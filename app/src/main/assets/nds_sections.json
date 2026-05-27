@@ -1,0 +1,115 @@
+{
+  "metadata": {
+    "source": "NDS",
+    "edition": "2018",
+    "publicationYear": 2018,
+    "units": "IMPERIAL"
+  },
+  "sections": [
+    {
+      "id": "2x4",
+      "designation": "2x4",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 0.003387,
+      "depth": 0.0889,
+      "width": 0.0381,
+      "strongAxis": {
+        "ix": 0.00000223,
+        "sx": 0.0000501,
+        "zx": 0.0000752,
+        "rx": 0.0256
+      },
+      "weakAxis": {
+        "ix": 0.00000041,
+        "sx": 0.0000215,
+        "zx": 0.0000322,
+        "rx": 0.0110
+      }
+    },
+    {
+      "id": "2x6",
+      "designation": "2x6",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 0.005322,
+      "depth": 0.1397,
+      "width": 0.0381,
+      "strongAxis": {
+        "ix": 0.00000866,
+        "sx": 0.0001239,
+        "zx": 0.0001859,
+        "rx": 0.0403
+      },
+      "weakAxis": {
+        "ix": 0.00000064,
+        "sx": 0.0000338,
+        "zx": 0.0000507,
+        "rx": 0.0110
+      }
+    },
+    {
+      "id": "2x8",
+      "designation": "2x8",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 0.007016,
+      "depth": 0.18415,
+      "width": 0.0381,
+      "strongAxis": {
+        "ix": 0.00001985,
+        "sx": 0.0002156,
+        "zx": 0.0003234,
+        "rx": 0.0532
+      },
+      "weakAxis": {
+        "ix": 0.00000085,
+        "sx": 0.0000446,
+        "zx": 0.0000669,
+        "rx": 0.0110
+      }
+    },
+    {
+      "id": "2x10",
+      "designation": "2x10",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 0.008951,
+      "depth": 0.23495,
+      "width": 0.0381,
+      "strongAxis": {
+        "ix": 0.00004118,
+        "sx": 0.0003505,
+        "zx": 0.0005258,
+        "rx": 0.0678
+      },
+      "weakAxis": {
+        "ix": 0.00000108,
+        "sx": 0.0000568,
+        "zx": 0.0000852,
+        "rx": 0.0110
+      }
+    },
+    {
+      "id": "2x12",
+      "designation": "2x12",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 0.010887,
+      "depth": 0.28575,
+      "width": 0.0381,
+      "strongAxis": {
+        "ix": 0.00007412,
+        "sx": 0.0005188,
+        "zx": 0.0007782,
+        "rx": 0.0825
+      },
+      "weakAxis": {
+        "ix": 0.00000132,
+        "sx": 0.000691,
+        "zx": 0.0001037,
+        "rx": 0.0110
+      }
+    }
+  ]
+}
