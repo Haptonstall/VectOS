@@ -5,14 +5,25 @@ import com.lz.vectos.domain.units.inches
 import kotlinx.serialization.Serializable
 
 /**
- * Bracing modes for Steel/General materials.
+ * Bracing modes for beam spans.
  */
 @Serializable
 enum class BracingMode(val label: String) {
     CONTINUOUS("Continuous"),
     DISCRETE("Discrete Points"),
-    UNBRACED("Unbraced (Ends Only)")
+    UNBRACED("Unbraced (Ends Only)"),
+    CUSTOM("Custom Locations")
 }
+
+/**
+ * Bracing configuration for a specific beam span.
+ */
+@Serializable
+data class SpanBracing(
+    val topType: BracingMode = BracingMode.UNBRACED,
+    val bottomType: BracingMode = BracingMode.UNBRACED,
+    val discretePoints: List<DiscreteBracePoint> = emptyList()
+)
 
 /**
  * A single discrete bracing point, used in the interactive table.
@@ -31,7 +42,7 @@ data class DiscreteBracePoint(
 sealed class BracingInput {
     @Serializable
     data class Steel(
-        val topMode: BracingMode = BracingMode.CONTINUOUS,
+        val topMode: BracingMode = BracingMode.UNBRACED,
         val bottomMode: BracingMode = BracingMode.UNBRACED,
         val discreteTable: List<DiscreteBracePoint> = emptyList()
     ) : BracingInput()
@@ -60,11 +71,11 @@ fun normalizeBracing(
     analysisPoints: List<Double>,
     memberLength: Length
 ): List<NormalizedBraceState> {
-    val L = memberLength.inches
+    val l = memberLength.inches
     val tolerance = 0.001
 
     return analysisPoints.map { x ->
-        val isAtEnds = x < tolerance || x > (L - tolerance)
+        val isAtEnds = x < tolerance || x > (l - tolerance)
         
         val (topBraced, botBraced) = when (input) {
             is BracingInput.Steel -> {
@@ -72,15 +83,19 @@ fun normalizeBracing(
                     BracingMode.CONTINUOUS -> true
                     BracingMode.UNBRACED -> isAtEnds
                     BracingMode.DISCRETE -> isAtEnds || input.discreteTable.any { 
-                        Math.abs(it.x.inches - x) < tolerance && it.isTopBraced 
+                        val braceX = it.x.inches
+                        kotlin.math.abs(braceX - x) < tolerance && it.isTopBraced 
                     }
+                    BracingMode.CUSTOM -> isAtEnds // Steel input model currently doesn't use CUSTOM type directly
                 }
                 val bot = when (input.bottomMode) {
                     BracingMode.CONTINUOUS -> true
                     BracingMode.UNBRACED -> isAtEnds
                     BracingMode.DISCRETE -> isAtEnds || input.discreteTable.any { 
-                        Math.abs(it.x.inches - x) < tolerance && it.isBottomBraced 
+                        val braceX = it.x.inches
+                        kotlin.math.abs(braceX - x) < tolerance && it.isBottomBraced
                     }
+                    BracingMode.CUSTOM -> isAtEnds
                 }
                 top to bot
             }

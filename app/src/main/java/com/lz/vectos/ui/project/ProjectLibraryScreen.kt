@@ -1,15 +1,19 @@
 package com.lz.vectos.ui.project
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lz.vectos.domain.calculation.EngineeringCalculation
@@ -22,81 +26,213 @@ import java.util.UUID
 fun ProjectLibraryScreen(
     viewModel: ProjectViewModel,
     onOpenCalculation: (EngineeringCalculation) -> Unit,
-    onBack: () -> Unit
+    onDeleteCalculation: (UUID) -> Unit,
+    onAddCalculation: () -> Unit,
+    onProjectSettings: () -> Unit,
+    onEditProject: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val project by viewModel.activeProject.collectAsState()
     val calculationsMap by viewModel.calculations.collectAsState()
-    val calculations = calculationsMap.values.toList()
+    val calculations = calculationsMap.values.toList().distinctBy { it.id }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(project?.name ?: "Project Library") },
+                title = { 
+                    Column {
+                        Text(
+                            project.name.split("\n").first(), 
+                            style = MaterialTheme.typography.titleLarge,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                        if (!project.projectNumber.isNullOrBlank()) {
+                            Text(
+                                project.projectNumber!!, 
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onProjectSettings) {
+                        Icon(Icons.Default.Info, contentDescription = "Project Info")
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = onAddCalculation) {
+                Icon(Icons.Default.Add, contentDescription = "New Calculation")
+            }
         }
     ) { paddingValues ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                "Engineering Calculations",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                ProjectSummaryCard(
+                    project = project,
+                    onEdit = onEditProject
+                )
+            }
+
+            item {
+                Text(
+                    "Engineering Calculations",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
 
             if (calculations.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "No calculations in this project yet.",
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    val grouped = calculations.groupBy { it.toolId }
-                    grouped.forEach { (toolId, toolCalcs) ->
-                        item {
-                            Text(
-                                text = toolId,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            )
-                        }
-                        items(toolCalcs) { calculation ->
-                            CalculationLibraryItem(
-                                calculation = calculation,
-                                onClick = { onOpenCalculation(calculation) }
-                            )
-                        }
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "No calculations in this project yet.",
+                            color = MaterialTheme.colorScheme.outline
+                        )
                     }
                 }
+            } else {
+                val grouped = calculations.groupBy { it.toolId }
+                grouped.forEach { (toolId, toolCalcs) ->
+                    item {
+                        Text(
+                            text = toolId,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                    items(toolCalcs, key = { it.id }) { calculation ->
+                        CalculationLibraryItem(
+                            calculation = calculation,
+                            onClick = { onOpenCalculation(calculation) },
+                            onDelete = { onDeleteCalculation(calculation.id) }
+                        )
+                    }
+                }
+            }
+            
+            item {
+                Spacer(modifier = Modifier.height(80.dp)) // Space for FAB
             }
         }
     }
 }
 
 @Composable
-fun CalculationLibraryItem(
-    calculation: EngineeringCalculation,
-    onClick: () -> Unit
+fun ProjectSummaryCard(
+    project: Project,
+    onEdit: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Box(modifier = Modifier.padding(16.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Project Summary", 
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    val client = project.clientName ?: "None"
+                    val site = project.siteLocation ?: "None"
+                    
+                    Text(
+                        text = "Client: $client",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Site: $site",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TagItem(text = project.designContext.buildingCode.shortName)
+                    TagItem(text = project.designContext.methodology.name)
+                }
+            }
+            
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 12.dp, y = (-12).dp)
+            ) {
+                Icon(
+                    Icons.Default.Edit, 
+                    contentDescription = "Edit Project",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TagItem(text: String) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+        color = Color.Transparent
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+        )
+    }
+}
+
+// Removed private fun border
+
+@Composable
+fun CalculationLibraryItem(
+    calculation: EngineeringCalculation,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        ),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -144,11 +280,20 @@ fun CalculationLibraryItem(
                 )
             }
             
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.outline
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.outline
+                )
+            }
         }
     }
 }

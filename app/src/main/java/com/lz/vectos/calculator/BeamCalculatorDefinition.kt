@@ -7,7 +7,7 @@ import com.lz.vectos.viewmodel.CalculationContext
 object BeamCalculatorDefinition : CalculatorDefinition {
 
     override val id = "beam_simply_supported"
-    override val displayName = "Simply Supported Beam"
+    override val displayName = "Beam Design"
     override val description = "Analyze bending, shear, and deflection"
     override val icon = Icons.Default.ShowChart
     override val supportsQuickCalc = true

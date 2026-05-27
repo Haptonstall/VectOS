@@ -2,7 +2,7 @@ package com.lz.vectos.persistence.repository
 
 import android.content.Context
 import com.lz.vectos.domain.beam.*
-import com.lz.vectos.domain.units.Length
+import com.lz.vectos.domain.units.*
 import com.lz.vectos.domain.units.UnitSystem
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
@@ -79,44 +79,30 @@ class NdsSectionRepository(private val context: Context) : SectionRepository {
 
     override suspend fun getShapeTypes(material: MaterialType): List<ShapeType> {
         if (material != MaterialType.WOOD) return emptyList()
-        return loadDatabase().sections.map { ShapeType.valueOf(it.shapeType) }.distinct()
+        return loadDatabase().sections.map { ShapeType.SOLID_RECTANGULAR }.distinct()
     }
 
     override suspend fun getSections(material: MaterialType, shapeType: ShapeType): List<SectionProfile> {
         if (material != MaterialType.WOOD) return emptyList()
         val db = loadDatabase()
         val metadata = getDatabaseMetadata(material)
-        
-        return db.sections
-            .filter { it.shapeType == shapeType.name }
-            .map { s ->
-                SectionProfile(
-                    id = s.id,
-                    designation = s.designation,
-                    materialType = material,
-                    shapeType = shapeType,
-                    area = s.area,
-                    depth = Length(s.depth),
-                    propertiesStrongAxis = SectionAxisProperties(
-                        i = s.strongAxis.ix,
-                        s = s.strongAxis.sx,
-                        z = s.strongAxis.zx,
-                        r = s.strongAxis.rx
-                    ),
-                    propertiesWeakAxis = SectionAxisProperties(
-                        i = s.weakAxis.ix,
-                        s = s.weakAxis.sx,
-                        z = s.weakAxis.zx,
-                        r = s.weakAxis.rx
-                    ),
-                    databaseMetadata = metadata
-                )
-            }
+
+        return db.sections.map { s ->
+            WoodProfile(
+                id = s.id,
+                designation = s.designation,
+                nominalWidth = s.width.inches,
+                nominalDepth = s.depth.inches,
+                dressedWidth = s.width.inches,
+                dressedDepth = s.depth.inches,
+                databaseMetadata = metadata
+            )
+        }
     }
 
     override suspend fun getSectionById(id: String): SectionProfile? {
         val db = loadDatabase()
-        val s = db.sections.find { it.id == id } ?: return null
-        return getSections(MaterialType.WOOD, ShapeType.valueOf(s.shapeType)).find { it.id == id }
+        db.sections.find { it.id == id } ?: return null
+        return getSections(MaterialType.WOOD, ShapeType.SOLID_RECTANGULAR).find { it.id == id }
     }
 }

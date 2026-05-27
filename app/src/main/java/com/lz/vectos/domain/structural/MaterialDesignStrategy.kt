@@ -1,8 +1,7 @@
 package com.lz.vectos.domain.structural
 
 import com.lz.vectos.domain.beam.SectionProfile
-import com.lz.vectos.domain.units.Force
-import com.lz.vectos.domain.units.Moment
+import com.lz.vectos.domain.units.*
 
 /**
  * Strategy contract for material-specific design capacity calculations.
@@ -17,18 +16,25 @@ interface MaterialDesignStrategy {
 /**
  * AISC-aligned steel design strategy.
  */
-class SteelDesignStrategy(private val yieldStrengthPa: Double = 345e6) : MaterialDesignStrategy {
+class SteelDesignStrategy(private val yieldStrengthPsi: Double = 50000.0) : MaterialDesignStrategy {
     override fun computeCapacity(section: SectionProfile, code: BuildingCode): SectionCapacity {
         // Mn = Fy * Zx (Plastic moment for compact sections)
-        val nominalMn = yieldStrengthPa * section.plasticModulus
-        // Vn = 0.6 * Fy * Aw (Shear capacity)
-        val nominalVn = 0.6 * yieldStrengthPa * section.area 
+        // Convert section properties from internal Unit Models.
+        
+        val nominalMnLbIn = yieldStrengthPsi * section.propertiesStrongAxis.z.inIn3
+        val nominalVnLbs = 0.6 * yieldStrengthPsi * section.area.inIn2 
+
+        val nominalMn = nominalMnLbIn.lbIn
+        val nominalVn = nominalVnLbs.poundsForce
+
+        val phiM = 0.9 // TODO: Get from code if available
+        val phiV = 0.9 // TODO: Get from code if available
 
         return SectionCapacity(
-            nominalMomentCapacity = Moment(nominalMn),
-            nominalShearCapacity = Force(nominalVn),
-            designMomentCapacity = Moment(nominalMn * code.phiMoment),
-            designShearCapacity = Force(nominalVn * code.phiShear)
+            nominalMomentCapacity = nominalMn,
+            nominalShearCapacity = nominalVn,
+            designMomentCapacity = nominalMn * phiM,
+            designShearCapacity = nominalVn * phiV
         )
     }
 }
@@ -37,21 +43,23 @@ class SteelDesignStrategy(private val yieldStrengthPa: Double = 345e6) : Materia
  * Simplified wood design strategy (ASD-based).
  */
 class WoodDesignStrategy(
-    private val allowableBendingStressPa: Double = 10e6, // e.g. 10 MPa
-    private val allowableShearStressPa: Double = 1e6      // e.g. 1 MPa
+    private val allowableBendingStressPsi: Double = 1000.0,
+    private val allowableShearStressPsi: Double = 150.0
 ) : MaterialDesignStrategy {
     override fun computeCapacity(section: SectionProfile, code: BuildingCode): SectionCapacity {
         // NDS-style: M_allow = Fb * Sx * AdjustmentFactors
-        // For Step 30, adjustment factors are 1.0
-        val nominalMn = allowableBendingStressPa * section.elasticModulus
-        val nominalVn = allowableShearStressPa * section.area * (2.0 / 3.0) // Simplified for rectangular
+        val nominalMnLbIn = allowableBendingStressPsi * section.propertiesStrongAxis.s.inIn3
+        val nominalVnLbs = allowableShearStressPsi * section.area.inIn2 * (2.0 / 3.0) 
 
-        // Wood often uses ASD, so Design Capacity = Nominal Capacity (factors are usually pre-applied to Fb)
+        val nominalMn = nominalMnLbIn.lbIn
+        val nominalVn = nominalVnLbs.poundsForce
+
+        // Wood often uses ASD, so Design Capacity = Nominal Capacity
         return SectionCapacity(
-            nominalMomentCapacity = Moment(nominalMn),
-            nominalShearCapacity = Force(nominalVn),
-            designMomentCapacity = Moment(nominalMn), 
-            designShearCapacity = Force(nominalVn)
+            nominalMomentCapacity = nominalMn,
+            nominalShearCapacity = nominalVn,
+            designMomentCapacity = nominalMn, 
+            designShearCapacity = nominalVn
         )
     }
 }

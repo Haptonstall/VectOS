@@ -16,7 +16,8 @@ import java.util.UUID
 class RoomCalculationRepository(
     private val calculationDao: CalculationDao,
     private val beamCalculationDao: BeamCalculationDao,
-    private val projectRepository: ProjectRepository
+    private val projectRepository: ProjectRepository,
+    private val mapper: RoomPersistenceMapper
 ) : CalculationRepository {
 
     override suspend fun getBeamCalculation(id: UUID): BeamCalculation? {
@@ -24,21 +25,21 @@ class RoomCalculationRepository(
         val beamEntity = beamCalculationDao.getByCalculationId(id) ?: return null
         
         val project = projectRepository.getProject(metadataEntity.projectId) ?: return null
-        val metadata = RoomPersistenceMapper.toDomain(metadataEntity)
+        val metadata = mapper.toDomain(metadataEntity)
         
-        return RoomPersistenceMapper.toDomain(beamEntity, metadata, project)
+        return mapper.toDomain(beamEntity, metadata, project)
     }
 
     override suspend fun getCalculationsForProject(projectId: UUID): List<CalculationMetadata> {
-        return calculationDao.getByProjectId(projectId).map { RoomPersistenceMapper.toDomain(it) }
+        return calculationDao.getByProjectId(projectId).map { mapper.toDomain(it) }
     }
 
     override suspend fun saveBeamCalculation(calculation: BeamCalculation) {
         val metadata = calculation.metadata
-        val project = calculation.inputs.project
+        val project = calculation.project
         
-        val metadataEntity = RoomPersistenceMapper.toRoomEntity(metadata, project.id, "BEAM_SIMPLY_SUPPORTED")
-        val beamEntity = RoomPersistenceMapper.toRoomEntity(calculation)
+        val metadataEntity = mapper.toRoomEntity(metadata, project.id, "BEAM_SIMPLY_SUPPORTED")
+        val beamEntity = mapper.toRoomEntity(calculation)
         
         // Transactional save ensures metadata and payload are saved together
         calculationDao.insertCalculationWithPayload(metadataEntity, beamEntity, beamCalculationDao)

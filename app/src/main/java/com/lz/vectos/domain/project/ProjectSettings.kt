@@ -15,6 +15,6 @@ data class ProjectSettings(
     val engineerName: String? = null,
     val firmName: String? = null,
     val designMethodology: DesignMethodology = DesignMethodology.ASD,
-    val unitSystem: UnitSystem = UnitSystem.METRIC,
-    val buildingCode: String = "IBC 2021" // Stored as name for serialization simplicity
+    val unitSystem: UnitSystem = UnitSystem.IMPERIAL,
+    val buildingCode: String = "IBC 2021"
 )

@@ -16,9 +16,9 @@ class AiscSectionSeeder(
 ) {
     suspend fun seed() {
         // Check if already seeded to avoid redundant work
-        val existing = aiscDao.getAllSections()
-        if (existing.isNotEmpty()) {
-            Log.d("AiscSectionSeeder", "AISC sections already seeded. Count: ${existing.size}")
+        val count = aiscDao.getAllSections().size
+        if (count > 0) {
+            Log.d("AiscSectionSeeder", "AISC sections already seeded. Count: $count")
             return
         }
 
@@ -27,6 +27,8 @@ class AiscSectionSeeder(
             if (sections.isNotEmpty()) {
                 aiscDao.insertAll(sections)
                 Log.d("AiscSectionSeeder", "Successfully seeded ${sections.size} AISC sections.")
+            } else {
+                Log.w("AiscSectionSeeder", "No AISC sections parsed from file.")
             }
         } catch (e: Exception) {
             Log.e("AiscSectionSeeder", "Error seeding AISC sections", e)
@@ -40,6 +42,7 @@ class AiscSectionSeeder(
 
         // Read header
         val header = reader.readLine() ?: return emptyList()
+        // Use limit = 0 to keep trailing empty columns (standard Kotlin behavior)
         val columns = header.split(",")
         
         // Find indices for required columns
@@ -62,29 +65,36 @@ class AiscSectionSeeder(
         val jIdx = columns.indexOf("J")
         val cwIdx = columns.indexOf("Cw")
 
+        val maxIdx = listOf(typeIdx, idIdx, labelIdx, areaIdx, depthIdx, twIdx, bfIdx, tfIdx, ixIdx, sxIdx, zxIdx, rxIdx, iyIdx, syIdx, zyIdx, ryIdx, jIdx, cwIdx).maxOrNull() ?: -1
+        if (maxIdx == -1) {
+            Log.e("AiscSectionSeeder", "Required columns missing in header")
+            return emptyList()
+        }
+
         reader.forEachLine { line ->
+            // Ensure values size matches header
             val values = line.split(",")
-            if (values.size >= columns.size) {
+            if (values.size > maxIdx) {
                 try {
                     val entity = AiscSectionRoomEntity(
                         id = values[idIdx].trim(),
                         designation = values[labelIdx].trim(),
                         type = values[typeIdx].trim(),
-                        area = values[areaIdx].toDoubleOrNull() ?: 0.0,
-                        depth = values[depthIdx].toDoubleOrNull() ?: 0.0,
-                        webThickness = values[twIdx].toDoubleOrNull() ?: 0.0,
-                        flangeWidth = values[bfIdx].toDoubleOrNull() ?: 0.0,
-                        flangeThickness = values[tfIdx].toDoubleOrNull() ?: 0.0,
-                        ix = values[ixIdx].toDoubleOrNull() ?: 0.0,
-                        sx = values[sxIdx].toDoubleOrNull() ?: 0.0,
-                        zx = values[zxIdx].toDoubleOrNull() ?: 0.0,
-                        rx = values[rxIdx].toDoubleOrNull() ?: 0.0,
-                        iy = values[iyIdx].toDoubleOrNull() ?: 0.0,
-                        sy = values[syIdx].toDoubleOrNull() ?: 0.0,
-                        zy = values[zyIdx].toDoubleOrNull() ?: 0.0,
-                        ry = values[ryIdx].toDoubleOrNull() ?: 0.0,
-                        torsionalJ = values[jIdx].toDoubleOrNull() ?: 0.0,
-                        warpingCw = values[cwIdx].toDoubleOrNull() ?: 0.0
+                        area = values.getOrNull(areaIdx)?.toDoubleOrNull() ?: 0.0,
+                        depth = values.getOrNull(depthIdx)?.toDoubleOrNull() ?: 0.0,
+                        webThickness = values.getOrNull(twIdx)?.toDoubleOrNull() ?: 0.0,
+                        flangeWidth = values.getOrNull(bfIdx)?.toDoubleOrNull() ?: 0.0,
+                        flangeThickness = values.getOrNull(tfIdx)?.toDoubleOrNull() ?: 0.0,
+                        ix = values.getOrNull(ixIdx)?.toDoubleOrNull() ?: 0.0,
+                        sx = values.getOrNull(sxIdx)?.toDoubleOrNull() ?: 0.0,
+                        zx = values.getOrNull(zxIdx)?.toDoubleOrNull() ?: 0.0,
+                        rx = values.getOrNull(rxIdx)?.toDoubleOrNull() ?: 0.0,
+                        iy = values.getOrNull(iyIdx)?.toDoubleOrNull() ?: 0.0,
+                        sy = values.getOrNull(syIdx)?.toDoubleOrNull() ?: 0.0,
+                        zy = values.getOrNull(zyIdx)?.toDoubleOrNull() ?: 0.0,
+                        ry = values.getOrNull(ryIdx)?.toDoubleOrNull() ?: 0.0,
+                        torsionalJ = values.getOrNull(jIdx)?.toDoubleOrNull() ?: 0.0,
+                        warpingCw = values.getOrNull(cwIdx)?.toDoubleOrNull() ?: 0.0
                     )
                     // Only add if it has a valid ID and type
                     if (entity.id.isNotEmpty() && entity.type.isNotEmpty()) {

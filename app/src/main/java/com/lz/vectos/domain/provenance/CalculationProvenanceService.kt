@@ -35,7 +35,7 @@ object CalculationProvenanceService {
             timestamp = LocalDateTime.now().format(formatter),
             projectId = projectId,
             calculatorId = calculatorId,
-            buildingCode = buildingCode.name,
+            buildingCode = buildingCode.shortName,
             unitSystem = unitSystem.name,
             sectionDesignation = sectionDesignation,
             spanLength = spanLength,

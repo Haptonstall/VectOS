@@ -17,7 +17,11 @@ data class GoverningEffect<T>(
  * Analysis envelope results across all evaluated combinations.
  */
 data class AnalysisEnvelope(
-    val maxMoment: GoverningEffect<Moment>,
-    val maxShear: GoverningEffect<Force>,
+    val maxMomentZ: GoverningEffect<Moment>,
+    val maxMomentY: GoverningEffect<Moment>,
+    val maxShearY: GoverningEffect<Force>,
+    val maxShearZ: GoverningEffect<Force>,
+    val maxTorsion: GoverningEffect<Moment>,
+    val maxAxial: GoverningEffect<Force>,
     val maxDeflection: GoverningEffect<Length>
 )

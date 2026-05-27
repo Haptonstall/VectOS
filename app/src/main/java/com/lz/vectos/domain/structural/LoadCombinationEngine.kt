@@ -4,91 +4,112 @@ import com.lz.vectos.domain.units.*
 import java.util.UUID
 
 /**
- * Resolves structural demands by applying code-mandated load combinations.
+ * Utility for resolving governing structural demands by applying code-mandated load combinations
+ * to analyzed station results.
  */
 object LoadCombinationEngine {
 
     /**
-     * Result of a demand resolution across all combinations.
+     * Result of an envelope resolution at a specific station.
      */
-    data class DemandResolutionResult(
-        val governingMoment: Moment,
-        val governingShear: Force,
+    data class StationEnvelopeResult(
+        val x: Length,
+        val governingDemand: StationDemand,
         val governingCombination: LoadCombination,
-        val traces: List<DesignEquationTrace>
+        val allCombinationsResults: Map<String, StationDemand>
     )
 
-    fun resolveGoverningDemands(
-        member: StructuralMember,
-        loads: List<Load>,
+    /**
+     * Resolves the governing envelope for a member by processing every station across all combinations.
+     */
+    fun resolveEnvelope(
+        analysisResultsByCategory: Map<LoadCategory, List<StationDemand>>,
         combinations: List<LoadCombination>
-    ): DemandResolutionResult {
-        // This is a simplified engine. In Step 32, it iterates through each combination,
-        // computes the total effect, and finds the maximum.
-        
-        var maxMoment = 0.0
-        var maxShear = 0.0
-        var governingCombo = combinations.first()
-        val allTraces = mutableListOf<DesignEquationTrace>()
+    ): List<StationEnvelopeResult> {
+        if (analysisResultsByCategory.isEmpty() || combinations.isEmpty()) return emptyList()
 
-        combinations.forEach { combo ->
-            // 1. Group loads by category and sum effects (simplified for now)
-            val combinedMoment = computeCombinedEffect(member, loads, combo) { it.newtonMeters }
-            val combinedShear = computeCombinedEffect(member, loads, combo) { it.newtons }
-
-            if (combinedMoment > maxMoment) {
-                maxMoment = combinedMoment
-                maxShear = combinedShear
-                governingCombo = combo
-            }
+        // Ensure all categories have the same number of stations
+        val sizes = analysisResultsByCategory.mapValues { it.value.size }
+        val distinctSizes = sizes.values.distinct()
+        if (distinctSizes.size > 1) {
+            val details = sizes.entries.joinToString { "${it.key}: ${it.value}" }
+            throw IllegalArgumentException("All load categories must have the same number of analysis stations. Found: $details")
         }
 
-        // Generate Trace for governing demand
-        allTraces.add(DesignEquationTrace(
-            equation = governingCombo.equation,
-            substitutions = mapOf("D" to "...", "L" to "..."), // Future: detailed substitution
-            result = String.format("%.2f N-m", maxMoment),
-            reference = governingCombo.codeReference
-        ))
+        // Assume all categories have the same station points
+        val firstCategory = analysisResultsByCategory.keys.first()
+        val stations = analysisResultsByCategory[firstCategory] ?: return emptyList()
 
-        return DemandResolutionResult(
-            governingMoment = Moment(maxMoment),
-            governingShear = Force(maxShear),
+        return stations.mapIndexed { index, _ ->
+            resolveGoverningStation(index, analysisResultsByCategory, combinations)
+        }
+    }
+
+    private fun resolveGoverningStation(
+        stationIndex: Int,
+        resultsByCategory: Map<LoadCategory, List<StationDemand>>,
+        combinations: List<LoadCombination>
+    ): StationEnvelopeResult {
+        val resultsByCombo = mutableMapOf<String, StationDemand>()
+        
+        combinations.forEach { combo ->
+            resultsByCombo[combo.name] = combineStationDemands(stationIndex, resultsByCategory, combo)
+        }
+
+        // Find governing by absolute max moment (simple implementation)
+        val governingEntry = resultsByCombo.entries.maxByOrNull { Math.abs(it.value.moment.inLbIn) }!!
+        val governingCombo = combinations.find { it.name == governingEntry.key }!!
+
+        return StationEnvelopeResult(
+            x = governingEntry.value.x,
+            governingDemand = governingEntry.value,
             governingCombination = governingCombo,
-            traces = allTraces
+            allCombinationsResults = resultsByCombo
         )
     }
 
-    private fun computeCombinedEffect(
-        member: StructuralMember,
-        loads: List<Load>,
-        combo: LoadCombination,
-        extractor: (Moment) -> Double
-    ): Double {
-        // Simplified superposition logic for Step 32
-        var total = 0.0
+    private fun combineStationDemands(
+        stationIndex: Int,
+        resultsByCategory: Map<LoadCategory, List<StationDemand>>,
+        combo: LoadCombination
+    ): StationDemand {
+        var totalMoment = 0.0
+        var totalShear = 0.0
+        var totalAxial = 0.0
+        var totalMomentY = 0.0
+        var totalShearY = 0.0
+        var totalTorque = 0.0
+        var totalDeflection = 0.0
+        
+        val firstStation = resultsByCategory.values.first()[stationIndex]
+
         combo.factors.forEach { (category, factor) ->
-            val categoryLoads = loads.filter { it.category == category }
-            categoryLoads.forEach { load ->
-                total += factor * 1000.0 // Mock effect logic for resolution framework
+            resultsByCategory[category]?.get(stationIndex)?.let { demand ->
+                totalMoment += factor * demand.moment.inLbIn
+                totalShear += factor * demand.shear.inPoundsForce
+                totalAxial += factor * demand.axial.inPoundsForce
+                totalMomentY += factor * demand.momentY.inLbIn
+                totalShearY += factor * demand.shearY.inPoundsForce
+                totalTorque += factor * demand.torque.inLbIn
+                totalDeflection += factor * demand.deflection.inInches
             }
         }
-        return total
-    }
-    
-    private fun computeCombinedEffect(
-        member: StructuralMember,
-        loads: List<Load>,
-        combo: LoadCombination,
-        extractor: (Force) -> Double
-    ): Double {
-        var total = 0.0
-        combo.factors.forEach { (category, factor) ->
-            val categoryLoads = loads.filter { it.category == category }
-            categoryLoads.forEach { load ->
-                total += factor * 500.0 // Mock effect logic
-            }
-        }
-        return total
+
+        return StationDemand(
+            x = firstStation.x,
+            moment = Moment(totalMoment),
+            shear = Force(totalShear),
+            axial = Force(totalAxial),
+            momentY = Moment(totalMomentY),
+            shearY = Force(totalShearY),
+            torque = Moment(totalTorque),
+            deflection = Length(totalDeflection),
+            spanId = firstStation.spanId,
+            cb = firstStation.cb,
+            lbTop = firstStation.lbTop,
+            lbBottom = firstStation.lbBottom,
+            allowableDeflection = firstStation.allowableDeflection,
+            compressionFlange = firstStation.compressionFlange
+        )
     }
 }

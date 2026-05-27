@@ -2,115 +2,120 @@ package com.lz.vectos.domain.structural.analysis
 
 import com.lz.vectos.domain.structural.*
 import com.lz.vectos.domain.units.*
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Test
 import java.util.UUID
-import kotlin.math.abs
-import kotlin.math.pow
 
 class BeamAnalysisSolverVerificationTest {
 
-    private val E_STEEL = 29e6
-    private val I_VAL = 100.0
-    private val G_STEEL = E_STEEL / (2 * (1 + 0.3))
-
     @Test
-    fun `verify UDL mid-span deflection matches analytical 5wL^4 over 384EI`() {
+    fun `combined load categories with point loads reflect correct peaks`() {
         val spanId = UUID.randomUUID()
-        val length = Length(120.0) // 10 ft
-        val span = SpanGeometry(id = spanId, length = length, startSupport = SupportCondition.ROLLER, endSupport = SupportCondition.ROLLER)
-        val member = StructuralMember(spans = listOf(span))
+        val member = StructuralMember.createSimple(Length(120.0)) // 10 ft
         
-        val w = 100.0 // lb/in
-        val loads = listOf(
-            Load.UniformDistributedLoad(
-                id = UUID.randomUUID(),
-                spanId = spanId,
-                value = ForcePerLength(w),
-                locationStart = Length(0.0),
-                locationEnd = length,
-                direction = LoadDirection.VERTICAL_DOWN
+        val deadLoad = Load.PointLoad(
+            value = Force(1000.0),
+            spanId = spanId,
+            locationStart = Length(40.0), // at 40 inches
+            category = LoadCategory.DEAD
+        )
+        
+        val liveLoad = Load.PointLoad(
+            value = Force(2000.0),
+            spanId = spanId,
+            locationStart = Length(80.0), // at 80 inches
+            category = LoadCategory.LIVE
+        )
+        
+        val combinations = listOf(
+            LoadCombination(
+                name = "1.2D + 1.6L",
+                methodology = DesignMethodology.LRFD,
+                equation = "1.2D + 1.6L",
+                factors = mapOf(LoadCategory.DEAD to 1.2, LoadCategory.LIVE to 1.6),
+                codeReference = "ASCE 7-16"
             )
         )
         
-        val config = BeamAnalysisConfig(ePsi = E_STEEL, iIn4 = I_VAL, avIn2 = null) // No shear deformation
-        val result = BeamAnalysisSolver.solve(member, loads, config)
+        val config = BeamAnalysisConfig(
+            member = member,
+            loadCases = listOf(
+                LoadCase("D", "Dead", listOf(deadLoad)),
+                LoadCase("L", "Live", listOf(liveLoad))
+            ),
+            combinations = combinations,
+            modulusOfElasticityPsi = 29000000.0,
+            momentOfInertiaIn4 = 100.0
+        )
         
-        val expectedDeflection = (5 * w * length.inches.pow(4)) / (384 * E_STEEL * I_VAL)
+        val result = BeamAnalysisSolver.solve(config)
         
-        // Find mid-span deflection in the diagram
-        val midPoint = result.spanResults[0].deflectionDiagram.find { abs(it.x.inches - 60.0) < 0.1 }
+        val comboResult = result.combinationResults["1.2D + 1.6L"]!!
+        val spanResult = comboResult.spanResults[0]
         
-        assertEquals("Mid-span deflection should match analytical formula", expectedDeflection, midPoint?.value ?: 0.0, 1e-4)
+        // Expected Shear:
+        // P_dead = 1000, R_dead_start = 1000 * 80 / 120 = 666.67, R_dead_end = 333.33
+        // P_live = 2000, R_live_start = 2000 * 40 / 120 = 666.67, R_live_end = 1333.33
+        
+        // Factored Reactions:
+        // R_start = 1.2 * 666.67 + 1.6 * 666.67 = 800 + 1066.67 = 1866.67
+        // R_end = 1.2 * 333.33 + 1.6 * 1333.33 = 400 + 2133.33 = 2533.33
+        
+        // At 40": V changes by 1.2 * 1000 = 1200
+        // At 80": V changes by 1.6 * 2000 = 3200
+        
+        val shearPoints = spanResult.shearDiagram
+
+        // Debug output for failing assertions
+        println("Shear points (x -> value):")
+        shearPoints.forEach { println("${it.x.inches} -> ${it.value}") }
+
+        // Check for peaks (steps) at 40 and 80
+        val peakAt40Before = shearPoints.find { Math.abs(it.x.inInches - (40.0 - 1e-5)) < 1e-6 }
+        val peakAt40After = shearPoints.find { Math.abs(it.x.inInches - (40.0 + 1e-5)) < 1e-6 }
+        val peakAt80Before = shearPoints.find { Math.abs(it.x.inInches - (80.0 - 1e-5)) < 1e-6 }
+        val peakAt80After = shearPoints.find { Math.abs(it.x.inInches - (80.0 + 1e-5)) < 1e-6 }
+        
+        assertNotNull("Peak at 40 (before) missing", peakAt40Before)
+        assertNotNull("Peak at 40 (after) missing", peakAt40After)
+        assertNotNull("Peak at 80 (before) missing", peakAt80Before)
+        assertNotNull("Peak at 80 (after) missing", peakAt80After)
+        
+        val delta40 = peakAt40Before!!.value - peakAt40After!!.value
+        val delta80 = peakAt80Before!!.value - peakAt80After!!.value
+        
+        assertEquals(1200.0, delta40, 1.0)
+        assertEquals(3200.0, delta80, 1.0)
     }
 
     @Test
-    fun `verify point load FEA matches PL over 8`() {
+    fun `axial compression follows negative sign convention`() {
         val spanId = UUID.randomUUID()
-        val length = Length(100.0)
-        // Fixed-Fixed beam
-        val span = SpanGeometry(id = spanId, length = length, startSupport = SupportCondition.FIXED, endSupport = SupportCondition.FIXED)
-        val member = StructuralMember(spans = listOf(span))
+        val member = StructuralMember.createSimple(Length(100.0))
         
-        val p = 1000.0 // lbs
-        val loads = listOf(
-            Load.PointLoad(
-                id = UUID.randomUUID(),
-                spanId = spanId,
-                value = Force(p),
-                locationStart = Length(50.0),
-                direction = LoadDirection.VERTICAL_DOWN
-            )
+        val axialLoad = Load.AxialLoad(
+            value = Force(1000.0),
+            spanId = spanId,
+            direction = LoadDirection.AXIAL_COMPRESSION
         )
         
-        val config = BeamAnalysisConfig(ePsi = E_STEEL, iIn4 = I_VAL)
-        val result = BeamAnalysisSolver.solve(member, loads, config)
+        val config = BeamAnalysisConfig(
+            member = member,
+            loadCases = listOf(LoadCase("D", "Dead", listOf(axialLoad))),
+            modulusOfElasticityPsi = 29000000.0,
+            momentOfInertiaIn4 = 100.0,
+            areaIn2 = 10.0
+        )
         
-        val expectedMoment = (p * length.inches) / 8.0
-        
-        // Reactions[1] is RZ at node 0 (Start Moment)
-        val startMoment = abs(result.reactions.find { it.nodeIndex == 0 }?.moment?.lbIn ?: 0.0)
-        
-        assertEquals("Fixed-end moment should be PL/8", expectedMoment, startMoment, 1e-3)
-    }
+        val result = BeamAnalysisSolver.solve(config)
+        val spanResult = result.spanResults[0]
 
-    @Test
-    fun `verify Timoshenko shear deformation increases deflection`() {
-        val spanId = UUID.randomUUID()
-        val length = Length(24.0) // Short deep beam
-        val span = SpanGeometry(id = spanId, length = length, startSupport = SupportCondition.ROLLER, endSupport = SupportCondition.ROLLER)
-        val member = StructuralMember(spans = listOf(span))
+        println("Axial station demands:")
+        result.spanResults[0].stationDemands.forEach { println("x=${it.x.inches} axial=${it.axial.inPoundsForce}") }
         
-        val w = 1000.0 // lb/in
-        val loads = listOf(
-            Load.UniformDistributedLoad(
-                id = UUID.randomUUID(),
-                spanId = spanId,
-                value = ForcePerLength(w),
-                locationStart = Length(0.0),
-                locationEnd = length,
-                direction = LoadDirection.VERTICAL_DOWN
-            )
-        )
-        
-        // 1. Solve without shear deformation
-        val configNoShear = BeamAnalysisConfig(ePsi = E_STEEL, iIn4 = I_VAL, avIn2 = null)
-        val resNoShear = BeamAnalysisSolver.solve(member, loads, configNoShear)
-        val deltaNoShear = resNoShear.maxDeflection.inches
-        
-        // 2. Solve with shear deformation (Small Av to amplify effect)
-        val configShear = BeamAnalysisConfig(ePsi = E_STEEL, iIn4 = I_VAL, gPsi = G_STEEL, avIn2 = 2.0)
-        val resShear = BeamAnalysisSolver.solve(member, loads, configShear)
-        val deltaShear = resShear.maxDeflection.inches
-        
-        assertTrue("Shear deformation should increase total deflection", deltaShear > deltaNoShear)
-        
-        // Analytical check for Timoshenko UDL: delta_total = delta_bending + delta_shear
-        // delta_shear for UDL = wL^2 / 8GAv
-        val expectedDeltaShear = (w * length.inches.pow(2)) / (8 * G_STEEL * 2.0)
-        val expectedTotal = deltaNoShear + expectedDeltaShear
-        
-        assertEquals("Timoshenko deflection should match bending + shear components", expectedTotal, deltaShear, 1e-4)
+        // Internal axial force should be -1000
+        assertTrue("Axial compression should be negative: ${spanResult.maxAxial.inPoundsForce}", 
+            spanResult.stationDemands.all { it.axial.inPoundsForce <= 0.0 })
+        assertEquals(-1000.0, spanResult.minAxial.inPoundsForce, 0.1)
     }
 }

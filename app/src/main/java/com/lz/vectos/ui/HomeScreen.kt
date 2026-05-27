@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Calculate
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lz.vectos.domain.project.Project
+import com.lz.vectos.ui.navigation.Screen
 import com.lz.vectos.viewmodel.ProjectViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -23,16 +25,17 @@ fun HomeScreen(
     viewModel: ProjectViewModel,
     onProjectSelected: (Project) -> Unit,
     onQuickCalc: () -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    onNewProject: () -> Unit
 ) {
     val projects by viewModel.projects.collectAsState()
-    var showNewProjectDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.loadProjects()
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("VectOS Engineering") },
@@ -44,7 +47,7 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showNewProjectDialog = true }) {
+            FloatingActionButton(onClick = onNewProject) {
                 Icon(Icons.Default.Add, contentDescription = "New Project")
             }
         }
@@ -119,16 +122,6 @@ fun HomeScreen(
                 }
             }
         }
-
-        if (showNewProjectDialog) {
-            NewProjectDialog(
-                onDismiss = { showNewProjectDialog = false },
-                onConfirm = { name, desc, client, eng ->
-                    viewModel.createProject(name, desc, client, eng)
-                    showNewProjectDialog = false
-                }
-            )
-        }
     }
 }
 
@@ -140,62 +133,55 @@ fun ProjectItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+        ),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(project.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            if (!project.description.isNullOrBlank()) {
+            val title = project.name.split("\n").first()
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            
+            if (!project.projectNumber.isNullOrBlank()) {
                 Text(
-                    project.description, 
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    modifier = Modifier.padding(top = 4.dp)
+                    project.projectNumber!!, 
+                    style = MaterialTheme.typography.labelSmall, 
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 2.dp)
                 )
             }
+
+            if (!project.description.isNullOrBlank()) {
+                Text(
+                    project.description!!, 
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    modifier = Modifier.padding(top = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
             Row(
-                modifier = Modifier.padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier.padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 if (!project.clientName.isNullOrBlank()) {
-                    Text("Client: ${project.clientName}", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        "Client: ${project.clientName}", 
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                Text("Created: ${project.createdAt.toLocalDate()}", style = MaterialTheme.typography.labelSmall)
+                Text(
+                    "Created: ${project.createdAt.toLocalDate()}", 
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
 }
 
-@Composable
-fun NewProjectDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String, String, String, String) -> Unit
-) {
-    var name by remember { mutableStateOf("") }
-    var desc by remember { mutableStateOf("") }
-    var client by remember { mutableStateOf("") }
-    var eng by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("New Project") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Project Name") })
-                OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("Description") })
-                OutlinedTextField(value = client, onValueChange = { client = it }, label = { Text("Client") })
-                OutlinedTextField(value = eng, onValueChange = { eng = it }, label = { Text("Engineer Name") })
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(name, desc, client, eng) },
-                enabled = name.isNotBlank()
-            ) {
-                Text("Create")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
+// Deleted NewProjectDialog

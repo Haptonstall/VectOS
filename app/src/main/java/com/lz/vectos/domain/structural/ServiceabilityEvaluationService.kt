@@ -1,61 +1,72 @@
 package com.lz.vectos.domain.structural
 
-import com.lz.vectos.domain.units.Length
+import com.lz.vectos.domain.structural.analysis.BeamAnalysisResult
+import com.lz.vectos.domain.units.*
+import kotlin.math.abs
 
 /**
- * Pure Kotlin service to evaluate serviceability responses against code limits.
+ * Service to evaluate serviceability responses (deflections) against code limits
+ * using full analyzed diagrams.
  */
 object ServiceabilityEvaluationService {
 
     /**
-     * Evaluates deflection results for a member based on building code criteria.
+     * Evaluates serviceability for a member based on building code criteria.
+     * Uses the full analysis result which contains all load combination passes.
      */
     fun evaluate(
         member: StructuralMember,
-        loadCases: List<LoadCase>,
-        buildingCode: BuildingCode,
-        e: Double,
-        i: Double
+        analysisResult: BeamAnalysisResult,
+        buildingCode: BuildingCode
     ): List<ServiceabilityResult> {
-        val span = member.length.meters
+        val totalLength = member.spans.sumOf { it.length.inches }
         
         return buildingCode.serviceabilityCriteria.map { criterion ->
-            // Resolve actual deflection for the criterion's load case
-            val actualDeflectionM = if (criterion.loadCaseId == null) {
-                // Total Deflection (Unfactored sum of all cases)
-                loadCases.sumOf { case -> 
-                    case.loads.sumOf { load -> computeDeflection(load, span, e, i) }
-                }
+            // 1. Resolve which combination or category result to use for this criterion
+            // Serviceability checks are typically unfactored (Service Level)
+            
+            val governingStationResult = if (criterion.loadCategory == null) {
+                // Total Deflection (Look for a combination that represents "D + L + S + ...")
+                // For now, we'll find the max deflection across all Serviceability combinations
+                findMaxDeflectionAcrossCombinations(analysisResult)
             } else {
-                // Specific Case Deflection (e.g. LIVE only)
-                val case = loadCases.find { it.id == criterion.loadCaseId }
-                case?.loads?.sumOf { load -> computeDeflection(load, span, e, i) } ?: 0.0
+                // Specific Category Deflection (e.g. LIVE only)
+                // We find the result pass for that specific category
+                findMaxDeflectionForCategory(analysisResult, criterion.loadCategory)
             }
 
-            val allowableDeflectionM = if (criterion.spanDenominator > 0) span / criterion.spanDenominator else 0.0
+            val actualDeflection = governingStationResult.deflection
+            val allowableDeflectionInches = if (criterion.spanDenominator > 0) totalLength / criterion.spanDenominator else 0.0
 
             ServiceabilityResult(
-                actualDeflection = Length(actualDeflectionM),
-                allowableDeflection = Length(allowableDeflectionM),
-                utilization = if (allowableDeflectionM > 0) actualDeflectionM / allowableDeflectionM else 0.0,
+                actualDeflection = actualDeflection,
+                allowableDeflection = Length(allowableDeflectionInches),
+                utilization = if (allowableDeflectionInches > 0) abs(actualDeflection.inInches) / allowableDeflectionInches else 0.0,
                 criterion = criterion
             )
         }
     }
 
-    private fun computeDeflection(load: Load, l: Double, e: Double, i: Double): Double {
-        if (l <= 0 || e * i <= 0) return 0.0
-        return when (load) {
-            is Load.PointLoad -> {
-                val p = load.value
-                val a = load.locationStart
-                val b = l - a
-                (p * a * b * (l + a)) * Math.sqrt(3 * a * (l + a)) / (27 * e * i * l)
-            }
-            is Load.UniformDistributedLoad -> {
-                (5.0 * load.value * Math.pow(l, 4.0)) / (384.0 * e * i)
-            }
-            else -> 0.0
-        }
+    private fun findMaxDeflectionAcrossCombinations(
+        result: BeamAnalysisResult
+    ): StationDemand {
+        // In a real implementation, we would filter result.combinationResults by those tagged with the limitState.
+        // For now, we'll look at all combinations and find the absolute maximum deflection.
+        return result.combinationResults.values
+            .flatMap { it.spanResults }
+            .flatMap { it.stationDemands }
+            .maxByOrNull { abs(it.deflection.inInches) } 
+            ?: StationDemand(0.0.inches, Moment(0.0), Force(0.0), spanId = java.util.UUID.randomUUID())
+    }
+
+    private fun findMaxDeflectionForCategory(
+        result: BeamAnalysisResult,
+        category: LoadCategory
+    ): StationDemand {
+        // Fallback: Look for a combination named after the category (e.g., "Live Load")
+        val categoryResult = result.combinationResults[category.label] ?: result.combinationResults[category.shortLabel]
+        
+        return categoryResult?.spanResults?.flatMap { it.stationDemands }?.maxByOrNull { abs(it.deflection.inInches) }
+            ?: result.spanResults.flatMap { it.stationDemands }.maxByOrNull { abs(it.deflection.inInches) }!!
     }
 }

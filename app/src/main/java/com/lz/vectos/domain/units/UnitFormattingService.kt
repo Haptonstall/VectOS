@@ -38,9 +38,9 @@ object UnitFormattingService {
 
     fun formatDistributedLoad(load: ForcePerLength, system: UnitSystem): String {
         return if (system == UnitSystem.METRIC) {
-            String.format(Locale.US, "%.1f N/m", load.newtonsPerMeter)
+            String.format(Locale.US, "%.1f N/m", load.inNewtonsPerMeter)
         } else {
-            String.format(Locale.US, "%.1f lb/ft", load.poundsPerFoot)
+            String.format(Locale.US, "%.1f lb/ft", load.inLbPerFt)
         }
     }
 
@@ -52,10 +52,10 @@ object UnitFormattingService {
                 String.format(Locale.US, "%.2f kN-m", moment.inNewtonMeters / 1000.0)
             }
         } else {
-            if (moment.inPoundFeet < 1000.0) {
-                String.format(Locale.US, "%.1f lb-ft", moment.inPoundFeet)
+            if (moment.inLbFt < 1000.0) {
+                String.format(Locale.US, "%.1f lb-ft", moment.inLbFt)
             } else {
-                String.format(Locale.US, "%.2f kip-ft", moment.inPoundFeet / 1000.0)
+                String.format(Locale.US, "%.2f kip-ft", moment.inLbFt / 1000.0)
             }
         }
     }
@@ -64,7 +64,7 @@ object UnitFormattingService {
         return if (system == UnitSystem.METRIC) {
             String.format(Locale.US, "%.1f N-m", moment.inNewtonMeters)
         } else {
-            String.format(Locale.US, "%.2f lb-in", moment.inPoundInches)
+            String.format(Locale.US, "%.2f lb-in", moment.inLbIn)
         }
     }
 

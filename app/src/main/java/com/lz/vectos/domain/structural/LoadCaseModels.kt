@@ -12,7 +12,9 @@ data class LoadCase(
 object StandardLoadCases {
     const val DEAD = "DL"
     const val LIVE = "LL"
+    const val ROOF_LIVE = "RLL"
     const val SNOW = "SL"
     const val WIND = "WL"
     const val SEISMIC = "EL"
+    const val RAIN = "RL"
 }

@@ -107,7 +107,7 @@ fun DrawScope.drawStructuralJoint(
         drawIntoCanvas { canvas ->
             val paint = android.graphics.Paint().apply {
                 this.color = color.toArgb()
-                this.textSize = 10.sp.toPx()
+                this.textSize = 14.sp.toPx()
                 this.textAlign = android.graphics.Paint.Align.CENTER
                 this.isFakeBoldText = true
             }

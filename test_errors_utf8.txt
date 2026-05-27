@@ -1,0 +1,434 @@
+﻿> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:kspDebugKotlin UP-TO-DATE
+> Task :app:compileDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:bundleDebugClassesToCompileJar UP-TO-DATE
+> Task :app:kspDebugUnitTestKotlin UP-TO-DATE
+
+> Task :app:compileDebugUnitTestKotlin FAILED
+./gradlew : e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/beam/BeamCalc
+ulatorTest.kt:28:9 No value passed for parameter 'designContext'.
+At line:1 char:1
++ ./gradlew compileDebugUnitTestKotlin > test_errors.txt 2>&1 ; Get-Con ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (e: file:///C:/U...designContext'.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/beam/BeamCalculatorTest.k
+t:35:22 Unresolved reference 'BeamInputs'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/beam/BeamCalculatorTest.k
+t:41:24 Unresolved reference 'LoadType'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/beam/BeamCalculatorTest.k
+t:45:27 Unresolved reference 'BeamCalculator'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/beam/BeamCalculatorTest.k
+t:60:22 Unresolved reference 'BeamInputs'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/beam/BeamCalculatorTest.k
+t:66:24 Unresolved reference 'LoadType'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/beam/BeamCalculatorTest.k
+t:70:27 Unresolved reference 'BeamCalculator'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/beam/BeamCalculatorTest.k
+t:90:22 Unresolved reference 'BeamInputs'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/beam/BeamCalculatorTest.k
+t:93:30 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+val Double.newtons: Force
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/beam/BeamCalculatorTest.k
+t:96:24 Unresolved reference 'LoadType'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/beam/BeamCalculatorTest.k
+t:100:27 Unresolved reference 'BeamCalculator'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:15:36 Argument type mismatch: actual type is 'kotlin.Double', but 'com.lz.vectos.domain.units.Force' 
+was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:15:61 No value passed for parameter 'locationStart'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:16:36 Argument type mismatch: actual type is 'kotlin.Double', but 'com.lz.vectos.domain.units.Force' 
+was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:16:61 No value passed for parameter 'locationStart'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:20:37 Argument type mismatch: actual type is 'com.lz.vectos.domain.structural.DesignMethodology', but 
+'kotlin.String' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:20:61 Argument type mismatch: actual type is 'kotlin.String', but 
+'com.lz.vectos.domain.structural.DesignMethodology' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:20:69 Argument type mismatch: actual type is 'kotlin.collections.Map<K, V>', but 'kotlin.String' was 
+expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:20:102 Argument type mismatch: actual type is 'kotlin.String', but 
+'kotlin.collections.Map<com.lz.vectos.domain.structural.LoadCategory, kotlin.Double>' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:20:102 No value passed for parameter 'codeReference'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:21:44 Argument type mismatch: actual type is 'com.lz.vectos.domain.structural.DesignMethodology', but 
+'kotlin.String' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:21:68 Argument type mismatch: actual type is 'kotlin.String', but 
+'com.lz.vectos.domain.structural.DesignMethodology' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:21:83 Argument type mismatch: actual type is 'kotlin.collections.Map<K, V>', but 'kotlin.String' was 
+expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:21:142 Argument type mismatch: actual type is 'kotlin.String', but 
+'kotlin.collections.Map<com.lz.vectos.domain.structural.LoadCategory, kotlin.Double>' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:21:142 No value passed for parameter 'codeReference'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadCombinatio
+nEngineTest.kt:24:44 Unresolved reference 'resolveGoverningDemands'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:18:13 No value passed for parameter 'id'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:27:13 No value passed for parameter 'id'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:36:37 Argument type mismatch: actual type is 'com.lz.vectos.domain.structural.DesignMethodology', but 
+'kotlin.String' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:36:61 Argument type mismatch: actual type is 'kotlin.String', but 
+'com.lz.vectos.domain.structural.DesignMethodology' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:36:69 Argument type mismatch: actual type is 'kotlin.collections.Map<K, V>', but 'kotlin.String' was 
+expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:36:102 Argument type mismatch: actual type is 'kotlin.String', but 
+'kotlin.collections.Map<com.lz.vectos.domain.structural.LoadCategory, kotlin.Double>' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:36:102 No value passed for parameter 'codeReference'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:37:44 Argument type mismatch: actual type is 'com.lz.vectos.domain.structural.DesignMethodology', but 
+'kotlin.String' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:37:68 Argument type mismatch: actual type is 'kotlin.String', but 
+'com.lz.vectos.domain.structural.DesignMethodology' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:37:83 Argument type mismatch: actual type is 'kotlin.collections.Map<K, V>', but 'kotlin.String' was 
+expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:37:142 Argument type mismatch: actual type is 'kotlin.String', but 
+'kotlin.collections.Map<com.lz.vectos.domain.structural.LoadCategory, kotlin.Double>' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:37:142 No value passed for parameter 'codeReference'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:51:41 Unresolved reference 'maxMomentZ'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:52:46 Unresolved reference 'maxMomentZ'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:53:49 Unresolved reference 'value'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:63:13 No value passed for parameter 'id'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:73:37 Argument type mismatch: actual type is 'com.lz.vectos.domain.structural.DesignMethodology', but 
+'kotlin.String' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:73:60 Argument type mismatch: actual type is 'kotlin.String', but 
+'com.lz.vectos.domain.structural.DesignMethodology' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:73:68 Argument type mismatch: actual type is 'kotlin.collections.Map<K, V>', but 'kotlin.String' was 
+expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:73:101 Argument type mismatch: actual type is 'kotlin.String', but 
+'kotlin.collections.Map<com.lz.vectos.domain.structural.LoadCategory, kotlin.Double>' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:73:101 No value passed for parameter 'codeReference'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:87:40 Unresolved reference 'value'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/LoadResolution
+ServiceTest.kt:88:51 Unresolved reference 'value'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:12:33 Interface 'interface SectionProfile : Any' does not have constructors.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:23:58 Argument type mismatch: actual type is 'kotlin.Double', but 
+'com.lz.vectos.domain.units.MomentOfInertia' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:23:71 Argument type mismatch: actual type is 'kotlin.Double', but 
+'com.lz.vectos.domain.units.SectionModulus' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:23:84 Argument type mismatch: actual type is 'kotlin.Double', but 
+'com.lz.vectos.domain.units.SectionModulus' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:23:97 Argument type mismatch: actual type is 'kotlin.Double', but 
+'com.lz.vectos.domain.units.Length' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:24:56 Argument type mismatch: actual type is 'kotlin.Double', but 
+'com.lz.vectos.domain.units.MomentOfInertia' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:24:69 Argument type mismatch: actual type is 'kotlin.Double', but 
+'com.lz.vectos.domain.units.SectionModulus' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:24:82 Argument type mismatch: actual type is 'kotlin.Double', but 
+'com.lz.vectos.domain.units.SectionModulus' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:24:95 Argument type mismatch: actual type is 'kotlin.Double', but 
+'com.lz.vectos.domain.units.Length' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:27:36 'designMethodology' overrides nothing.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:27:89 This type is final, so it cannot be extended.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:27:101 No value passed for parameter 'id'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:27:101 No value passed for parameter 'shortName'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:27:101 No value passed for parameter 'longName'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:28:9 'name' overrides nothing.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:29:9 'referenceMap' overrides nothing.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:29:37 Unresolved reference 'CodeReferenceMap'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:30:9 'defaultLoadCases' overrides nothing.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:31:9 'defaultLoadCombinations' overrides nothing.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:32:9 'phiMoment' overrides nothing.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:33:9 'phiShear' overrides nothing.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:34:9 'omegaMoment' overrides nothing.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:35:9 'omegaShear' overrides nothing.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:36:9 'serviceabilityCriteria' in 'BuildingCode' is final and cannot be overridden.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:41:22 Unresolved reference 'MaterialDesignInputs'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:45:70 Too many arguments for 'fun computeCapacity(section: SectionProfile, code: BuildingCode): 
+SectionCapacity'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:45:102 Too many arguments for 'fun computeCapacity(section: SectionProfile, code: BuildingCode): 
+SectionCapacity'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:46:32 Unresolved reference 'interactionResult'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:53:25 Unresolved reference 'CombinationResult'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:54:24 Unresolved reference 'CombinationResult'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:55:13 No value passed for parameter 'limitState'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:55:29 Argument type mismatch: actual type is 'com.lz.vectos.domain.units.Length', but 
+'com.lz.vectos.domain.structural.GoverningEffect<com.lz.vectos.domain.units.Length>' was expected.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:60:30 Unresolved reference 'interactionResult'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:61:34 Unresolved reference 'interactionResult'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:63:75 Unresolved reference 'newtonMeters'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:63:135 Unresolved reference 'newtons'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:64:49 Unresolved reference 'interactionValue'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:67:22 Unresolved reference 'GoverningMechanism'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:67:61 Unresolved reference 'governingMechanism'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:72:22 Unresolved reference 'MaterialDesignInputs'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:75:70 Too many arguments for 'fun computeCapacity(section: SectionProfile, code: BuildingCode): 
+SectionCapacity'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:75:100 Too many arguments for 'fun computeCapacity(section: SectionProfile, code: BuildingCode): 
+SectionCapacity'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/SteelInteracti
+onVerificationTest.kt:78:29 Unresolved reference 'interactionResult'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/Canti
+leverVerificationTest.kt:51:13 No parameter with name 'loads' found.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/Canti
+leverVerificationTest.kt:53:13 No value passed for parameter 'loadCases'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/Canti
+leverVerificationTest.kt:63:68 Unresolved reference 'poundFeet'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/Canti
+leverVerificationTest.kt:67:100 Unresolved reference. None of the following candidates is applicable because of a 
+receiver type mismatch:
+val Double.poundsForce: Force
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/Canti
+leverVerificationTest.kt:78:76 Unresolved reference. None of the following candidates is applicable because of a 
+receiver type mismatch:
+val Double.poundsForce: Force
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/Canti
+leverVerificationTest.kt:82:59 Unresolved reference 'poundFeet'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/Canti
+leverVerificationTest.kt:87:56 Unresolved reference 'poundFeet'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/Canti
+leverVerificationTest.kt:88:63 Unresolved reference 'poundFeet'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/TwoSp
+anBeamTest.kt:51:13 No parameter with name 'loads' found.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/TwoSp
+anBeamTest.kt:53:13 No value passed for parameter 'loadCases'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/TwoSp
+anBeamTest.kt:61:58 Unresolved reference 'poundFeet'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/TwoSp
+anBeamTest.kt:62:64 Unresolved reference 'poundFeet'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/TwoSp
+anBeamTest.kt:63:47 Unresolved reference. None of the following candidates is applicable because of a receiver type 
+mismatch:
+val Double.poundsForce: Force
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/TwoSp
+anBeamTest.kt:67:43 Unresolved reference. None of the following candidates is applicable because of a receiver type 
+mismatch:
+val Double.poundsForce: Force
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/structural/analysis/TwoSp
+anBeamTest.kt:68:37 Unresolved reference 'poundFeet'.
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:12:9 None of the following candidates is applicable:
+static fun assertEquals(p0: String!, p1: Any!, p2: Any!): Unit
+static fun assertEquals(p0: String!, p1: Long, p2: Long): Unit
+static fun assertEquals(p0: String!, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Double, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Float, p1: Float, p2: Float): Unit
+static fun assertEquals(p0: String!, p1: (Array<Any!>..Array<out Any!>?), p2: (Array<Any!>..Array<out Any!>?)): Unit
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:12:80 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+val Double.meters: Length
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:13:9 None of the following candidates is applicable:
+static fun assertEquals(p0: String!, p1: Any!, p2: Any!): Unit
+static fun assertEquals(p0: String!, p1: Long, p2: Long): Unit
+static fun assertEquals(p0: String!, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Double, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Float, p1: Float, p2: Float): Unit
+static fun assertEquals(p0: String!, p1: (Array<Any!>..Array<out Any!>?), p2: (Array<Any!>..Array<out Any!>?)): Unit
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:13:87 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+val Double.meters: Length
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:14:9 None of the following candidates is applicable:
+
+[Incubating] Problems report is available at: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/build/reports/problems/problems-report.html
+static fun assertEquals(p0: String!, p1: Any!, p2: Any!): Unit
+static fun assertEquals(p0: String!, p1: Long, p2: Long): Unit
+static fun assertEquals(p0: String!, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Double, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Float, p1: Float, p2: Float): Unit
+static fun assertEquals(p0: String!, p1: (Array<Any!>..Array<out Any!>?), p2: (Array<Any!>..Array<out Any!>?)): Unit
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:14:81 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+val Double.meters: Length
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:15:9 None of the following candidates is applicable:
+static fun assertEquals(p0: String!, p1: Any!, p2: Any!): Unit
+static fun assertEquals(p0: String!, p1: Long, p2: Long): Unit
+static fun assertEquals(p0: String!, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Double, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Float, p1: Float, p2: Float): Unit
+static fun assertEquals(p0: String!, p1: (Array<Any!>..Array<out Any!>?), p2: (Array<Any!>..Array<out Any!>?)): Unit
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:15:83 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+val Double.meters: Length
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:29:9 None of the following candidates is applicable:
+static fun assertEquals(p0: String!, p1: Any!, p2: Any!): Unit
+static fun assertEquals(p0: String!, p1: Long, p2: Long): Unit
+static fun assertEquals(p0: String!, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Double, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Float, p1: Float, p2: Float): Unit
+static fun assertEquals(p0: String!, p1: (Array<Any!>..Array<out Any!>?), p2: (Array<Any!>..Array<out Any!>?)): Unit
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:29:80 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+val Double.newtons: Force
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:30:9 None of the following candidates is applicable:
+static fun assertEquals(p0: String!, p1: Any!, p2: Any!): Unit
+static fun assertEquals(p0: String!, p1: Long, p2: Long): Unit
+static fun assertEquals(p0: String!, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Double, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Float, p1: Float, p2: Float): Unit
+static fun assertEquals(p0: String!, p1: (Array<Any!>..Array<out Any!>?), p2: (Array<Any!>..Array<out Any!>?)): Unit
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:30:87 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+val Double.newtons: Force
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:31:9 None of the following candidates is applicable:
+static fun assertEquals(p0: String!, p1: Any!, p2: Any!): Unit
+static fun assertEquals(p0: String!, p1: Long, p2: Long): Unit
+static fun assertEquals(p0: String!, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Double, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Float, p1: Float, p2: Float): Unit
+static fun assertEquals(p0: String!, p1: (Array<Any!>..Array<out Any!>?), p2: (Array<Any!>..Array<out Any!>?)): Unit
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:31:89 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+val Double.newtons: Force
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:36:9 None of the following candidates is applicable:
+static fun assertEquals(p0: String!, p1: Any!, p2: Any!): Unit
+static fun assertEquals(p0: String!, p1: Long, p2: Long): Unit
+static fun assertEquals(p0: String!, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Double, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Float, p1: Float, p2: Float): Unit
+static fun assertEquals(p0: String!, p1: (Array<Any!>..Array<out Any!>?), p2: (Array<Any!>..Array<out Any!>?)): Unit
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:36:83 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+val Double.pascals: Pressure
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:37:9 None of the following candidates is applicable:
+static fun assertEquals(p0: String!, p1: Any!, p2: Any!): Unit
+static fun assertEquals(p0: String!, p1: Long, p2: Long): Unit
+static fun assertEquals(p0: String!, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Double, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Float, p1: Float, p2: Float): Unit
+static fun assertEquals(p0: String!, p1: (Array<Any!>..Array<out Any!>?), p2: (Array<Any!>..Array<out Any!>?)): Unit
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:37:88 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+val Double.pascals: Pressure
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:38:9 None of the following candidates is applicable:
+static fun assertEquals(p0: String!, p1: Any!, p2: Any!): Unit
+static fun assertEquals(p0: String!, p1: Long, p2: Long): Unit
+static fun assertEquals(p0: String!, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Double, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Float, p1: Float, p2: Float): Unit
+static fun assertEquals(p0: String!, p1: (Array<Any!>..Array<out Any!>?), p2: (Array<Any!>..Array<out Any!>?)): Unit
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:38:88 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+val Double.pascals: Pressure
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:39:9 None of the following candidates is applicable:
+static fun assertEquals(p0: String!, p1: Any!, p2: Any!): Unit
+static fun assertEquals(p0: String!, p1: Long, p2: Long): Unit
+static fun assertEquals(p0: String!, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Double, p1: Double, p2: Double): Unit
+static fun assertEquals(p0: Float, p1: Float, p2: Float): Unit
+static fun assertEquals(p0: String!, p1: (Array<Any!>..Array<out Any!>?), p2: (Array<Any!>..Array<out Any!>?)): Unit
+e: file:///C:/Users/hapto/AndroidStudioProjects/VectOS/app/src/test/java/com/lz/vectos/domain/units/UnitConverterTest.k
+t:39:84 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+val Double.pascals: Pressure
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugUnitTestKotlin'.
+> A failure occurred while executing 
+org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.2.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+20 actionable tasks: 1 executed, 19 up-to-date
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 1s

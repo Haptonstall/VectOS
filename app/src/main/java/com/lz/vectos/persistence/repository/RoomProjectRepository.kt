@@ -11,19 +11,20 @@ import java.util.UUID
  * Translates domain models to Room entities using [RoomPersistenceMapper].
  */
 class RoomProjectRepository(
-    private val projectDao: ProjectDao
+    private val projectDao: ProjectDao,
+    private val mapper: RoomPersistenceMapper
 ) : ProjectRepository {
 
     override suspend fun getProject(id: UUID): Project? {
-        return projectDao.getById(id)?.let { RoomPersistenceMapper.toDomain(it) }
+        return projectDao.getById(id)?.let { mapper.toDomain(it) }
     }
 
     override suspend fun getAllProjects(): List<Project> {
-        return projectDao.getAll().map { RoomPersistenceMapper.toDomain(it) }
+        return projectDao.getAll().map { mapper.toDomain(it) }
     }
 
     override suspend fun saveProject(project: Project) {
-        projectDao.insert(RoomPersistenceMapper.toRoomEntity(project))
+        projectDao.insert(mapper.toRoomEntity(project))
     }
 
     override suspend fun deleteProject(id: UUID) {

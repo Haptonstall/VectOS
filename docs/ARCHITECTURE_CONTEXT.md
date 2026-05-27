@@ -10,7 +10,6 @@ This document is the authoritative architectural contract for VectOS. All future
 *   **Target Users:** Practicing structural engineers
 *   **Core Philosophy:**
     *   **Analysis ≠ Design ≠ Judgment:** These three stages are distinct. Analysis produces raw demands; Design compares them to capacities; Judgment (Human-in-the-loop) determines the final engineering decision.
-    *   **Human-in-the-loop is mandatory:** The system provides data and interpretation, but the engineer provides the acknowledgment and final approval.
 
 ## 2. Supported Scope (Current)
 *   **Structural Scope:** Beams (Simple span active; `StructuralMember` and `SpanGeometry` data structures are multi-span ready).
@@ -25,6 +24,7 @@ This document is the authoritative architectural contract for VectOS. All future
     *   Yielding, Lateral-Torsional Buckling (LTB), Shear, and Axial strength checks.
     *   Flexure-Shear Interaction and Axial-Flexural Interaction hooks.
     *   Utilization-based interpretation (Low, Moderate, High, Exceeds Capacity).
+    *   Automated Pass/Fail status based on code-defined limit states.
 *   **Reporting & Audit:**
     *   CSV and PDF export functionality.
     *   Equation-level traceability (Traces) for all capacity evaluations.
@@ -32,10 +32,11 @@ This document is the authoritative architectural contract for VectOS. All future
     *   Revision management with automated change detection.
 
 ## 3. Architectural Laws (Non-Negotiable)
-*   **No Auto Pass/Fail:** The system shall not autonomously declare a calculation "Finished" or "Safe". Engineering acknowledgment is required.
+*   **Automated Validation:** The system provides real-time Pass/Fail feedback based on the governed utilization ratios of all active limit states.
 *   **No UI-Driven Engineering Logic:** Calculators and services must reside in the domain layer. The UI is a pure projection of state and a capturer of events.
-*   **No Unit Logic Inside Calculators:** Domain calculators operate exclusively on internal base units (SI: Meters, Newtons, Pascals). All unit conversion and formatting are handled at the perimeter (UI/ViewModel) via `UnitConverter` and `UnitFormattingService`.
-*   **Functional Separation:** Analysis (Demand), Design (Capacity), Interpretation (Status), and Decision (Acknowledgment) must remain strictly separate in the code.
+*   **No Unit Logic Inside Calculators:** Domain calculators operate exclusively on internal base units (Imperial). All unit conversion and formatting are handled at the perimeter (UI/ViewModel) via `UnitConverter` and `UnitFormattingService`.
+*   **No Hardcoded Engineering Metadata:** Building codes, load factors, and serviceability limits must be retrieved from the `StructuralRepository`. Domain models (`BuildingCode`, `Standard`) are "Pure" data holders, and their instantiation is the responsibility of the persistence layer.
+*   **Functional Separation:** Analysis (Demand), Design (Capacity), and Interpretation (Status) must remain strictly separate in the code.
 
 ## 4. Steel as Reference Implementation
 *   Steel design (`SteelDesignStrategy`) per AISC 360 is the reference-quality implementation.
@@ -50,7 +51,8 @@ This document is the authoritative architectural contract for VectOS. All future
 
 ## 6. Load & Combination Philosophy
 *   **Load Cases vs Combinations:** Loads are authored into specific Load Cases (Dead, Live, etc.). Combinations then aggregate these cases using factors.
-*   **Code-Driven Combinations:** Factors and combinations are derived from building codes (e.g., ASCE 7).
+*   **Code-Driven Combinations:** Factors and combinations are derived from building codes (e.g., ASCE 7). They are retrieved dynamically from the `StructuralRepository` rather than being hardcoded in logic.
+*   **Recursive Code Inheritance:** The system supports building code inheritance (e.g., FBC inherits from IBC). Merging logic resides within the repository, ensuring the domain layer sees only the final, resolved configuration.
 *   **Span-Scoped Loads:** Loads are associated with specific spans within a member.
 *   **No User-Defined Factors:** To ensure code compliance, users select established code combinations rather than defining arbitrary factors for safety-critical checks.
 
@@ -61,16 +63,15 @@ Tab-based responsibility is strict to prevent duplicated inputs and fragmented c
 | :--- | :--- |
 | **Geometry** | Span definitions + Section selection |
 | **Loads** | All load authoring and case management |
-| **Design** | Evaluation results, utilization, and acknowledgment |
-| **Basis** | Engineering assumptions and design methodology |
-| **Revisions** | Version history and audit provenance |
+| **Analysis** | Envelopes, reactions, and station-by-station demand |
+| **Design** | Detailed limit state checks and serviceability evaluation |
 
 *   **Constraint:** Duplicated inputs across tabs are strictly forbidden.
 
 ## 8. Known Gaps (Intentional)
 The following are accepted states of the current development:
 *   **Incomplete AISC database:** Asset files contain subsets of common sections.
-*   **Project Settings UI Gaps:** Global settings vs. Project-specific overrides are in transition.
+*   **Dynamic Code Switching UI:** While the architecture supports it, the UI for switching building codes in an active project and handling the resulting re-validation is still in progress.
 *   **Continuous Beam Solver Transition:** The mathematical solver is moving from a single-span focus to a multi-span matrix-based approach.
 *   **LRFD/ASD Selector UI Polish:** The visual implementation of switching methodologies is functional but requires aesthetic refinement.
 
@@ -91,5 +92,71 @@ The following are accepted states of the current development:
 *   Changes to **Architectural Laws** require explicit human approval.
 *   Deprecated sections must be labeled as `[DEPRECATED]` but not deleted to preserve contextual history.
 
+## 12. Data-Driven Structural Configuration
+*   **ID-Based Persistence:** Projects must store only the `shortName` (ID) of building codes and standards. Rehydration is handled via `RoomPersistenceMapper` using the `StructuralRepository`.
+*   **Strict Typing for Metadata:** Metadata lookups must use the strictly typed enums: `StructuralReferenceKey`, `ServiceabilityLimitType`, and `LoadCategory`.
+*   **Fail-Fast Resolution:** Repository lookups must throw explicit exceptions for missing configurations to prevent silent errors in calculations.
+
 ---
 *Note: This file was initialized at Part 1 of the VectOS Baseline Initialization.*
+
+## 13. Canonical Package Layout
+The authoritative app source root is `app/src/main/java/com/lz/vectos/`.
+
+The project should be organized into these primary logical layers:
+
+- `com.lz.vectos.domain` – Pure engineering models, analysis, design, and interpretation logic.
+  - `domain.structural` – structural demand, capacity, load combinations, building code models, and interpretation services.
+  - `domain.beam` – beam-specific domain models, geometry, and beam analysis interfaces.
+  - `domain.project` – project settings, context, and domain-level project models.
+  - `domain.calculation` – calculation lifecycle, registry, and engineering calculation orchestration.
+  - `domain.provenance` – traceability, audit trail, and revision provenance.
+  - `domain.units` – unit system models, formatting, and unit conversion helper abstractions.
+  - `domain.versioning` – calculation versioning and change tracking models.
+
+- `com.lz.vectos.data` – Persistence and external data adapter implementations.
+  - `data.repository` – repository interfaces and concrete data store implementations.
+  - `data.persistence.room` – Room database classes, DAOs, entities, mappers, and seeders.
+  - `data.export` – CSV/PDF export and reporting adapters.
+
+- `com.lz.vectos.ui` – UI layer and presentation.
+  - `ui.navigation` – navigation routes and graph definitions.
+  - `ui.theme` – theming and visual design system.
+  - `ui.home`, `ui.project`, `ui.beam`, `ui.tool` – feature-specific Compose screens and supporting composables.
+  - `ui.settings` – global application settings UI.
+
+- `com.lz.vectos.presentation` or `com.lz.vectos.viewmodel` – UI state and ViewModel coordination.
+  - ViewModels should be the only boundary between UI and domain/data, exposing state to composables.
+
+- `com.lz.vectos.util` – general utilities such as serialization helpers.
+
+- `com.lz.vectos.application` – app wiring, cross-cutting orchestration, and bootstrapping.
+  - This package may only contain setup code and should not host domain logic or calculation algorithms.
+
+## 14. Organizational Guardrails
+To preserve the baseline architecture and prevent regression:
+
+- The `domain` layer must not import `androidx`, `android.app`, `android.content`, Room, DataStore, or UI-specific packages.
+- The `domain` layer must contain no UI state, no Compose code, and no persistence adapter code.
+- All repository interfaces should be domain-facing or data-facing, but not both. Prefer `com.lz.vectos.domain.repository` for domain contracts and `com.lz.vectos.data.repository` for implementations.
+- Persistence classes (Room DAOs, entities, mappers, seeders) must remain under `data.persistence.room`.
+- Compose screens and UI-only components must remain under `ui.*`. Shared composables may live in `ui.common` or the feature package that owns them.
+- `MainActivity` should remain orchestration-only: app theme, navigation host, dependency wiring, and startup sequences.
+- Input domain models may live under `domain` or `ui.input` depending on intent; avoid a generic `input` package if it mixes domain and UI concerns.
+- Feature names should guide directories: `ui.project`, `ui.beam`, `ui.tool`, not broad directories like `ui/widgets` unless truly shared.
+- Any new top-level package outside `app/src/main/java/com/lz/vectos/` must be intentionally added as a Gradle module and referenced in `settings.gradle.kts`.
+- Before deleting or moving files, compare duplicate content carefully and preserve the more complete version.
+
+## 15. Duplicate-path caution
+There are currently files outside the canonical app source tree, notably:
+
+- `application/repository/SettingsRepository.kt`
+- `domain/structural/ServiceabilityInterpretationService.kt`
+
+These appear to be duplicates of `app/src/main/java/com/lz/vectos/...` files.
+
+- `application/repository/SettingsRepository.kt` currently has a larger interface surface than the app module copy.
+- `domain/structural/ServiceabilityInterpretationService.kt` is identical to the app module copy.
+- `persistence/room/entity` and `ui/beam` at the repository root are empty directories.
+
+Do not remove these files automatically. Confirm whether the root-level files are intended to be migrated into the app module, kept as in-progress work, or discarded after a deliberate merge.

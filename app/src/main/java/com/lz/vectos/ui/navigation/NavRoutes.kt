@@ -7,4 +7,6 @@ sealed class Screen(val route: String) {
     object ToolPicker : Screen("tool_picker")
     object BeamCalculator : Screen("beam_calculator")
     object Settings : Screen("settings")
+    object NewProject : Screen("new_project")
+    object ProjectDetails : Screen("project_details")
 }

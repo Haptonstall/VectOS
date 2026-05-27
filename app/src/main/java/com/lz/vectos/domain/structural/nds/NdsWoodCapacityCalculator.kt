@@ -34,7 +34,7 @@ class NdsWoodCapacityCalculator(
         )
     }
 
-    fun evaluate(demand: StationDemand): RawCapacityResult {
+    override fun evaluate(demand: StationDemand): RawCapacityResult {
         // NDS Placeholder: F'b = Fb * Cd * Cm * Ct * Cl * Cf * Cfu * Ci * Cr
         // For now, assume unadjusted reference properties
         val nominalMn = material.referenceBending.inPsi * profile.propertiesStrongAxis.s.inIn3

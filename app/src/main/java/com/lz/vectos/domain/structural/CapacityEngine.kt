@@ -1,96 +1,181 @@
 package com.lz.vectos.domain.structural
 
-import com.lz.vectos.domain.beam.MaterialType
 import com.lz.vectos.domain.beam.SectionProfile
+import com.lz.vectos.domain.units.*
+import kotlinx.serialization.Serializable
+import kotlin.math.abs
 
 /**
- * Result of a point-by-point capacity evaluation.
+ * Details of a single code check.
  */
-data class PointCapacityResult(
-    val x: Double,
-    val Mx: Double,
-    val compressionFlange: Flange,
-    val Lb: Double,
-    val nominalCapacity: Double,
-    val designCapacity: Double,
-    val utilizationRatio: Double,
-    val governingLimitState: String
+@Serializable
+data class CodeCheck(
+    val limitState: String = "N/A",
+    val demand: Double = 0.0,
+    val capacity: Double = 0.0,
+    val ratio: Double = 0.0,
+    val isServiceability: Boolean = false
 )
 
 /**
- * Placeholder for material-specific capacity formulas.
- * This will be replaced by actual AISC/NDS logic.
+ * Result of a point-by-point capacity evaluation across all limit states.
+ */
+@Serializable
+data class PointCapacityResult(
+    val demand: StationDemand,
+    
+    // Detailed Checks
+    val flexureCheckX: CodeCheck = CodeCheck(),
+    val flexureCheckY: CodeCheck = CodeCheck(),
+    val shearCheckX: CodeCheck = CodeCheck(),
+    val shearCheckY: CodeCheck = CodeCheck(),
+    val axialCheck: CodeCheck = CodeCheck(),
+    val torsionCheck: CodeCheck = CodeCheck(),
+    val deflectionCheck: CodeCheck = CodeCheck(),
+    val interactionCheck: CodeCheck = CodeCheck(),
+    
+    // Top-level governing values for easy consumption
+    val designCapacity: Double = 0.0,
+    val utilizationRatio: Double = 0.0,
+    val governingLimitState: String = "N/A",
+    val compressionFlange: Flange = Flange.TOP,
+    val Lb: Double = 0.0
+)
+
+/**
+ * Container for nominal capacities and allowable limits calculated by the material strategy.
  */
 data class RawCapacityResult(
-    val nominalCapacity: Double,
-    val governingLimitState: String
-)
+    val nominalFlexureX: Double = 0.0,
+    val limitStateFlexureX: String = "Flexure X",
+    val nominalFlexureY: Double = 0.0,
+    val limitStateFlexureY: String = "Flexure Y",
+    val nominalShearX: Double = 0.0,
+    val limitStateShearX: String = "Shear X",
+    val nominalShearY: Double = 0.0,
+    val limitStateShearY: String = "Shear Y",
+    val nominalAxial: Double = 0.0,
+    val limitStateAxial: String = "Axial",
+    val nominalTorsion: Double = 0.0,
+    val limitStateTorsion: String = "Torsion",
+    val allowableDeflection: Double = Double.POSITIVE_INFINITY,
+    val limitStateDeflection: String = "Deflection"
+) {
+    // Backward compatibility property aliases
+    val nominalCapacity: Double get() = nominalFlexureX
+    val governingLimitState: String get() = limitStateFlexureX
+}
 
 /**
- * Evaluation engine that performs code checks at every discrete point.
+ * Evaluation engine that performs comprehensive code checks at every discrete point.
  */
 object CapacityEngine {
 
     /**
-     * Iterates through the enriched bracing array and calculates utilization at every point.
+     * Iterates through the enriched station demands and calculates utilization 
+     * for all limit states (shear, axial, flexure, torsion, and serviceability) at every point.
      */
     fun evaluate(
-        enrichedBracing: List<DiscreteBracingResult>,
+        demands: List<StationDemand>,
         section: SectionProfile,
         methodology: DesignMethodology,
-        // In the future, this would be a MaterialDesignStrategy implementation
-        capacityCalculator: (Double, Flange) -> RawCapacityResult
+        capacityCalculator: (StationDemand) -> RawCapacityResult
     ): List<PointCapacityResult> {
         
-        val phi = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0 // Simplified for placeholder
-        val omega = if (methodology == DesignMethodology.ASD) 1.67 else 1.0 // Simplified for placeholder
+        // Simplified factors for placeholder; normally pulled from code specifications
+        val phiFlexure = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
+        val omegaFlexure = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
+        
+        val phiShear = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
+        val omegaShear = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
+        
+        val phiAxial = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
+        val omegaAxial = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
 
-        return enrichedBracing.map { point ->
-            // 1. Calculate Capacity for this specific Lb and Flange
-            val raw = capacityCalculator(point.Lb, point.compressionFlange)
+        val phiTorsion = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
+        val omegaTorsion = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
+
+        return demands.map { demand ->
+            val raw = capacityCalculator(demand)
             
-            // 2. Apply Design Factors (LRFD/ASD)
-            val designCapacity = if (methodology == DesignMethodology.LRFD) {
-                raw.nominalCapacity * phi
-            } else {
-                raw.nominalCapacity / omega
-            }
+            // Flexure X
+            val designFlexureX = if (methodology == DesignMethodology.LRFD) raw.nominalFlexureX * phiFlexure else raw.nominalFlexureX / omegaFlexure
+            val demandFlexureX = abs(demand.moment.inLbIn)
+            val ratioFlexureX = if (designFlexureX > 0) demandFlexureX / designFlexureX else 0.0
+            val checkFlexureX = CodeCheck(raw.limitStateFlexureX, demandFlexureX, designFlexureX, ratioFlexureX)
+            
+            // Flexure Y
+            val designFlexureY = if (methodology == DesignMethodology.LRFD) raw.nominalFlexureY * phiFlexure else raw.nominalFlexureY / omegaFlexure
+            val demandFlexureY = abs(demand.momentY.inLbIn)
+            val ratioFlexureY = if (designFlexureY > 0) demandFlexureY / designFlexureY else 0.0
+            val checkFlexureY = CodeCheck(raw.limitStateFlexureY, demandFlexureY, designFlexureY, ratioFlexureY)
+            
+            // Shear X (Strong axis / Vy demand)
+            val designShearX = if (methodology == DesignMethodology.LRFD) raw.nominalShearX * phiShear else raw.nominalShearX / omegaShear
+            val demandShearX = abs(demand.shear.inPoundsForce)
+            val ratioShearX = if (designShearX > 0) demandShearX / designShearX else 0.0
+            val checkShearX = CodeCheck(raw.limitStateShearX, demandShearX, designShearX, ratioShearX)
+            
+            // Shear Y (Weak axis / Vz demand)
+            val designShearY = if (methodology == DesignMethodology.LRFD) raw.nominalShearY * phiShear else raw.nominalShearY / omegaShear
+            val demandShearY = abs(demand.shearY.inPoundsForce)
+            val ratioShearY = if (designShearY > 0) demandShearY / designShearY else 0.0
+            val checkShearY = CodeCheck(raw.limitStateShearY, demandShearY, designShearY, ratioShearY)
+            
+            // Axial
+            val designAxial = if (methodology == DesignMethodology.LRFD) raw.nominalAxial * phiAxial else raw.nominalAxial / omegaAxial
+            val demandAxial = abs(demand.axial.inPoundsForce)
+            val ratioAxial = if (designAxial > 0) demandAxial / designAxial else 0.0
+            val checkAxial = CodeCheck(raw.limitStateAxial, demandAxial, designAxial, ratioAxial)
+            
+            // Torsion
+            val designTorsion = if (methodology == DesignMethodology.LRFD) raw.nominalTorsion * phiTorsion else raw.nominalTorsion / omegaTorsion
+            val demandTorsion = abs(demand.torque.inLbIn)
+            val ratioTorsion = if (designTorsion > 0) demandTorsion / designTorsion else 0.0
+            val checkTorsion = CodeCheck(raw.limitStateTorsion, demandTorsion, designTorsion, ratioTorsion)
 
-            // 3. Calculate Utilization (Demand / Capacity)
-            // Note: Mx is absolute because capacity is usually defined as a positive resistance
-            val demand = Math.abs(point.Mx)
-            val utilization = if (designCapacity > 0) demand / designCapacity else Double.POSITIVE_INFINITY
+            // Deflection (Serviceability)
+            val demandDeflection = abs(demand.deflection.inInches)
+            val capacityDeflection = raw.allowableDeflection
+            val ratioDeflection = if (capacityDeflection > 0 && capacityDeflection != Double.POSITIVE_INFINITY) demandDeflection / capacityDeflection else 0.0
+            val checkDeflection = CodeCheck(raw.limitStateDeflection, demandDeflection, capacityDeflection, ratioDeflection, isServiceability = true)
+
+            // Interaction (Chapter H1.1)
+            val interactionRatio = if (ratioAxial >= 0.2) {
+                ratioAxial + (8.0 / 9.0) * (ratioFlexureX + ratioFlexureY)
+            } else {
+                (ratioAxial / 2.0) + (ratioFlexureX + ratioFlexureY)
+            }
+            val checkInteraction = CodeCheck("Interaction Eq H1-1", interactionRatio, 1.0, interactionRatio)
+
+            // Find Governing Limit State
+            val checks = listOf(
+                checkFlexureX, checkFlexureY, 
+                checkShearX, checkShearY, 
+                checkAxial, checkTorsion, 
+                checkDeflection, checkInteraction
+            )
+            
+            val governing = checks.maxByOrNull { it.ratio } ?: checkInteraction
 
             PointCapacityResult(
-                x = point.x,
-                Mx = point.Mx,
-                compressionFlange = point.compressionFlange,
-                Lb = point.Lb,
-                nominalCapacity = raw.nominalCapacity,
-                designCapacity = designCapacity,
-                utilizationRatio = utilization,
-                governingLimitState = raw.governingLimitState
+                demand = demand,
+                flexureCheckX = checkFlexureX,
+                flexureCheckY = checkFlexureY,
+                shearCheckX = checkShearX,
+                shearCheckY = checkShearY,
+                axialCheck = checkAxial,
+                torsionCheck = checkTorsion,
+                deflectionCheck = checkDeflection,
+                interactionCheck = checkInteraction,
+                designCapacity = governing.capacity,
+                utilizationRatio = governing.ratio,
+                governingLimitState = governing.limitState,
+                compressionFlange = demand.compressionFlange,
+                Lb = if (demand.compressionFlange == Flange.TOP) demand.lbTop.inInches else demand.lbBottom.inInches
             )
         }
     }
 }
 
-/**
- * EXAMPLE: A Mock Steel Capacity Calculator (AISC Chapter F placeholder)
- */
-fun mockSteelFlexuralCapacity(Lb: Double, flange: Flange): RawCapacityResult {
-    // Plastic Moment (Mp) = 50 ksi * 100 in^3 = 5,000,000 lb-in
-    val Mp = 50000.0 * 100.0 
-    
-    return when {
-        Lb <= 50.0 -> RawCapacityResult(Mp, "Yielding")
-        Lb <= 150.0 -> {
-            val capacity = Mp * (1.0 - (Lb - 50.0) / 200.0)
-            RawCapacityResult(capacity, "Inelastic LTB")
-        }
-        else -> {
-            val capacity = Mp * (150.0 / Lb)
-            RawCapacityResult(capacity, "Elastic LTB")
-        }
-    }
-}
+

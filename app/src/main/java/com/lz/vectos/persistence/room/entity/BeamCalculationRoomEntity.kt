@@ -19,21 +19,13 @@ import java.util.UUID
 data class BeamCalculationRoomEntity(
     @PrimaryKey val calculationId: UUID,
     
-    // Inputs
-    val spanMeters: Double,
-    val loadValueBase: Double,
-    val materialName: String,
-    val momentOfInertiaM4: Double,
-    val loadTypeName: String,
-    val unitSystemName: String,
+    // Serialized Data
+    val memberJson: String,
+    val resultsJson: String,
+    val assumptionsJson: String,
     
-    // Assumptions
-    val isLinearElastic: Boolean,
-    val isSmallDeflection: Boolean,
-    val isSimplySupported: Boolean,
-    
-    // Results
-    val maxBendingMomentNm: Double,
-    val maxShearN: Double,
-    val maxDeflectionM: Double
+    // Summary Results (for quick access/querying)
+    val maxBendingMomentLbIn: Double,
+    val maxShearLbs: Double,
+    val maxDeflectionInches: Double
 )

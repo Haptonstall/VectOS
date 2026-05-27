@@ -24,7 +24,8 @@ enum class LengthUnit(val symbol: String) {
 enum class ForceUnit(val symbol: String) {
     NEWTONS("N"),
     KILONEWTONS("kN"),
-    POUNDS_FORCE("lbf")
+    POUNDS_FORCE("lbf"),
+    KIPS("kip")
 }
 
 /**
@@ -34,7 +35,8 @@ enum class PressureUnit(val symbol: String) {
     PASCALS("Pa"),
     MEGA_PASCALS("MPa"),
     GIGA_PASCALS("GPa"),
-    PSI("psi")
+    PSI("psi"),
+    KSI("ksi")
 }
 
 /**
@@ -51,7 +53,10 @@ enum class MomentOfInertiaUnit(val symbol: String) {
  */
 enum class MomentUnit(val symbol: String) {
     NEWTON_METERS("N⋅m"),
-    POUND_FEET("lb⋅ft")
+    POUND_FEET("lb⋅ft"),
+    POUND_INCHES("lb⋅in"),
+    KIP_FEET("k-ft"),
+    KIP_INCHES("k-in")
 }
 
 /**
@@ -85,19 +90,24 @@ object UnitConverter {
         ForceUnit.NEWTONS -> value.newtons
         ForceUnit.KILONEWTONS -> value.kiloNewtons
         ForceUnit.POUNDS_FORCE -> value.poundsForce
+        ForceUnit.KIPS -> value.kips
     }
 
     fun toDisplayValue(force: Force, unit: ForceUnit): Double = when (unit) {
         ForceUnit.NEWTONS -> force.inNewtons
         ForceUnit.KILONEWTONS -> force.inKiloNewtons
         ForceUnit.POUNDS_FORCE -> force.inPoundsForce
+        ForceUnit.KIPS -> force.inKips
     }
 
     // --- MOMENT CONVERSIONS ---
 
     fun toDisplayValue(moment: Moment, unit: MomentUnit): Double = when (unit) {
         MomentUnit.NEWTON_METERS -> moment.inNewtonMeters
-        MomentUnit.POUND_FEET -> moment.inNewtonMeters / 1.3558179483314004
+        MomentUnit.POUND_FEET -> moment.inLbFt
+        MomentUnit.POUND_INCHES -> moment.inLbIn
+        MomentUnit.KIP_FEET -> moment.inLbFt / 1000.0
+        MomentUnit.KIP_INCHES -> moment.inLbIn / 1000.0
     }
 
     // --- PRESSURE CONVERSIONS ---
@@ -107,6 +117,7 @@ object UnitConverter {
         PressureUnit.MEGA_PASCALS -> value.megaPascals
         PressureUnit.GIGA_PASCALS -> value.gigaPascals
         PressureUnit.PSI -> value.psi
+        PressureUnit.KSI -> value.ksi
     }
 
     fun toDisplayValue(pressure: Pressure, unit: PressureUnit): Double = when (unit) {
@@ -114,6 +125,7 @@ object UnitConverter {
         PressureUnit.MEGA_PASCALS -> pressure.inMegaPascals
         PressureUnit.GIGA_PASCALS -> pressure.inGigaPascals
         PressureUnit.PSI -> pressure.inPsi
+        PressureUnit.KSI -> pressure.inKsi
     }
 
     // --- MOMENT OF INERTIA CONVERSIONS ---
@@ -126,7 +138,7 @@ object UnitConverter {
 
     fun toDisplayValue(moi: MomentOfInertia, unit: MomentOfInertiaUnit): Double = when (unit) {
         MomentOfInertiaUnit.METERS_4 -> moi.inM4
-        MomentOfInertiaUnit.MILLIMETERS_4 -> moi.metersToFourth / 1e-12
+        MomentOfInertiaUnit.MILLIMETERS_4 -> moi.inMm4
         MomentOfInertiaUnit.INCHES_4 -> moi.inIn4
     }
 }

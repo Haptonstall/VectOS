@@ -18,17 +18,19 @@ import com.lz.vectos.viewmodel.ProjectViewModel
 @Composable
 fun ProjectSettingsScreen(
     viewModel: ProjectViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
-    val project by viewModel.activeProject.collectAsState()
+    val projectState by viewModel.activeProject.collectAsState()
+    val buildingCodes by viewModel.buildingCodes.collectAsState()
+    val standards by viewModel.standards.collectAsState()
     val scrollState = rememberScrollState()
 
-    project?.let { activeProject ->
+    projectState.let { activeProject ->
         var units by remember { mutableStateOf(activeProject.designContext.units) }
         var methodology by remember { mutableStateOf(activeProject.designContext.methodology) }
-        var ibc by remember { mutableStateOf(activeProject.designContext.ibcEdition) }
-        var asce by remember { mutableStateOf(activeProject.designContext.asceEdition) }
-        var aisc by remember { mutableStateOf(activeProject.designContext.aiscEdition) }
+        var buildingCode by remember { mutableStateOf(activeProject.designContext.buildingCode) }
+        var standard by remember { mutableStateOf(activeProject.designContext.loadingStandard) }
+        var materialStandards by remember { mutableStateOf(activeProject.designContext.materialStandards) }
 
         Scaffold(
             topBar = {
@@ -41,7 +43,7 @@ fun ProjectSettingsScreen(
                     },
                     actions = {
                         TextButton(onClick = {
-                            viewModel.updateProjectSettings(units, methodology, ibc, asce, aisc)
+                            viewModel.updateProjectSettings(units, methodology, buildingCode, standard, materialStandards)
                             onBack()
                         }) {
                             Text("SAVE")
@@ -96,7 +98,7 @@ fun ProjectSettingsScreen(
                                 FilterChip(
                                     selected = methodology == method,
                                     onClick = { methodology = method },
-                                    label = { Text(method.label) }
+                                    label = { Text(method.name) }
                                 )
                             }
                         }
@@ -109,9 +111,65 @@ fun ProjectSettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text("Governing Codes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     
-                    EditionSelector("International Building Code (IBC)", ibc, IbcEdition.entries) { ibc = it }
-                    EditionSelector("ASCE 7 (Minimum Design Loads)", asce, AsceEdition.entries) { asce = it }
-                    EditionSelector("AISC 360 (Steel Specification)", aisc, AiscEdition.entries) { aisc = it }
+                    ObjectSelector("Building Code", buildingCode, buildingCodes) { 
+                        buildingCode = it 
+                        // Note: In Task 6, we would ideally offer to reset standards here.
+                    }
+                    ObjectSelector("Loading Standard", standard, standards.filter { it.shortName.contains("ASCE") }) { standard = it }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Material Design Standards", style = MaterialTheme.typography.titleSmall)
+
+                    // Dynamically render selectors for materials supported by the building code
+                    com.lz.vectos.domain.beam.MaterialType.entries.forEach { type ->
+                        val currentStd = materialStandards[type] ?: buildingCode.defaultMaterialStandards[type]
+                        if (currentStd != null) {
+                            val options = standards.filter { 
+                                when(type) {
+                                    com.lz.vectos.domain.beam.MaterialType.STEEL -> it.shortName.contains("AISC")
+                                    com.lz.vectos.domain.beam.MaterialType.WOOD -> it.shortName.contains("NDS")
+                                    else -> true
+                                }
+                            }
+                            
+                            ObjectSelector(
+                                label = "${type.name.lowercase().replaceFirstChar { it.uppercase() }} Standard",
+                                selected = currentStd,
+                                options = options
+                            ) { newStd ->
+                                materialStandards = materialStandards + (type to newStd)
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider()
+
+                // 4. Validation Issues (Intelligence)
+                val currentContext = activeProject.designContext.copy(
+                    units = units,
+                    methodology = methodology,
+                    buildingCode = buildingCode,
+                    loadingStandard = standard,
+                    materialStandards = materialStandards
+                )
+                val issues = currentContext.validate()
+
+                if (issues.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Compatibility Notes", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.secondary)
+                        issues.forEach { issue ->
+                            val color = when(issue.severity) {
+                                IssueSeverity.ERROR -> MaterialTheme.colorScheme.error
+                                IssueSeverity.WARNING -> MaterialTheme.colorScheme.primary
+                                IssueSeverity.INFO -> MaterialTheme.colorScheme.outline
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("•", color = color, style = MaterialTheme.typography.bodySmall)
+                                Text(issue.message, style = MaterialTheme.typography.bodySmall, color = color)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -120,14 +178,20 @@ fun ProjectSettingsScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun <T : Enum<T>> EditionSelector(
+private fun <T : Any> ObjectSelector(
     label: String,
     selected: T,
     options: List<T>,
-    onSelect: (T) -> Unit
+    onSelect: (T) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     
+    val displayName = when (selected) {
+        is BuildingCode -> selected.shortName
+        is Standard -> selected.shortName
+        else -> selected.toString()
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, style = MaterialTheme.typography.labelMedium)
         ExposedDropdownMenuBox(
@@ -135,19 +199,24 @@ private fun <T : Enum<T>> EditionSelector(
             onExpandedChange = { expanded = it }
         ) {
             OutlinedTextField(
-                value = selected.toString().replace("_", " "),
+                value = displayName,
                 onValueChange = {},
                 readOnly = true,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                modifier = Modifier.menuAnchor().fillMaxWidth()
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
             )
             ExposedDropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false }
             ) {
                 options.forEach { option ->
+                    val optionName = when (option) {
+                        is BuildingCode -> option.shortName
+                        is Standard -> option.shortName
+                        else -> option.toString()
+                    }
                     DropdownMenuItem(
-                        text = { Text(option.toString().replace("_", " ")) },
+                        text = { Text(optionName) },
                         onClick = {
                             onSelect(option)
                             expanded = false

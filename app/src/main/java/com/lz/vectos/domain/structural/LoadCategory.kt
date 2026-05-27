@@ -9,5 +9,6 @@ enum class LoadCategory(val label: String, val shortLabel: String) {
     ROOF_LIVE("Roof Live Load", "Lr"),
     SNOW("Snow Load", "S"),
     WIND("Wind Load", "W"),
-    SEISMIC("Seismic Load", "E")
+    SEISMIC("Seismic Load", "E"),
+    RAIN("Rain Load", "R")
 }

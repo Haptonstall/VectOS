@@ -26,10 +26,13 @@ object LimitStateService {
         member: StructuralMember,
         loadCases: List<LoadCase>,
         buildingCode: BuildingCode,
+        methodology: DesignMethodology,
         e: Double,
         i: Double
     ): Map<LimitState, LimitStateEnvelope> {
-        val allCombos = buildingCode.defaultLoadCombinations
+        val setId = if (methodology == DesignMethodology.LRFD) buildingCode.defaultLrfdSetId else buildingCode.defaultAsdSetId
+        val comboSet = setId?.let { buildingCode.getCombinationSet(it) }
+        val allCombos = comboSet?.combinations ?: emptyList()
         
         return LimitState.entries.associateWith { state ->
             val combosForState = allCombos.filter { it.limitState == state }
@@ -37,14 +40,14 @@ object LimitStateService {
                 member = member,
                 loadCases = loadCases,
                 combinations = combosForState,
-                modulusOfElasticityPa = e,
-                momentOfInertiaM4 = i
+                modulusOfElasticityPsi = e,
+                momentOfInertiaIn4 = i
             )
             LimitStateEnvelope(
                 limitState = state,
-                maxMoment = envelope.maxMoment,
-                maxShear = envelope.maxShear,
-                maxDeflection = envelope.maxDeflection
+                maxMoment = GoverningEffect(envelope.maxMoment, 0.0, envelope.governingCombinationName ?: "Governing"),
+                maxShear = GoverningEffect(envelope.maxShear, 0.0, envelope.governingCombinationName ?: "Governing"),
+                maxDeflection = GoverningEffect(envelope.maxDeflection, 0.0, envelope.governingCombinationName ?: "Governing")
             )
         }
     }

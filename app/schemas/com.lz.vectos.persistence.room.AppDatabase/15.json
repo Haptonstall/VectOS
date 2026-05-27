@@ -1,0 +1,413 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 15,
+    "identityHash": "42203e13ef2a560039568a5d0ce31286",
+    "entities": [
+      {
+        "tableName": "projects",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `projectNumber` TEXT, `description` TEXT, `clientName` TEXT, `engineerName` TEXT, `location` TEXT, `createdAtEpoch` INTEGER NOT NULL, `updatedAtEpoch` INTEGER NOT NULL, `unitSystem` TEXT NOT NULL, `methodology` TEXT NOT NULL, `ibcEdition` TEXT NOT NULL, `asceEdition` TEXT NOT NULL, `aiscEdition` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectNumber",
+            "columnName": "projectNumber",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "clientName",
+            "columnName": "clientName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "engineerName",
+            "columnName": "engineerName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "location",
+            "columnName": "location",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtEpoch",
+            "columnName": "createdAtEpoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpoch",
+            "columnName": "updatedAtEpoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unitSystem",
+            "columnName": "unitSystem",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "methodology",
+            "columnName": "methodology",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ibcEdition",
+            "columnName": "ibcEdition",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "asceEdition",
+            "columnName": "asceEdition",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aiscEdition",
+            "columnName": "aiscEdition",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "calculations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `projectId` TEXT NOT NULL, `name` TEXT NOT NULL, `calculationType` TEXT NOT NULL, `createdAtEpoch` INTEGER NOT NULL, `updatedAtEpoch` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectId",
+            "columnName": "projectId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "calculationType",
+            "columnName": "calculationType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpoch",
+            "columnName": "createdAtEpoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpoch",
+            "columnName": "updatedAtEpoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "beam_calculations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`calculationId` TEXT NOT NULL, `spanMeters` REAL NOT NULL, `loadValueBase` REAL NOT NULL, `materialName` TEXT NOT NULL, `momentOfInertiaM4` REAL NOT NULL, `loadTypeName` TEXT NOT NULL, `unitSystemName` TEXT NOT NULL, `sectionProfileId` TEXT, `loadCasesJson` TEXT NOT NULL DEFAULT '[]', `structuralMemberJson` TEXT, `steelInputsJson` TEXT, `woodInputsJson` TEXT, `isLinearElastic` INTEGER NOT NULL, `isSmallDeflection` INTEGER NOT NULL, `isSimplySupported` INTEGER NOT NULL, `maxBendingMomentNm` REAL NOT NULL, `maxShearN` REAL NOT NULL, `maxDeflectionM` REAL NOT NULL, `strengthDesignResultJson` TEXT, PRIMARY KEY(`calculationId`), FOREIGN KEY(`calculationId`) REFERENCES `calculations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "calculationId",
+            "columnName": "calculationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "spanMeters",
+            "columnName": "spanMeters",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "loadValueBase",
+            "columnName": "loadValueBase",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "materialName",
+            "columnName": "materialName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "momentOfInertiaM4",
+            "columnName": "momentOfInertiaM4",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "loadTypeName",
+            "columnName": "loadTypeName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unitSystemName",
+            "columnName": "unitSystemName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sectionProfileId",
+            "columnName": "sectionProfileId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "loadCasesJson",
+            "columnName": "loadCasesJson",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "structuralMemberJson",
+            "columnName": "structuralMemberJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "steelInputsJson",
+            "columnName": "steelInputsJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "woodInputsJson",
+            "columnName": "woodInputsJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isLinearElastic",
+            "columnName": "isLinearElastic",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSmallDeflection",
+            "columnName": "isSmallDeflection",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSimplySupported",
+            "columnName": "isSimplySupported",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxBendingMomentNm",
+            "columnName": "maxBendingMomentNm",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxShearN",
+            "columnName": "maxShearN",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxDeflectionM",
+            "columnName": "maxDeflectionM",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "strengthDesignResultJson",
+            "columnName": "strengthDesignResultJson",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "calculationId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "calculations",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "calculationId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "aisc_sections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `designation` TEXT NOT NULL, `type` TEXT NOT NULL, `area` REAL NOT NULL, `depth` REAL NOT NULL, `webThickness` REAL NOT NULL, `flangeWidth` REAL NOT NULL, `flangeThickness` REAL NOT NULL, `ix` REAL NOT NULL, `sx` REAL NOT NULL, `zx` REAL NOT NULL, `rx` REAL NOT NULL, `iy` REAL NOT NULL, `sy` REAL NOT NULL, `zy` REAL NOT NULL, `ry` REAL NOT NULL, `rz` REAL NOT NULL, `torsionalJ` REAL NOT NULL, `warpingCw` REAL NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "designation",
+            "columnName": "designation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "area",
+            "columnName": "area",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "depth",
+            "columnName": "depth",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "webThickness",
+            "columnName": "webThickness",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "flangeWidth",
+            "columnName": "flangeWidth",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "flangeThickness",
+            "columnName": "flangeThickness",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ix",
+            "columnName": "ix",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sx",
+            "columnName": "sx",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zx",
+            "columnName": "zx",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rx",
+            "columnName": "rx",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "iy",
+            "columnName": "iy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sy",
+            "columnName": "sy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zy",
+            "columnName": "zy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ry",
+            "columnName": "ry",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rz",
+            "columnName": "rz",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "torsionalJ",
+            "columnName": "torsionalJ",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warpingCw",
+            "columnName": "warpingCw",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '42203e13ef2a560039568a5d0ce31286')"
+    ]
+  }
+}

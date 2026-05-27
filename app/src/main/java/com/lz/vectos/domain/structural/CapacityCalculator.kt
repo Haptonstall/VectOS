@@ -15,4 +15,9 @@ interface CapacityCalculator {
      * Performs a detailed check at a specific station.
      */
     fun evaluateDetailed(demand: StationDemand, methodology: DesignMethodology): StrengthDesignResult
+
+    /**
+     * Performs a raw capacity calculation for a specific demand station.
+     */
+    fun evaluate(demand: StationDemand): RawCapacityResult
 }

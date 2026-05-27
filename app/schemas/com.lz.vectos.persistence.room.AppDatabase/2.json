@@ -1,0 +1,669 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "e52ad748a6181627bf0537265111a657",
+    "entities": [
+      {
+        "tableName": "projects",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT, `clientName` TEXT, `engineerName` TEXT, `createdAtEpoch` INTEGER NOT NULL, `updatedAtEpoch` INTEGER NOT NULL, `unitSystem` TEXT NOT NULL, `methodology` TEXT NOT NULL, `buildingCodeId` TEXT NOT NULL, `loadingStandardId` TEXT NOT NULL, `materialStandardIdsJson` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "clientName",
+            "columnName": "clientName",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "engineerName",
+            "columnName": "engineerName",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "createdAtEpoch",
+            "columnName": "createdAtEpoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpoch",
+            "columnName": "updatedAtEpoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unitSystem",
+            "columnName": "unitSystem",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "methodology",
+            "columnName": "methodology",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "buildingCodeId",
+            "columnName": "buildingCodeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "loadingStandardId",
+            "columnName": "loadingStandardId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "materialStandardIdsJson",
+            "columnName": "materialStandardIdsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "calculations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `projectId` TEXT NOT NULL, `name` TEXT NOT NULL, `calculationType` TEXT NOT NULL, `createdAtEpoch` INTEGER NOT NULL, `updatedAtEpoch` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectId",
+            "columnName": "projectId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "calculationType",
+            "columnName": "calculationType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpoch",
+            "columnName": "createdAtEpoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpoch",
+            "columnName": "updatedAtEpoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "beam_calculations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`calculationId` TEXT NOT NULL, `spanInches` REAL NOT NULL, `loadValueBase` REAL NOT NULL, `materialName` TEXT NOT NULL, `momentOfInertiaIn4` REAL NOT NULL, `loadTypeName` TEXT NOT NULL, `unitSystemName` TEXT NOT NULL, `isLinearElastic` INTEGER NOT NULL, `isSmallDeflection` INTEGER NOT NULL, `isSimplySupported` INTEGER NOT NULL, `maxBendingMomentLbIn` REAL NOT NULL, `maxShearLbs` REAL NOT NULL, `maxDeflectionInches` REAL NOT NULL, PRIMARY KEY(`calculationId`), FOREIGN KEY(`calculationId`) REFERENCES `calculations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "calculationId",
+            "columnName": "calculationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "spanInches",
+            "columnName": "spanInches",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "loadValueBase",
+            "columnName": "loadValueBase",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "materialName",
+            "columnName": "materialName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "momentOfInertiaIn4",
+            "columnName": "momentOfInertiaIn4",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "loadTypeName",
+            "columnName": "loadTypeName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unitSystemName",
+            "columnName": "unitSystemName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isLinearElastic",
+            "columnName": "isLinearElastic",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSmallDeflection",
+            "columnName": "isSmallDeflection",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSimplySupported",
+            "columnName": "isSimplySupported",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxBendingMomentLbIn",
+            "columnName": "maxBendingMomentLbIn",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxShearLbs",
+            "columnName": "maxShearLbs",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxDeflectionInches",
+            "columnName": "maxDeflectionInches",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "calculationId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": [
+          {
+            "table": "calculations",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "calculationId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "standards",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`shortName` TEXT NOT NULL, `longName` TEXT NOT NULL, `referencesJson` TEXT NOT NULL, PRIMARY KEY(`shortName`))",
+        "fields": [
+          {
+            "fieldPath": "shortName",
+            "columnName": "shortName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "longName",
+            "columnName": "longName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "referencesJson",
+            "columnName": "referencesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "shortName"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "building_codes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`shortName` TEXT NOT NULL, `longName` TEXT NOT NULL, `baseCodeName` TEXT, `referencesJson` TEXT NOT NULL, PRIMARY KEY(`shortName`), FOREIGN KEY(`baseCodeName`) REFERENCES `building_codes`(`shortName`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "shortName",
+            "columnName": "shortName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "longName",
+            "columnName": "longName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "baseCodeName",
+            "columnName": "baseCodeName",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "referencesJson",
+            "columnName": "referencesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "shortName"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": [
+          {
+            "table": "building_codes",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "baseCodeName"
+            ],
+            "referencedColumns": [
+              "shortName"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "building_code_standards",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`buildingCodeName` TEXT NOT NULL, `standardName` TEXT NOT NULL, PRIMARY KEY(`buildingCodeName`, `standardName`), FOREIGN KEY(`buildingCodeName`) REFERENCES `building_codes`(`shortName`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`standardName`) REFERENCES `standards`(`shortName`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "buildingCodeName",
+            "columnName": "buildingCodeName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "standardName",
+            "columnName": "standardName",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "buildingCodeName",
+            "standardName"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_building_code_standards_standardName",
+            "unique": false,
+            "columnNames": [
+              "standardName"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_building_code_standards_standardName` ON `${TABLE_NAME}` (`standardName`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "building_codes",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "buildingCodeName"
+            ],
+            "referencedColumns": [
+              "shortName"
+            ]
+          },
+          {
+            "table": "standards",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "standardName"
+            ],
+            "referencedColumns": [
+              "shortName"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "default_material_standards",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`buildingCodeName` TEXT NOT NULL, `materialType` TEXT NOT NULL, `standardName` TEXT NOT NULL, PRIMARY KEY(`buildingCodeName`, `materialType`), FOREIGN KEY(`buildingCodeName`) REFERENCES `building_codes`(`shortName`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`standardName`) REFERENCES `standards`(`shortName`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "buildingCodeName",
+            "columnName": "buildingCodeName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "materialType",
+            "columnName": "materialType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "standardName",
+            "columnName": "standardName",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "buildingCodeName",
+            "materialType"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_default_material_standards_standardName",
+            "unique": false,
+            "columnNames": [
+              "standardName"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_default_material_standards_standardName` ON `${TABLE_NAME}` (`standardName`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "building_codes",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "buildingCodeName"
+            ],
+            "referencedColumns": [
+              "shortName"
+            ]
+          },
+          {
+            "table": "standards",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "standardName"
+            ],
+            "referencedColumns": [
+              "shortName"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "load_combinations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `buildingCodeName` TEXT NOT NULL, `name` TEXT NOT NULL, `methodology` TEXT NOT NULL, `equation` TEXT NOT NULL, `codeReference` TEXT NOT NULL, `limitState` TEXT NOT NULL, `factorsJson` TEXT NOT NULL, FOREIGN KEY(`buildingCodeName`) REFERENCES `building_codes`(`shortName`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "buildingCodeName",
+            "columnName": "buildingCodeName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "methodology",
+            "columnName": "methodology",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "equation",
+            "columnName": "equation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "codeReference",
+            "columnName": "codeReference",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "limitState",
+            "columnName": "limitState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "factorsJson",
+            "columnName": "factorsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_load_combinations_buildingCodeName",
+            "unique": false,
+            "columnNames": [
+              "buildingCodeName"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_load_combinations_buildingCodeName` ON `${TABLE_NAME}` (`buildingCodeName`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "building_codes",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "buildingCodeName"
+            ],
+            "referencedColumns": [
+              "shortName"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "serviceability_criteria",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `buildingCodeName` TEXT NOT NULL, `limitType` TEXT NOT NULL, `name` TEXT NOT NULL, `loadCategory` TEXT, `spanDenominator` REAL NOT NULL, `description` TEXT, FOREIGN KEY(`buildingCodeName`) REFERENCES `building_codes`(`shortName`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "buildingCodeName",
+            "columnName": "buildingCodeName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "limitType",
+            "columnName": "limitType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "loadCategory",
+            "columnName": "loadCategory",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "spanDenominator",
+            "columnName": "spanDenominator",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_serviceability_criteria_buildingCodeName",
+            "unique": false,
+            "columnNames": [
+              "buildingCodeName"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_serviceability_criteria_buildingCodeName` ON `${TABLE_NAME}` (`buildingCodeName`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "building_codes",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "buildingCodeName"
+            ],
+            "referencedColumns": [
+              "shortName"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "default_load_cases",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`buildingCodeName` TEXT NOT NULL, `loadCaseId` TEXT NOT NULL, `name` TEXT NOT NULL, PRIMARY KEY(`buildingCodeName`, `loadCaseId`), FOREIGN KEY(`buildingCodeName`) REFERENCES `building_codes`(`shortName`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "buildingCodeName",
+            "columnName": "buildingCodeName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "loadCaseId",
+            "columnName": "loadCaseId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "buildingCodeName",
+            "loadCaseId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": [
+          {
+            "table": "building_codes",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "buildingCodeName"
+            ],
+            "referencedColumns": [
+              "shortName"
+            ]
+          }
+        ]
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e52ad748a6181627bf0537265111a657')"
+    ]
+  }
+}

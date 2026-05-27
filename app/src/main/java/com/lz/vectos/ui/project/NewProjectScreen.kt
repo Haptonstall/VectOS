@@ -9,7 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,21 +28,22 @@ import com.lz.vectos.viewmodel.ProjectViewModel
 @Composable
 fun NewProjectScreen(
     viewModel: ProjectViewModel,
+    projectToEdit: com.lz.vectos.domain.project.Project? = null,
     onProjectCreated: () -> Unit,
     onCancel: () -> Unit
 ) {
     val buildingCodes by viewModel.buildingCodes.collectAsState()
     
-    var name by remember { mutableStateOf("") }
-    var projectNumber by remember { mutableStateOf("") }
-    var siteLocation by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var client by remember { mutableStateOf("") }
-    var engineer by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(projectToEdit?.name ?: "") }
+    var projectNumber by remember { mutableStateOf(projectToEdit?.projectNumber ?: "") }
+    var siteLocation by remember { mutableStateOf(projectToEdit?.siteLocation ?: "") }
+    var description by remember { mutableStateOf(projectToEdit?.description ?: "") }
+    var client by remember { mutableStateOf(projectToEdit?.clientName ?: "") }
+    var engineer by remember { mutableStateOf(projectToEdit?.engineerName ?: "") }
     
-    var selectedCode by remember { mutableStateOf<BuildingCode?>(null) }
-    var unitSystem by remember { mutableStateOf(UnitSystem.IMPERIAL) }
-    var methodology by remember { mutableStateOf(DesignMethodology.ASD) }
+    var selectedCode by remember { mutableStateOf<BuildingCode?>(projectToEdit?.designContext?.buildingCode) }
+    var unitSystem by remember { mutableStateOf(projectToEdit?.designContext?.units ?: UnitSystem.IMPERIAL) }
+    var methodology by remember { mutableStateOf(projectToEdit?.designContext?.methodology ?: DesignMethodology.ASD) }
     
     var showCodeDropdown by remember { mutableStateOf(false) }
 
@@ -52,24 +54,71 @@ fun NewProjectScreen(
         }
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
+    val saveEnabled = name.isNotBlank() && selectedCode != null
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (projectToEdit == null) "New Project" else "Edit Project") },
+                navigationIcon = {
+                    IconButton(onClick = onCancel) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onClick = {
+                            selectedCode?.let { code ->
+                                if (projectToEdit == null) {
+                                    viewModel.createProject(
+                                        name = name,
+                                        projectNumber = projectNumber,
+                                        siteLocation = siteLocation,
+                                        description = description,
+                                        client = client,
+                                        engineer = engineer,
+                                        units = unitSystem,
+                                        methodology = methodology,
+                                        buildingCode = code,
+                                        loadingStandard = code.standards.firstOrNull() ?: com.lz.vectos.domain.structural.Standard(id = "EMPTY", shortName = "None", longName = "None"),
+                                        materialStandards = emptyMap()
+                                    )
+                                } else {
+                                    val updatedProject = projectToEdit.copy(
+                                        name = name,
+                                        projectNumber = projectNumber,
+                                        siteLocation = siteLocation,
+                                        description = description,
+                                        clientName = client,
+                                        engineerName = engineer,
+                                        designContext = projectToEdit.designContext.copy(
+                                            units = unitSystem,
+                                            methodology = methodology,
+                                            buildingCode = code,
+                                            loadingStandard = code.standards.firstOrNull() ?: com.lz.vectos.domain.structural.Standard(id = "EMPTY", shortName = "None", longName = "None")
+                                        )
+                                    )
+                                    viewModel.updateProject(updatedProject)
+                                }
+                                onProjectCreated()
+                            }
+                        },
+                        enabled = saveEnabled
+                    ) {
+                        Text(if (projectToEdit == null) "CREATE" else "SAVE")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
         Column(
             modifier = Modifier
+                .padding(paddingValues)
                 .fillMaxSize()
                 .padding(24.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                "New Project",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold
-            )
-
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
@@ -203,45 +252,6 @@ fun NewProjectScreen(
             )
 
             Spacer(modifier = Modifier.height(24.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(onClick = onCancel) {
-                    Text("Cancel", color = MaterialTheme.colorScheme.primary)
-                }
-                Spacer(modifier = Modifier.width(16.dp))
-                Button(
-                    onClick = {
-                        selectedCode?.let { code ->
-                            viewModel.createProject(
-                                name = name,
-                                projectNumber = projectNumber,
-                                siteLocation = siteLocation,
-                                description = description,
-                                client = client,
-                                engineer = engineer,
-                                units = unitSystem,
-                                methodology = methodology,
-                                buildingCode = code,
-                                loadingStandard = code.standards.firstOrNull() ?: com.lz.vectos.domain.structural.Standard(id = "EMPTY", shortName = "None", longName = "None"),
-                                materialStandards = emptyMap()
-                            )
-                            onProjectCreated()
-                        }
-                    },
-                    enabled = name.isNotBlank() && selectedCode != null,
-                    shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Text("Create", modifier = Modifier.padding(horizontal = 8.dp))
-                }
-            }
         }
     }
 }
