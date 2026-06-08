@@ -6,7 +6,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.lz.vectos.domain.structural.LoadCombination
+import com.lz.model.regulatory.LoadCombination
 
 @Composable
 fun LoadCombinationPicker(
@@ -52,7 +52,7 @@ fun LoadCombinationPicker(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(combo.name, style = MaterialTheme.typography.labelLarge)
                             Text(
-                                combo.equation, 
+                                combo.equationText,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )

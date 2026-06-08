@@ -19,8 +19,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
-import com.lz.vectos.domain.structural.SpanGeometry
-import com.lz.vectos.domain.units.*
+import com.lz.model.units.Length
+import com.lz.model.units.feet
+import com.lz.model.units.inFeet
+import com.lz.model.structural.SpanGeometry
+import com.lz.model.units.*
 import java.util.Locale
 import java.util.UUID
 

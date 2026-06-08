@@ -1,5 +1,7 @@
 package com.lz.vectos.domain.structural
 
+import com.lz.model.structural.DesignEquationTrace
+
 /**
  * Result of a flexure-shear interaction check (AISC Chapter H).
  */

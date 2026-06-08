@@ -15,7 +15,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lz.vectos.domain.structural.analysis.AnalysisPoint
-import com.lz.vectos.domain.units.*
+import com.lz.model.units.*
 import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.ui.graphics.toArgb

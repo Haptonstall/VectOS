@@ -1,7 +1,9 @@
 package com.lz.vectos.domain.structural
 
-import com.lz.vectos.domain.units.Force
-import com.lz.vectos.domain.units.Moment
+import com.lz.model.structural.DesignEquationTrace
+import com.lz.model.structural.DesignMethodology
+import com.lz.model.units.Force
+import com.lz.model.units.Moment
 
 /**
  * Represents the governing demand (factored or service-level) for a structural member.

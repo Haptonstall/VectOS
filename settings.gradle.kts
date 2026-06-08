@@ -24,4 +24,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "VectOS"
 include(":app")
- 
+include(":core:model")
+include(":core:domain")
+include(":core:data")
+include(":core:solver")
+include(":core:ui")
+include(":feature:beam")

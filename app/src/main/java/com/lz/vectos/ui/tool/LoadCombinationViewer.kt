@@ -6,7 +6,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.lz.vectos.domain.structural.LoadCombination
+import com.lz.model.regulatory.LoadCombination
+
 
 @Composable
 fun LoadCombinationViewer(

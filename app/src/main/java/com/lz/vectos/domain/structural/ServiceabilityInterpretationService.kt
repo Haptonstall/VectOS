@@ -1,6 +1,9 @@
 package com.lz.vectos.domain.structural
 
-import com.lz.vectos.domain.units.Length
+import com.lz.model.structural.DesignInterpretation
+import com.lz.model.structural.DesignUtilizationStatus
+import com.lz.model.structural.ServiceabilityResult
+import com.lz.model.units.Length
 
 /**
  * Pure Kotlin service to interpret serviceability evaluation results.

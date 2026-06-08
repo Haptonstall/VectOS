@@ -10,8 +10,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.lz.vectos.domain.units.UnitSystem
-import com.lz.vectos.viewmodel.SettingsViewModel
+import com.lz.model.units.UnitSystem
+import com.lz.vectos.presentation.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

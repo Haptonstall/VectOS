@@ -20,10 +20,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.lz.vectos.domain.beam.SectionProfile
-import com.lz.vectos.domain.beam.SteelProfile
-import com.lz.vectos.domain.units.*
-import com.lz.vectos.domain.units.UnitFormattingService
+import com.lz.model.units.UnitSystem
+import com.lz.model.structural.SectionProfile
+import com.lz.model.structural.SteelProfile
+import com.lz.model.units.*
+import com.lz.model.units.UnitFormattingService
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)

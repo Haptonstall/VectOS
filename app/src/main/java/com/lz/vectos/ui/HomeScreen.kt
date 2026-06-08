@@ -15,9 +15,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.lz.vectos.domain.project.Project
+import com.lz.domain.project.Project
 import com.lz.vectos.ui.navigation.Screen
-import com.lz.vectos.viewmodel.ProjectViewModel
+import com.lz.vectos.presentation.ProjectViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

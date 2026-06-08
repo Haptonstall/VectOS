@@ -1,13 +1,22 @@
 package com.lz.vectos.domain.structural.aisc
 
-import com.lz.vectos.domain.structural.MaterialGrade
-import com.lz.vectos.domain.beam.ShapeType
-import com.lz.vectos.domain.beam.SteelProfile
+import com.lz.model.units.Area
+import com.lz.model.units.Force
+import com.lz.model.units.Length
+import com.lz.model.units.Moment
+import com.lz.model.units.MomentOfInertia
+import com.lz.model.units.Pressure
+import com.lz.model.units.SectionModulus
+import com.lz.model.structural.MaterialGrade
+import com.lz.model.structural.SectionAxisProperties
+import com.lz.model.structural.ShapeType
+import com.lz.model.structural.SteelProfile
 import com.lz.vectos.domain.structural.Flange
 import com.lz.vectos.domain.structural.StationDemand
-import com.lz.vectos.domain.units.*
+import com.lz.model.units.*
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.util.UUID
 import kotlin.math.abs
 
 class AiscSteelCapacityCalculatorTest {
@@ -16,7 +25,7 @@ class AiscSteelCapacityCalculatorTest {
     fun `verify W8x10 flexural capacity against AISC Table 3-2`() {
         // Setup W8x10 profile
         val w8x10 = SteelProfile(
-            id = java.util.UUID.randomUUID().toString(),
+            id = UUID.randomUUID().toString(),
             designation = "W8x10",
             shapeType = ShapeType.WIDE_FLANGE,
             area = Area(2.96),
@@ -24,13 +33,13 @@ class AiscSteelCapacityCalculatorTest {
             webThickness = Length(0.170),
             flangeWidth = Length(3.94),
             flangeThickness = Length(0.205),
-            propertiesStrongAxis = com.lz.vectos.domain.beam.SectionAxisProperties(
+            propertiesStrongAxis = SectionAxisProperties(
                 i = MomentOfInertia(30.8),
                 s = SectionModulus(7.81),
                 r = Length(3.22),
                 z = SectionModulus(8.87)
             ),
-            propertiesWeakAxis = com.lz.vectos.domain.beam.SectionAxisProperties(
+            propertiesWeakAxis = SectionAxisProperties(
                 i = MomentOfInertia(2.09),
                 s = SectionModulus(1.06),
                 r = Length(0.841),

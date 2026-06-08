@@ -8,10 +8,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.lz.vectos.domain.structural.MaterialGrade
-import com.lz.vectos.domain.structural.WoodGrade
+import com.lz.model.structural.MaterialGrade
+import com.lz.model.structural.WoodGrade
 import com.lz.vectos.domain.structural.WoodPropertyService
-import com.lz.vectos.domain.structural.WoodSpecies
+import com.lz.model.structural.WoodSpecies
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -19,16 +19,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lz.vectos.domain.structural.BuildingCode
-import com.lz.vectos.domain.structural.DesignMethodology
-import com.lz.vectos.domain.units.UnitSystem
-import com.lz.vectos.viewmodel.ProjectViewModel
+import com.lz.domain.project.Project
+import com.lz.model.regulatory.codes.BuildingCode
+import com.lz.model.structural.DesignMethodology
+import com.lz.model.units.UnitSystem
+import com.lz.vectos.presentation.ProjectViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewProjectScreen(
     viewModel: ProjectViewModel,
-    projectToEdit: com.lz.vectos.domain.project.Project? = null,
+    projectToEdit: Project? = null,
     onProjectCreated: () -> Unit,
     onCancel: () -> Unit
 ) {

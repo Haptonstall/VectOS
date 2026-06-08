@@ -11,7 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.lz.vectos.domain.structural.BoundaryRestraint
-import com.lz.vectos.domain.structural.SupportCondition
+import com.lz.model.structural.SupportCondition
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

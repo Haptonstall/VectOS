@@ -1,0 +1,1115 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 18,
+    "identityHash": "42593daf64f50139393708fad1e727ba",
+    "entities": [
+      {
+        "tableName": "projects",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `projectNumber` TEXT, `description` TEXT, `clientName` TEXT, `engineerName` TEXT, `firmName` TEXT, `createdAtIso` TEXT NOT NULL, `buildingCode` TEXT NOT NULL, `designMethodology` TEXT NOT NULL, `unitSystem` TEXT NOT NULL, `riskCategory` TEXT NOT NULL, `isWindDesignEnabled` INTEGER NOT NULL, `isSeismicDesignEnabled` INTEGER NOT NULL, `streetAddress` TEXT NOT NULL, `city` TEXT NOT NULL, `state` TEXT NOT NULL, `zipCode` TEXT NOT NULL, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `elevationFeet` REAL NOT NULL, `isGeocoded` INTEGER NOT NULL, `seismicSs` REAL NOT NULL, `seismicS1` REAL NOT NULL, `seismicSds` REAL NOT NULL, `seismicSd1` REAL NOT NULL, `seismicDesignCategory` TEXT NOT NULL, `isSeismicAuthoritativeOverride` INTEGER NOT NULL, `steelStandardOverride` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectNumber",
+            "columnName": "projectNumber",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "clientName",
+            "columnName": "clientName",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "engineerName",
+            "columnName": "engineerName",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "firmName",
+            "columnName": "firmName",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "createdAtIso",
+            "columnName": "createdAtIso",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "buildingCode",
+            "columnName": "buildingCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "designMethodology",
+            "columnName": "designMethodology",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unitSystem",
+            "columnName": "unitSystem",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "riskCategory",
+            "columnName": "riskCategory",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isWindDesignEnabled",
+            "columnName": "isWindDesignEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSeismicDesignEnabled",
+            "columnName": "isSeismicDesignEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "streetAddress",
+            "columnName": "streetAddress",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "city",
+            "columnName": "city",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zipCode",
+            "columnName": "zipCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "elevationFeet",
+            "columnName": "elevationFeet",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isGeocoded",
+            "columnName": "isGeocoded",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seismicSs",
+            "columnName": "seismicSs",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seismicS1",
+            "columnName": "seismicS1",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seismicSds",
+            "columnName": "seismicSds",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seismicSd1",
+            "columnName": "seismicSd1",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seismicDesignCategory",
+            "columnName": "seismicDesignCategory",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSeismicAuthoritativeOverride",
+            "columnName": "isSeismicAuthoritativeOverride",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "steelStandardOverride",
+            "columnName": "steelStandardOverride",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "calculations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `projectId` TEXT NOT NULL, `name` TEXT NOT NULL, `calculationType` TEXT NOT NULL, `createdAtEpoch` INTEGER NOT NULL, `updatedAtEpoch` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectId",
+            "columnName": "projectId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "calculationType",
+            "columnName": "calculationType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpoch",
+            "columnName": "createdAtEpoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpoch",
+            "columnName": "updatedAtEpoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "custom_sections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `designation` TEXT NOT NULL, `width` REAL, `depth` REAL, `area` REAL NOT NULL, `ix` REAL NOT NULL, `sx` REAL NOT NULL, `zx` REAL, `iy` REAL, `sy` REAL, `zy` REAL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "designation",
+            "columnName": "designation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "width",
+            "columnName": "width",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "depth",
+            "columnName": "depth",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "area",
+            "columnName": "area",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ix",
+            "columnName": "ix",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sx",
+            "columnName": "sx",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zx",
+            "columnName": "zx",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "iy",
+            "columnName": "iy",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "sy",
+            "columnName": "sy",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "zy",
+            "columnName": "zy",
+            "affinity": "REAL",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "aisc_sections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `designation` TEXT NOT NULL, `type` TEXT NOT NULL, `area` REAL NOT NULL, `depth` REAL NOT NULL, `webThickness` REAL NOT NULL, `flangeWidth` REAL NOT NULL, `flangeThickness` REAL NOT NULL, `ix` REAL NOT NULL, `sx` REAL NOT NULL, `zx` REAL NOT NULL, `rx` REAL NOT NULL, `iy` REAL NOT NULL, `sy` REAL NOT NULL, `zy` REAL NOT NULL, `ry` REAL NOT NULL, `torsionalJ` REAL NOT NULL, `warpingCw` REAL NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "designation",
+            "columnName": "designation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "area",
+            "columnName": "area",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "depth",
+            "columnName": "depth",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "webThickness",
+            "columnName": "webThickness",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "flangeWidth",
+            "columnName": "flangeWidth",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "flangeThickness",
+            "columnName": "flangeThickness",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ix",
+            "columnName": "ix",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sx",
+            "columnName": "sx",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zx",
+            "columnName": "zx",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rx",
+            "columnName": "rx",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "iy",
+            "columnName": "iy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sy",
+            "columnName": "sy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zy",
+            "columnName": "zy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ry",
+            "columnName": "ry",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "torsionalJ",
+            "columnName": "torsionalJ",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warpingCw",
+            "columnName": "warpingCw",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "wood_sections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `designation` TEXT NOT NULL, `nominalWidth` REAL NOT NULL, `nominalDepth` REAL NOT NULL, `dressedWidth` REAL NOT NULL, `dressedDepth` REAL NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "designation",
+            "columnName": "designation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nominalWidth",
+            "columnName": "nominalWidth",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nominalDepth",
+            "columnName": "nominalDepth",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dressedWidth",
+            "columnName": "dressedWidth",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dressedDepth",
+            "columnName": "dressedDepth",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "materials",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `modulusOfElasticityPsi` REAL NOT NULL, `shearModulusPsi` REAL NOT NULL, `densityPcf` REAL NOT NULL, `yieldStrengthPsi` REAL NOT NULL, `ultimateStrengthPsi` REAL NOT NULL, `species` TEXT, `grade` TEXT, `referenceBendingPsi` REAL NOT NULL, `referenceShearPsi` REAL NOT NULL, `referenceCompressionParallelPsi` REAL NOT NULL, `referenceCompressionPerpPsi` REAL NOT NULL, `referenceTensionParallelPsi` REAL NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modulusOfElasticityPsi",
+            "columnName": "modulusOfElasticityPsi",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shearModulusPsi",
+            "columnName": "shearModulusPsi",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "densityPcf",
+            "columnName": "densityPcf",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "yieldStrengthPsi",
+            "columnName": "yieldStrengthPsi",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ultimateStrengthPsi",
+            "columnName": "ultimateStrengthPsi",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "species",
+            "columnName": "species",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "grade",
+            "columnName": "grade",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "referenceBendingPsi",
+            "columnName": "referenceBendingPsi",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "referenceShearPsi",
+            "columnName": "referenceShearPsi",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "referenceCompressionParallelPsi",
+            "columnName": "referenceCompressionParallelPsi",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "referenceCompressionPerpPsi",
+            "columnName": "referenceCompressionPerpPsi",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "referenceTensionParallelPsi",
+            "columnName": "referenceTensionParallelPsi",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "building_codes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `short_name` TEXT NOT NULL, `long_name` TEXT NOT NULL, `base_code_id` TEXT, `default_asd_set_id` TEXT, `default_lrfd_set_id` TEXT, `references_json` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "short_name",
+            "columnName": "short_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "long_name",
+            "columnName": "long_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "base_code_id",
+            "columnName": "base_code_id",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "default_asd_set_id",
+            "columnName": "default_asd_set_id",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "default_lrfd_set_id",
+            "columnName": "default_lrfd_set_id",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "references_json",
+            "columnName": "references_json",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "standards",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `short_name` TEXT NOT NULL, `long_name` TEXT NOT NULL, `references_json` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "short_name",
+            "columnName": "short_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "long_name",
+            "columnName": "long_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "references_json",
+            "columnName": "references_json",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "building_code_standard_cross_ref",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`code_id` TEXT NOT NULL, `standard_id` TEXT NOT NULL, PRIMARY KEY(`code_id`, `standard_id`), FOREIGN KEY(`code_id`) REFERENCES `building_codes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`standard_id`) REFERENCES `standards`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "code_id",
+            "columnName": "code_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "standard_id",
+            "columnName": "standard_id",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "code_id",
+            "standard_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_building_code_standard_cross_ref_standard_id",
+            "unique": false,
+            "columnNames": [
+              "standard_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_building_code_standard_cross_ref_standard_id` ON `${TABLE_NAME}` (`standard_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "building_codes",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "code_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "standards",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "standard_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "load_combination_sets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `source_id` TEXT NOT NULL, `source_name` TEXT NOT NULL, `methodology` TEXT NOT NULL, `description` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source_id",
+            "columnName": "source_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source_name",
+            "columnName": "source_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "methodology",
+            "columnName": "methodology",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "load_combinations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `set_id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`set_id`) REFERENCES `load_combination_sets`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "set_id",
+            "columnName": "set_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_load_combinations_set_id",
+            "unique": false,
+            "columnNames": [
+              "set_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_load_combinations_set_id` ON `${TABLE_NAME}` (`set_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "load_combination_sets",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "set_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "load_factors",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `combination_id` TEXT NOT NULL, `category` TEXT NOT NULL, `factor` REAL NOT NULL, FOREIGN KEY(`combination_id`) REFERENCES `load_combinations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "combination_id",
+            "columnName": "combination_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "factor",
+            "columnName": "factor",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_load_factors_combination_id",
+            "unique": false,
+            "columnNames": [
+              "combination_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_load_factors_combination_id` ON `${TABLE_NAME}` (`combination_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "load_combinations",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "combination_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "default_material_standards",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`buildingCodeId` TEXT NOT NULL, `materialType` TEXT NOT NULL, `standardId` TEXT NOT NULL, PRIMARY KEY(`buildingCodeId`, `materialType`), FOREIGN KEY(`buildingCodeId`) REFERENCES `building_codes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`standardId`) REFERENCES `standards`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "buildingCodeId",
+            "columnName": "buildingCodeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "materialType",
+            "columnName": "materialType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "standardId",
+            "columnName": "standardId",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "buildingCodeId",
+            "materialType"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_default_material_standards_standardId",
+            "unique": false,
+            "columnNames": [
+              "standardId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_default_material_standards_standardId` ON `${TABLE_NAME}` (`standardId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "building_codes",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "buildingCodeId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "standards",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "standardId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "serviceability_criteria",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `buildingCodeId` TEXT NOT NULL, `limitType` TEXT NOT NULL, `name` TEXT NOT NULL, `loadCategory` TEXT, `spanDenominator` REAL NOT NULL, `description` TEXT, FOREIGN KEY(`buildingCodeId`) REFERENCES `building_codes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "buildingCodeId",
+            "columnName": "buildingCodeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "limitType",
+            "columnName": "limitType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "loadCategory",
+            "columnName": "loadCategory",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "spanDenominator",
+            "columnName": "spanDenominator",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_serviceability_criteria_buildingCodeId",
+            "unique": false,
+            "columnNames": [
+              "buildingCodeId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_serviceability_criteria_buildingCodeId` ON `${TABLE_NAME}` (`buildingCodeId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "building_codes",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "buildingCodeId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "default_load_cases",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`buildingCodeId` TEXT NOT NULL, `loadCaseId` TEXT NOT NULL, `name` TEXT NOT NULL, PRIMARY KEY(`buildingCodeId`, `loadCaseId`), FOREIGN KEY(`buildingCodeId`) REFERENCES `building_codes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "buildingCodeId",
+            "columnName": "buildingCodeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "loadCaseId",
+            "columnName": "loadCaseId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "buildingCodeId",
+            "loadCaseId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": [
+          {
+            "table": "building_codes",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "buildingCodeId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '42593daf64f50139393708fad1e727ba')"
+    ]
+  }
+}

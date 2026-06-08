@@ -10,9 +10,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.lz.model.regulatory.codes.BuildingCode
+import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.IssueSeverity
+import com.lz.model.structural.MaterialType
 import com.lz.vectos.domain.structural.*
-import com.lz.vectos.domain.units.UnitSystem
-import com.lz.vectos.viewmodel.ProjectViewModel
+import com.lz.model.units.UnitSystem
+import com.lz.vectos.presentation.ProjectViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -121,13 +125,13 @@ fun ProjectSettingsScreen(
                     Text("Material Design Standards", style = MaterialTheme.typography.titleSmall)
 
                     // Dynamically render selectors for materials supported by the building code
-                    com.lz.vectos.domain.beam.MaterialType.entries.forEach { type ->
+                    MaterialType.entries.forEach { type ->
                         val currentStd = materialStandards[type] ?: buildingCode.defaultMaterialStandards[type]
                         if (currentStd != null) {
                             val options = standards.filter { 
                                 when(type) {
-                                    com.lz.vectos.domain.beam.MaterialType.STEEL -> it.shortName.contains("AISC")
-                                    com.lz.vectos.domain.beam.MaterialType.WOOD -> it.shortName.contains("NDS")
+                                    MaterialType.STEEL -> it.shortName.contains("AISC")
+                                    MaterialType.WOOD -> it.shortName.contains("NDS")
                                     else -> true
                                 }
                             }

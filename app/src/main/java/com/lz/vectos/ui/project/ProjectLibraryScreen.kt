@@ -17,8 +17,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lz.vectos.domain.calculation.EngineeringCalculation
-import com.lz.vectos.domain.project.Project
-import com.lz.vectos.viewmodel.ProjectViewModel
+import com.lz.domain.project.Project
+import com.lz.vectos.presentation.ProjectViewModel
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)

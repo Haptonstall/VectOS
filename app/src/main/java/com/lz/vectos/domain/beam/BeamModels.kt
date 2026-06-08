@@ -1,14 +1,14 @@
 package com.lz.vectos.domain.beam
 
-import com.lz.vectos.domain.project.Project
-import com.lz.vectos.domain.calculation.CalculationMetadata
-import com.lz.vectos.domain.structural.StructuralMember
+import com.lz.domain.project.Project
+import com.lz.domain.calculation.CalculationMetadata
+import com.lz.model.structural.StructuralMember
 import com.lz.vectos.domain.structural.analysis.BeamAnalysisResult
 import com.lz.vectos.domain.structural.PointCapacityResult
-import com.lz.vectos.domain.structural.ServiceabilityResult
-import com.lz.vectos.domain.units.Length
-import com.lz.vectos.domain.units.Pressure
-import com.lz.vectos.domain.units.UnitSystem
+import com.lz.model.structural.ServiceabilityResult
+import com.lz.model.units.Length
+import com.lz.model.units.Pressure
+import com.lz.model.units.UnitSystem
 import kotlinx.serialization.Serializable
 
 /**

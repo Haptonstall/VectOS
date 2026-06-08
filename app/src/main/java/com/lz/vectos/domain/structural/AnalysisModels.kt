@@ -1,8 +1,8 @@
 package com.lz.vectos.domain.structural
 
-import com.lz.vectos.domain.units.Force
-import com.lz.vectos.domain.units.Length
-import com.lz.vectos.domain.units.Moment
+import com.lz.model.units.Force
+import com.lz.model.units.Length
+import com.lz.model.units.Moment
 
 /**
  * Represents the governing (worst-case) effect for a specific response type.

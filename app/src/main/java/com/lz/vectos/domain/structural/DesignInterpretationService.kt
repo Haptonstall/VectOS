@@ -1,5 +1,8 @@
 package com.lz.vectos.domain.structural
 
+import com.lz.model.structural.DesignInterpretation
+import com.lz.model.structural.DesignUtilizationStatus
+import com.lz.model.structural.StrengthCheckResult
 import java.util.*
 
 /**

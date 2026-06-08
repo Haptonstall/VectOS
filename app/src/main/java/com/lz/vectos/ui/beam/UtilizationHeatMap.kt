@@ -20,8 +20,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lz.model.structural.SpanGeometry
+import com.lz.model.units.inInches
 import com.lz.vectos.domain.structural.PointCapacityResult
-import com.lz.vectos.domain.units.*
+import com.lz.model.units.*
 import java.util.UUID
 
 /**
@@ -31,7 +33,7 @@ import java.util.UUID
 @Composable
 fun UtilizationHeatMap(
     results: List<PointCapacityResult>,
-    spans: List<com.lz.vectos.domain.structural.SpanGeometry>,
+    spans: List<SpanGeometry>,
     totalLength: Double,
     modifier: Modifier = Modifier
 ) {

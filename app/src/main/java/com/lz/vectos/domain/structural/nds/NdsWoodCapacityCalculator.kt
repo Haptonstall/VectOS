@@ -1,17 +1,23 @@
 package com.lz.vectos.domain.structural.nds
 
-import com.lz.vectos.domain.beam.SectionProfile
-import com.lz.vectos.domain.structural.MaterialGrade
+import com.lz.model.units.inIn2
+import com.lz.model.units.inIn3
+import com.lz.model.units.inInches
+import com.lz.model.units.inPsi
+import com.lz.model.units.lbIn
+import com.lz.model.units.poundsForce
+import com.lz.model.structural.SectionProfile
+import com.lz.model.structural.MaterialGrade
 import com.lz.vectos.domain.structural.CapacityCalculator
 import com.lz.vectos.domain.structural.PointCapacityResult
-import com.lz.vectos.domain.structural.StrengthDesignResult
-import com.lz.vectos.domain.structural.DesignMethodology
+import com.lz.model.structural.StrengthDesignResult
+import com.lz.model.structural.DesignMethodology
 import com.lz.vectos.domain.structural.CapacityEngine
 import com.lz.vectos.domain.structural.StationDemand
-import com.lz.vectos.domain.structural.StrengthCheckResult
+import com.lz.model.structural.StrengthCheckResult
 import com.lz.vectos.domain.structural.RawCapacityResult
 import com.lz.vectos.domain.structural.analysis.BeamAnalysisResult
-import com.lz.vectos.domain.units.*
+import com.lz.model.units.*
 import kotlin.math.abs
 
 /**
@@ -19,82 +25,40 @@ import kotlin.math.abs
  */
 class NdsWoodCapacityCalculator(
     private val profile: SectionProfile,
-    private val material: MaterialGrade.Wood
+    private val material: MaterialGrade.Wood,
+    private val adjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors()
 ) : CapacityCalculator {
 
-    override fun evaluateAll(
-        analysisResult: BeamAnalysisResult,
-        methodology: DesignMethodology
-    ): List<PointCapacityResult> {
-        return CapacityEngine.evaluate(
-            demands = analysisResult.spanResults.flatMap { it.stationDemands },
-            section = profile,
-            methodology = methodology,
-            capacityCalculator = { evaluate(it) }
-        )
-    }
-
     override fun evaluate(demand: StationDemand): RawCapacityResult {
-        // NDS Placeholder: F'b = Fb * Cd * Cm * Ct * Cl * Cf * Cfu * Ci * Cr
-        // For now, assume unadjusted reference properties
-        val nominalMn = material.referenceBending.inPsi * profile.propertiesStrongAxis.s.inIn3
-        val nominalVn = (2.0/3.0) * material.referenceShear.inPsi * profile.area.inIn2
-        
+        val f = adjustmentFactors
+
+        // F'b = Fb * adjustment chain
+        val fbAdj = f.adjustedBending(material.referenceBending.inPsi)
+        val fvAdj = f.adjustedShear(material.referenceShear.inPsi)
+        val fcAdj = f.adjustedCompressionParallel(
+            material.referenceCompressionParallel.inPsi
+        )
+
+        val nominalMn = fbAdj * profile.propertiesStrongAxis.s.inIn3
+        val nominalVn = (2.0 / 3.0) * fvAdj * profile.area.inIn2
+        val nominalPn = fcAdj * profile.area.inIn2
+
         return RawCapacityResult(
-            nominalFlexureX = nominalMn,
-            limitStateFlexureX = "Bending (Placeholder)",
-            nominalFlexureY = 0.0,
+            nominalFlexureX    = nominalMn,
+            limitStateFlexureX = "Bending (NDS 3.3)",
+            nominalShearX      = nominalVn,
+            limitStateShearX   = "Shear (NDS 3.4)",
+            nominalAxial       = nominalPn,
+            limitStateAxial    = "Compression (NDS 3.7)",
+            // unchanged fields below
+            nominalFlexureY    = 0.0,
             limitStateFlexureY = "N/A",
-            nominalShearX = nominalVn,
-            limitStateShearX = "Shear (Placeholder)",
-            nominalShearY = 0.0,
-            limitStateShearY = "N/A",
-            nominalAxial = material.referenceCompressionParallel.inPsi * profile.area.inIn2,
-            limitStateAxial = "Compression (Placeholder)",
-            nominalTorsion = 0.0,
-            limitStateTorsion = "N/A",
+            nominalShearY      = 0.0,
+            limitStateShearY   = "N/A",
+            nominalTorsion     = 0.0,
+            limitStateTorsion  = "N/A",
             allowableDeflection = demand.allowableDeflection.inInches,
             limitStateDeflection = "Deflection"
-        )
-    }
-
-    override fun evaluateDetailed(demand: StationDemand, methodology: DesignMethodology): StrengthDesignResult {
-        val raw = evaluate(demand)
-        
-        // Simplified NDS logic: Design Capacity = Nominal (assuming ASD for now)
-        val designMn = raw.nominalFlexureX
-        val designVn = raw.nominalShearX
-        val designPn = raw.nominalAxial
-        
-        return StrengthDesignResult(
-            momentCheck = StrengthCheckResult(
-                demand = demand.moment,
-                capacity = designMn.lbIn,
-                utilization = if (designMn > 0) abs(demand.moment.lbIn) / designMn else 0.0,
-                governingCombination = "Current",
-                governingMode = raw.limitStateFlexureX
-            ),
-            shearCheck = StrengthCheckResult(
-                demand = demand.shear,
-                capacity = designVn.poundsForce,
-                utilization = if (designVn > 0) abs(demand.shear.pounds) / designVn else 0.0,
-                governingCombination = "Current",
-                governingMode = raw.limitStateShearX
-            ),
-            axialCheck = StrengthCheckResult(
-                demand = demand.axial,
-                capacity = designPn.poundsForce,
-                utilization = if (designPn > 0) abs(demand.axial.pounds) / designPn else 0.0,
-                governingCombination = "Current",
-                governingMode = raw.limitStateAxial
-            ),
-            torsionCheck = StrengthCheckResult(
-                demand = demand.torque,
-                capacity = 0.0.lbIn,
-                utilization = 0.0,
-                governingCombination = "N/A"
-            ),
-            methodology = methodology
         )
     }
 }

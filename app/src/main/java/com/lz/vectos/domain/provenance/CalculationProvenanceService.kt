@@ -1,8 +1,8 @@
 package com.lz.vectos.domain.provenance
 
-import com.lz.vectos.domain.structural.BuildingCode
+import com.lz.model.regulatory.codes.BuildingCode
 import com.lz.vectos.domain.structural.LoadCase
-import com.lz.vectos.domain.units.UnitSystem
+import com.lz.model.units.UnitSystem
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 

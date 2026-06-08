@@ -1,7 +1,14 @@
 package com.lz.vectos.domain.structural.analysis
 
+import com.lz.model.regulatory.LoadCategory
+import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.StructuralMember
+import com.lz.model.units.Force
+import com.lz.model.units.Length
+import com.lz.model.units.inInches
+import com.lz.model.units.inPoundsForce
 import com.lz.vectos.domain.structural.*
-import com.lz.vectos.domain.units.*
+import com.lz.model.units.*
 import org.junit.Assert.*
 import org.junit.Test
 import java.util.UUID
@@ -10,8 +17,8 @@ class BeamAnalysisSolverVerificationTest {
 
     @Test
     fun `combined load categories with point loads reflect correct peaks`() {
-        val spanId = UUID.randomUUID()
         val member = StructuralMember.createSimple(Length(120.0)) // 10 ft
+        val spanId = member.spans.first().id
         
         val deadLoad = Load.PointLoad(
             value = Force(1000.0),
@@ -90,8 +97,8 @@ class BeamAnalysisSolverVerificationTest {
 
     @Test
     fun `axial compression follows negative sign convention`() {
-        val spanId = UUID.randomUUID()
         val member = StructuralMember.createSimple(Length(100.0))
+        val spanId = member.spans.first().id
         
         val axialLoad = Load.AxialLoad(
             value = Force(1000.0),

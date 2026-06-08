@@ -14,11 +14,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.lz.model.units.UnitSystem
+import com.lz.model.units.feet
+import com.lz.model.units.kiloNewtons
+import com.lz.model.units.lbFt
+import com.lz.model.units.lbIn
+import com.lz.model.units.lbPerFt
+import com.lz.model.units.lbPerIn
+import com.lz.model.units.meters
+import com.lz.model.units.poundsForce
 import com.lz.vectos.domain.structural.Load
-import com.lz.vectos.domain.structural.LoadCategory
+import com.lz.model.regulatory.LoadCategory
 import com.lz.vectos.domain.structural.LoadDirection
-import com.lz.vectos.domain.structural.SpanGeometry
-import com.lz.vectos.domain.units.*
+import com.lz.model.structural.SpanGeometry
+import com.lz.model.units.*
 import java.util.UUID
 
 @Composable

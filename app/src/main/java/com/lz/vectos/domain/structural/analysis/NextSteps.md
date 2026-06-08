@@ -58,3 +58,27 @@ This document tracks the planned and proposed improvements for the structural an
     - Solver returns a `BeamEvaluator` object.
     - Provide `momentAt(x)`, `shearAt(x)`, and `deflectionAt(x)` methods.
     - Calculates values instantly using exact equations and node displacements for any arbitrary $x$, eliminating interpolation errors.
+
+## App Fixes Priority
+The following tasks are prioritized for the current app workstream. They are ordered by minimal-impact changes first, consistent with the architecture guardrails in `ARCHITECTURE_CONTEXT.md`.
+
+1. Fix shear and moment diagrams not visible in the `Analysis` tab.
+2. Add interactive scrolling/scrubbing along the beam diagram in the `Analysis` tab to show exact shear, moment, or deflection values at the selected cursor location.
+3. Resolve the shear and moment diagrams not matching correct output.
+4. Update the loading dialog boxes to show tributary width options.
+5. Update the loading dialog boxes to apply load to individual span or entire beam.
+6. Update the bracing visualization in the beam view.
+7. Update the colors across the app, including dialogs (notably the loading dialog).
+8. Improve the steel shape selection dialog with quick jump buttons for each beam depth (e.g. `W12`, `HSS8`).
+9. Fix the steel shape type list so it is complete and scrollable on the emulator.
+10. Resolve the missing associated standards for a selected building code in the Project information form.
+11. Move the edit pencil icon on the Project information card from the `Project Summary` label to the right side of the card.
+12. Enhance the design cards for shear, flexure, torsion, deflection, etc. so they are expandable and show full capacity development with code references, variables, equations, and selectable load combinations.
+
+## Single-Step Implementation Plan
+We will proceed one step at a time to minimize risk and remain aligned with the baseline architecture.
+
+- Next Step: Investigate and restore visibility of shear and moment diagrams in the `Analysis` tab.
+- Goal: Ensure diagrams are rendered and accessible before modifying analysis results.
+- Scope: UI/visibility fix only, no domain solver changes or architecture impacts.
+- Approval: Do not implement the next step until explicit consent is given.

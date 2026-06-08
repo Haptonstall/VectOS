@@ -3,12 +3,12 @@ package com.lz.vectos.domain.structural.analysis
 import com.lz.vectos.domain.structural.LoadCase
 import com.lz.vectos.domain.structural.LoadCombination
 import com.lz.vectos.domain.structural.Load
-import com.lz.vectos.domain.structural.StructuralMember
+import com.lz.model.structural.StructuralMember
 import com.lz.vectos.domain.structural.NormalizedBraceState
-import com.lz.vectos.domain.structural.DesignMethodology
-import com.lz.vectos.domain.beam.SectionProfile
+import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.SectionProfile
 
-import com.lz.vectos.domain.structural.MaterialGrade
+import com.lz.model.structural.MaterialGrade
 
 /**
  * Configuration for a beam analysis run.

@@ -1,8 +1,16 @@
 package com.lz.vectos.domain.structural
 
+import com.lz.model.regulatory.LoadCategory
+import com.lz.model.units.Force
+import com.lz.model.units.ForcePerLength
+import com.lz.model.units.Length
+import com.lz.model.units.Moment
+import com.lz.model.units.Pressure
+import com.lz.model.units.inches
+import com.lz.model.units.times
 import kotlinx.serialization.Serializable
-import com.lz.vectos.util.serialization.UUIDSerializer
-import com.lz.vectos.domain.units.*
+import com.lz.model.util.UUIDSerializer
+import com.lz.model.units.*
 import java.util.UUID
 
 /**

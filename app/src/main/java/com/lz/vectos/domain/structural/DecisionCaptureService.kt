@@ -1,5 +1,8 @@
 package com.lz.vectos.domain.structural
 
+import com.lz.model.structural.DesignDecision
+import com.lz.model.structural.DesignInterpretation
+
 /**
  * Pure Kotlin service to capture engineering intent based on design interpretations.
  */

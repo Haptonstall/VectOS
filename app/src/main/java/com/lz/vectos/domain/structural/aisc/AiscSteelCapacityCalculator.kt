@@ -1,18 +1,28 @@
 package com.lz.vectos.domain.structural.aisc
 
-import com.lz.vectos.domain.beam.SectionProfile
-import com.lz.vectos.domain.beam.ShapeType
-import com.lz.vectos.domain.structural.MaterialGrade
+import com.lz.model.regulatory.aisc.AiscDesignFactors
+import com.lz.model.units.inIn2
+import com.lz.model.units.inIn3
+import com.lz.model.units.inIn4
+import com.lz.model.units.inInches
+import com.lz.model.units.inPsi
+import com.lz.model.units.lbIn
+import com.lz.model.units.poundsForce
+import com.lz.model.structural.SectionProfile
+import com.lz.model.structural.ShapeType
+import com.lz.model.structural.MaterialGrade
 import com.lz.vectos.domain.structural.RawCapacityResult
 import com.lz.vectos.domain.structural.StationDemand
 import com.lz.vectos.domain.structural.Flange
 import com.lz.vectos.domain.structural.CapacityCalculator
 import com.lz.vectos.domain.structural.PointCapacityResult
-import com.lz.vectos.domain.structural.StrengthDesignResult
-import com.lz.vectos.domain.structural.DesignMethodology
+import com.lz.model.structural.StrengthDesignResult
+import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.SteelProfile
+import com.lz.model.structural.StrengthCheckResult
 import com.lz.vectos.domain.structural.CapacityEngine
 import com.lz.vectos.domain.structural.analysis.BeamAnalysisResult
-import com.lz.vectos.domain.units.*
+import com.lz.model.units.*
 import kotlin.math.PI
 import kotlin.math.max
 import kotlin.math.pow
@@ -72,8 +82,8 @@ class AiscSteelCapacityCalculator(
         val sx = profile.propertiesStrongAxis.s.inIn3
         val iy = profile.propertiesWeakAxis.i.inIn4
         val ry = profile.propertiesWeakAxis.r.inInches
-        val j = if (profile is com.lz.vectos.domain.beam.SteelProfile) profile.torsionalConstantJ else 0.0
-        val cw = if (profile is com.lz.vectos.domain.beam.SteelProfile) profile.warpingConstantCw else 0.0
+        val j = if (profile is SteelProfile) profile.torsionalConstantJ else 0.0
+        val cw = if (profile is SteelProfile) profile.warpingConstantCw else 0.0
 
         val mp = Fy * zx
 
@@ -81,7 +91,7 @@ class AiscSteelCapacityCalculator(
         var limitState = "Yielding"
 
         if (profile.shapeType == ShapeType.WIDE_FLANGE || profile.shapeType == ShapeType.CHANNEL) {
-            val ho = if (profile is com.lz.vectos.domain.beam.SteelProfile) profile.depth.inInches - profile.flangeThickness.inInches else profile.depth.inInches * 0.95
+            val ho = if (profile is SteelProfile) profile.depth.inInches - profile.flangeThickness.inInches else profile.depth.inInches * 0.95
             
             // Approximation for rts if not explicitly known:
             val rts = sqrt(sqrt(iy * cw) / sx)
@@ -114,7 +124,7 @@ class AiscSteelCapacityCalculator(
             var mnFLB = mp
             var limitStateFLB = "Yielding"
             
-            if (profile is com.lz.vectos.domain.beam.SteelProfile) {
+            if (profile is SteelProfile) {
                 val lambdaF = profile.flangeWidth.inInches / (2 * profile.flangeThickness.inInches)
                 val lambdaPf = 0.38 * sqrt(E / Fy)
                 val lambdaRf = 1.0 * sqrt(E / Fy)
@@ -155,7 +165,7 @@ class AiscSteelCapacityCalculator(
         var mn = mp
         var limitState = "Weak-Axis Yielding"
         
-        if (profile is com.lz.vectos.domain.beam.SteelProfile && (profile.shapeType == ShapeType.WIDE_FLANGE || profile.shapeType == ShapeType.CHANNEL)) {
+        if (profile is SteelProfile && (profile.shapeType == ShapeType.WIDE_FLANGE || profile.shapeType == ShapeType.CHANNEL)) {
             val lambdaF = profile.flangeWidth.inInches / (2 * profile.flangeThickness.inInches)
             val lambdaPf = 0.38 * sqrt(E / Fy)
             val lambdaRf = 1.0 * sqrt(E / Fy)
@@ -184,7 +194,7 @@ class AiscSteelCapacityCalculator(
         var aw = area * 0.5 // Default fallback
         var cv1 = 1.0
 
-        if (profile is com.lz.vectos.domain.beam.SteelProfile) {
+        if (profile is SteelProfile) {
             if (isStrongAxis) {
                 // Strong axis shear is resisted by the web
                 aw = profile.depth.inInches * profile.webThickness.inInches
@@ -237,13 +247,13 @@ class AiscSteelCapacityCalculator(
     }
 
     private fun calculateTorsion(): Pair<Double, String> {
-        val j = if (profile is com.lz.vectos.domain.beam.SteelProfile) profile.torsionalConstantJ else 0.0
+        val j = if (profile is SteelProfile) profile.torsionalConstantJ else 0.0
         
         return if (profile.shapeType == ShapeType.RECTANGULAR_HSS || profile.shapeType == ShapeType.ROUND_HSS || profile.shapeType == ShapeType.PIPE) {
             // Closed shape: Tn = Fcr * C (Section H3.1)
             // Approximate C if not explicitly in profile properties
             var c = j / 2.0 // rough fallback
-            if (profile is com.lz.vectos.domain.beam.SteelProfile) {
+            if (profile is SteelProfile) {
                 if (profile.shapeType == ShapeType.RECTANGULAR_HSS) {
                     val t = profile.webThickness.inInches
                     val b = profile.flangeWidth.inInches
@@ -265,18 +275,39 @@ class AiscSteelCapacityCalculator(
         }
     }
 
-    override fun evaluateDetailed(demand: StationDemand, methodology: DesignMethodology): StrengthDesignResult {
-        val lb = if (demand.compressionFlange == Flange.TOP) demand.lbTop.inInches else demand.lbBottom.inInches
-        val cb = demand.cb
+    private fun getFactors(methodology: DesignMethodology) =
+        AiscDesignFactors.get(methodology)
 
-        val phiFlexure = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
-        val omegaFlexure = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
-        val phiShear = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
-        val omegaShear = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
-        val phiAxial = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
-        val omegaAxial = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
-        val phiTorsion = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
-        val omegaTorsion = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
+    override fun evaluateDetailed(
+        demand: StationDemand,
+        methodology: DesignMethodology
+    ): StrengthDesignResult {
+        val f = getFactors(methodology)
+        val lb = if (demand.compressionFlange == Flange.TOP)
+            demand.lbTop.inInches else demand.lbBottom.inInches
+
+        val (mn, limitStateFlexure) = calculateFlexureX(lb, demand.cb)
+        val (vn, limitStateShear) = calculateShear(isStrongAxis = true)
+        val (pn, limitStateAxial) = calculateAxial(lb)
+        val (tn, limitStateTorsion) = calculateTorsion()
+
+        val designMn = when (methodology) {
+            DesignMethodology.LRFD -> AiscDesignFactors.applyLrfd(mn, f.phiFlexure)
+            DesignMethodology.ASD -> AiscDesignFactors.applyAsd(mn, f.omegaFlexure)
+        }
+        val designVn = when (methodology) {
+            DesignMethodology.LRFD -> AiscDesignFactors.applyLrfd(vn, f.phiShear)
+            DesignMethodology.ASD -> AiscDesignFactors.applyAsd(vn, f.omegaShear)
+        }
+        val designPn = when (methodology) {
+            DesignMethodology.LRFD -> AiscDesignFactors.applyLrfd(pn, f.phiCompression)
+            DesignMethodology.ASD -> AiscDesignFactors.applyAsd(pn, f.omegaCompression)
+        }
+        val designTn = when (methodology) {
+            DesignMethodology.LRFD -> AiscDesignFactors.applyLrfd(tn, f.phiTorsion)
+            DesignMethodology.ASD -> AiscDesignFactors.applyAsd(tn, f.omegaTorsion)
+        }
+        val cb = demand.cb
 
         val flexureX = calculateFlexureX(lb, cb)
         val flexureY = calculateFlexureY()
@@ -286,22 +317,18 @@ class AiscSteelCapacityCalculator(
 
         val mn = flexureX.first
         val limitStateFlexure = flexureX.second
-        val designMn = if (methodology == DesignMethodology.LRFD) mn * phiFlexure else mn / omegaFlexure
         val ratioFlexure = abs(demand.moment.lbIn) / designMn
 
         val vn = shearX.first
         val limitStateShear = shearX.second
-        val designVn = if (methodology == DesignMethodology.LRFD) vn * phiShear else vn / omegaShear
         val ratioShear = abs(demand.shear.pounds) / designVn
 
         val pn = axial.first
         val limitStateAxial = axial.second
-        val designPn = if (methodology == DesignMethodology.LRFD) pn * phiAxial else pn / omegaAxial
         val ratioAxial = abs(demand.axial.pounds) / designPn
 
         val tn = torsion.first
         val limitStateTorsion = torsion.second
-        val designTn = if (methodology == DesignMethodology.LRFD) tn * phiTorsion else tn / omegaTorsion
         val ratioTorsion = abs(demand.torque.lbIn) / designTn
 
         // Interaction (Simplified H1.1)
@@ -311,7 +338,7 @@ class AiscSteelCapacityCalculator(
             (ratioAxial / 2.0) + ratioFlexure
         }
 
-        val momentCheck = com.lz.vectos.domain.structural.StrengthCheckResult(
+        val momentCheck = StrengthCheckResult(
             demand = demand.moment,
             capacity = designMn.lbIn,
             utilization = ratioFlexure,
@@ -319,7 +346,7 @@ class AiscSteelCapacityCalculator(
             governingMode = limitStateFlexure
         )
 
-        val shearCheck = com.lz.vectos.domain.structural.StrengthCheckResult(
+        val shearCheck = StrengthCheckResult(
             demand = demand.shear,
             capacity = designVn.poundsForce,
             utilization = ratioShear,
@@ -327,7 +354,7 @@ class AiscSteelCapacityCalculator(
             governingMode = limitStateShear
         )
 
-        val axialCheck = com.lz.vectos.domain.structural.StrengthCheckResult(
+        val axialCheck = StrengthCheckResult(
             demand = demand.axial,
             capacity = designPn.poundsForce,
             utilization = ratioAxial,
@@ -335,7 +362,7 @@ class AiscSteelCapacityCalculator(
             governingMode = limitStateAxial
         )
 
-        val torsionCheck = com.lz.vectos.domain.structural.StrengthCheckResult(
+        val torsionCheck = StrengthCheckResult(
             demand = demand.torque,
             capacity = designTn.lbIn,
             utilization = ratioTorsion,
@@ -343,13 +370,16 @@ class AiscSteelCapacityCalculator(
             governingMode = limitStateTorsion
         )
 
-        return com.lz.vectos.domain.structural.StrengthDesignResult(
+        return StrengthDesignResult(
             momentCheck = momentCheck,
             shearCheck = shearCheck,
             axialCheck = axialCheck,
             torsionCheck = torsionCheck,
             methodology = methodology,
-            designParameters = mapOf("Lb" to String.format(java.util.Locale.US, "%.1f in", lb), "Cb" to String.format(java.util.Locale.US, "%.2f", cb))
+            designParameters = mapOf(
+                "Lb" to String.format(java.util.Locale.US, "%.1f in", lb),
+                "Cb" to String.format(java.util.Locale.US, "%.2f", cb)
+            )
         )
     }
 }

@@ -1,8 +1,10 @@
 package com.lz.vectos.domain.structural
 
-import com.lz.vectos.domain.units.Pressure
-import com.lz.vectos.domain.units.ksi
-import com.lz.vectos.domain.units.psi
+import com.lz.model.structural.WoodGrade
+import com.lz.model.structural.WoodSpecies
+import com.lz.model.units.Pressure
+import com.lz.model.units.ksi
+import com.lz.model.units.psi
 
 /**
  * Service to provide reference engineering properties for Wood species and grades

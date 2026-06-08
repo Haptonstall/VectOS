@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "adb": true,
+        "&\"C:\\Users\\hapto\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe\"": true,
+        "Tee-Object": true,
+        "Write-Error": true
+    }
+}

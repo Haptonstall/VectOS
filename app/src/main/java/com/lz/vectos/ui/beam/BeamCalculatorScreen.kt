@@ -36,12 +36,36 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lz.vectos.R
 import com.lz.vectos.domain.beam.*
-import com.lz.vectos.domain.project.Project
+import com.lz.domain.project.Project
 import com.lz.vectos.domain.structural.*
-import com.lz.vectos.domain.units.*
+import com.lz.model.units.*
 import com.lz.vectos.ui.tool.*
 import androidx.compose.material.icons.filled.VerticalAlignBottom
-import com.lz.vectos.viewmodel.BeamViewModel
+import com.lz.model.structural.BracingMode
+import com.lz.model.structural.DesignEquationTrace
+import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.MaterialGrade
+import com.lz.model.structural.MaterialType
+import com.lz.model.structural.SectionProfile
+import com.lz.model.structural.ServiceabilityResult
+import com.lz.model.structural.ShapeType
+import com.lz.model.structural.SpanGeometry
+import com.lz.model.structural.StrengthCheckResult
+import com.lz.model.structural.StrengthDesignResult
+import com.lz.model.structural.StructuralMember
+import com.lz.model.structural.SupportCondition
+import com.lz.model.units.Force
+import com.lz.model.units.Length
+import com.lz.model.units.Moment
+import com.lz.model.units.UnitSystem
+import com.lz.model.units.inInches
+import com.lz.model.units.inKiloNewtons
+import com.lz.model.units.inKips
+import com.lz.model.units.inLbFt
+import com.lz.model.units.inLbIn
+import com.lz.model.units.inNewtonMeters
+import com.lz.model.units.inPoundsForce
+import com.lz.vectos.presentation.BeamViewModel
 import com.lz.vectos.ui.beam.drawStructuralJoint
 import com.lz.vectos.ui.beam.drawStructuralSupport
 import java.util.UUID
@@ -1015,6 +1039,31 @@ fun AnalysisSummary(
 
     if (analysis == null) return
 
+    val momentUnitLabel = UnitFormattingService.getMomentUnitSymbol(unitSystem)
+    val shearUnitLabel = UnitFormattingService.getForceUnitSymbol(unitSystem)
+
+    val momentPoints = remember(analysis, unitSystem) {
+        analysis.spanResults.flatMap { it.momentDiagram }.map { p ->
+            val convertedValue = if (unitSystem == UnitSystem.METRIC) {
+                Moment(p.value).inNewtonMeters / 1000.0
+            } else {
+                Moment(p.value).inLbFt / 1000.0
+            }
+            p.copy(value = convertedValue)
+        }
+    }
+
+    val shearPoints = remember(analysis, unitSystem) {
+        analysis.spanResults.flatMap { it.shearDiagram }.map { p ->
+            val convertedValue = if (unitSystem == UnitSystem.METRIC) {
+                Force(p.value).inKiloNewtons
+            } else {
+                Force(p.value).inKips
+            }
+            p.copy(value = convertedValue)
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Force Envelopes", style = MaterialTheme.typography.titleMedium)
         
@@ -1033,6 +1082,49 @@ fun AnalysisSummary(
                 ResultRow("Max Deflection", "${String.format("%.3f", analysis.maxDeflection.inInches)} in")
                 ResultRow("Max Axial", "${String.format("%.1f", analysis.maxAxial.inPoundsForce)} lbs")
                 ResultRow("Max Torsion", "${String.format("%.1f", analysis.maxTorsion.inLbIn)} lb-in")
+            }
+        }
+
+        // Diagrams Card
+        if (shearPoints.isNotEmpty() || momentPoints.isNotEmpty()) {
+            Text("Analysis Diagrams", style = MaterialTheme.typography.titleMedium)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    if (shearPoints.isNotEmpty()) {
+                        AnalysisChart(
+                            title = "Shear Force ($shearUnitLabel)",
+                            points = shearPoints,
+                            unitLabel = shearUnitLabel,
+                            lineColor = Color(0xFF00ACC1), // Elegant Teal
+                            modifier = Modifier.fillMaxWidth(),
+                            invertY = false
+                        )
+                    }
+
+                    if (shearPoints.isNotEmpty() && momentPoints.isNotEmpty()) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                    }
+
+                    if (momentPoints.isNotEmpty()) {
+                        AnalysisChart(
+                            title = "Bending Moment ($momentUnitLabel)",
+                            points = momentPoints,
+                            unitLabel = momentUnitLabel,
+                            lineColor = Color(0xFF8E24AA), // Elegant Purple
+                            modifier = Modifier.fillMaxWidth(),
+                            invertY = true // Standard convention (tension side down)
+                        )
+                    }
+                }
             }
         }
 

@@ -1,8 +1,10 @@
 package com.lz.vectos.domain.structural
 
-import com.lz.vectos.domain.units.Length
-import com.lz.vectos.domain.units.inches
-import com.lz.vectos.domain.units.inLbIn
+import com.lz.model.structural.BracingMode
+import com.lz.model.structural.StructuralMember
+import com.lz.model.units.Length
+import com.lz.model.units.inches
+import com.lz.model.units.inLbIn
 import kotlin.math.abs
 
 /**

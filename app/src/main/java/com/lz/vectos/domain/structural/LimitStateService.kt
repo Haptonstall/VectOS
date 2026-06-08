@@ -1,8 +1,11 @@
 package com.lz.vectos.domain.structural
 
-import com.lz.vectos.domain.units.Force
-import com.lz.vectos.domain.units.Length
-import com.lz.vectos.domain.units.Moment
+import com.lz.model.regulatory.codes.BuildingCode
+import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.StructuralMember
+import com.lz.model.units.Force
+import com.lz.model.units.Length
+import com.lz.model.units.Moment
 
 /**
  * Result of evaluation for a specific limit state.

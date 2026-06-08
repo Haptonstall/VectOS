@@ -13,10 +13,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.lz.vectos.calculator.CalculatorDefinition
-import com.lz.vectos.calculator.CalculatorRegistry
-import com.lz.vectos.calculator.CalculatorRoute
-import com.lz.vectos.viewmodel.CalculationContext
+import com.lz.vectos.ui.calculator.CalculatorDefinition
+import com.lz.vectos.ui.calculator.CalculatorRegistry
+import com.lz.vectos.ui.calculator.CalculatorRoute
+import com.lz.vectos.presentation.CalculationContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

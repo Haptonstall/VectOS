@@ -1,10 +1,19 @@
 package com.lz.vectos.domain.structural
 
-import com.lz.vectos.domain.structural.MaterialGrade
-import com.lz.vectos.domain.beam.ShapeType
-import com.lz.vectos.domain.beam.SteelProfile
+import com.lz.model.structural.DesignMethodology
+import com.lz.model.units.Area
+import com.lz.model.units.Force
+import com.lz.model.units.Length
+import com.lz.model.units.Moment
+import com.lz.model.units.MomentOfInertia
+import com.lz.model.units.Pressure
+import com.lz.model.units.SectionModulus
+import com.lz.model.structural.MaterialGrade
+import com.lz.model.structural.SectionAxisProperties
+import com.lz.model.structural.ShapeType
+import com.lz.model.structural.SteelProfile
 import com.lz.vectos.domain.structural.aisc.AiscSteelCapacityCalculator
-import com.lz.vectos.domain.units.*
+import com.lz.model.units.*
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.UUID
@@ -22,13 +31,13 @@ class CapacityEngineTest {
             webThickness = Length(0.170),
             flangeWidth = Length(3.94),
             flangeThickness = Length(0.205),
-            propertiesStrongAxis = com.lz.vectos.domain.beam.SectionAxisProperties(
+            propertiesStrongAxis = SectionAxisProperties(
                 i = MomentOfInertia(30.8),
                 s = SectionModulus(7.81),
                 r = Length(3.22),
                 z = SectionModulus(8.87)
             ),
-            propertiesWeakAxis = com.lz.vectos.domain.beam.SectionAxisProperties(
+            propertiesWeakAxis = SectionAxisProperties(
                 i = MomentOfInertia(2.09),
                 s = SectionModulus(1.06),
                 r = Length(0.841),

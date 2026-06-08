@@ -13,10 +13,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import com.lz.model.units.inInches
 import com.lz.vectos.domain.structural.Load
-import com.lz.vectos.domain.structural.StructuralMember
-import com.lz.vectos.domain.structural.SupportCondition
-import com.lz.vectos.domain.units.*
+import com.lz.model.structural.StructuralMember
+import com.lz.model.structural.SupportCondition
+import com.lz.model.units.*
 
 @Composable
 fun BeamDiagram(

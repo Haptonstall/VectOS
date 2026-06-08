@@ -1,17 +1,27 @@
 package com.lz.vectos.domain.structural.analysis
 
+import com.lz.model.structural.MaterialGrade
+import com.lz.model.structural.SpanGeometry
+import com.lz.model.structural.SupportCondition
+import com.lz.model.units.Force
+import com.lz.model.units.Length
+import com.lz.model.units.Moment
+import com.lz.model.units.inInches
+import com.lz.model.units.inLbIn
+import com.lz.model.units.inPoundsForce
+import com.lz.model.units.inches
 import com.lz.vectos.domain.structural.*
 import com.lz.vectos.domain.structural.analysis.core.StructuralSolver
 import com.lz.vectos.domain.structural.analysis.core.StructuralResult
 import com.lz.vectos.domain.structural.analysis.core.StructuralSystem
 import com.lz.vectos.domain.structural.analysis.core.DofConfig
 import com.lz.vectos.domain.structural.analysis.core.DofType
-import com.lz.vectos.domain.units.*
+import com.lz.model.units.*
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-import com.lz.vectos.util.serialization.UUIDSerializer
+import com.lz.model.util.UUIDSerializer
 import kotlinx.serialization.Serializable
 
 
@@ -491,17 +501,29 @@ object BeamAnalysisSolver {
 
         return BeamAnalysisResult(
             maxMoment = Moment(allMoments.maxByOrNull { it } ?: 0.0),
-            maxMomentY = Moment(spanResults.maxOfOrNull { it.momentYDiagram.maxOfOrNull { p -> p.value } ?: 0.0 } ?: 0.0),
+            maxMomentY = Moment(spanResults.maxOfOrNull {
+                it.momentYDiagram.maxOfOrNull { p -> p.value } ?: 0.0
+            } ?: 0.0),
             maxShear = Force(allShears.maxByOrNull { it } ?: 0.0),
-            maxShearY = Force(spanResults.maxOfOrNull { it.shearYDiagram.maxOfOrNull { p -> p.value } ?: 0.0 } ?: 0.0),
-            maxTorsion = Moment(spanResults.maxOfOrNull { it.torqueDiagram.maxOfOrNull { p -> p.value } ?: 0.0 } ?: 0.0),
+            maxShearY = Force(spanResults.maxOfOrNull {
+                it.shearYDiagram.maxOfOrNull { p -> p.value } ?: 0.0
+            } ?: 0.0),
+            maxTorsion = Moment(spanResults.maxOfOrNull {
+                it.torqueDiagram.maxOfOrNull { p -> p.value } ?: 0.0
+            } ?: 0.0),
             maxAxial = Force(allAxials.maxByOrNull { it } ?: 0.0),
             maxDeflection = Length(spanResults.maxOfOrNull { it.maxDeflection.inInches } ?: 0.0),
             minMoment = Moment(allMoments.minByOrNull { it } ?: 0.0),
-            minMomentY = Moment(spanResults.minOfOrNull { it.momentYDiagram.minOfOrNull { p -> p.value } ?: 0.0 } ?: 0.0),
+            minMomentY = Moment(spanResults.minOfOrNull {
+                it.momentYDiagram.minOfOrNull { p -> p.value } ?: 0.0
+            } ?: 0.0),
             minShear = Force(allShears.minByOrNull { it } ?: 0.0),
-            minShearY = Force(spanResults.minOfOrNull { it.shearYDiagram.minOfOrNull { p -> p.value } ?: 0.0 } ?: 0.0),
-            minTorsion = Moment(spanResults.minOfOrNull { it.torqueDiagram.minOfOrNull { p -> p.value } ?: 0.0 } ?: 0.0),
+            minShearY = Force(spanResults.minOfOrNull {
+                it.shearYDiagram.minOfOrNull { p -> p.value } ?: 0.0
+            } ?: 0.0),
+            minTorsion = Moment(spanResults.minOfOrNull {
+                it.torqueDiagram.minOfOrNull { p -> p.value } ?: 0.0
+            } ?: 0.0),
             minAxial = Force(allAxials.minByOrNull { it } ?: 0.0),
             spanResults = spanResults,
             reactions = reactions
@@ -553,6 +575,7 @@ object BeamAnalysisSolver {
                     LoadDirection.VERTICAL_DOWN, LoadDirection.VERTICAL_UP -> {
                         val sign = if (load.direction == LoadDirection.VERTICAL_DOWN) -1.0 else 1.0
                         val (fems, reactions) = computePointLoadFems(p * sign, a, l)
+                        println("PointLoad vertical: element=${ctx.index} a=$a l=$l p=$p sign=$sign reactions=${reactions} fems=${fems}")
                         // Equivalent Nodal Loads (NOT reactions)
                         system.addElementEquivalentForce(ctx.index, 1, reactions.vStart)
                         system.addElementEquivalentForce(ctx.index, 5, fems.mStart)
@@ -694,8 +717,8 @@ object BeamAnalysisSolver {
             is Load.AxialLoad -> {
                 val pForce = load.value.inPoundsForce
                 val sign = if (load.direction == LoadDirection.AXIAL_COMPRESSION) -1.0 else 1.0
-                system.addElementEquivalentForce(ctx.index, 0, pForce * sign)
-                system.addElementEquivalentForce(ctx.index, 6, 0.0)
+                system.addElementEquivalentForce(ctx.index, 0, -pForce * sign)
+                system.addElementEquivalentForce(ctx.index, 6, pForce * sign)
             }
             is Load.TributaryLoad -> {
                 applyLoadToSystem(system, ctx, load.toTrapezoidal())
@@ -783,34 +806,8 @@ object BeamAnalysisSolver {
             txEnd = -elForces[9]
         )
 
-        // Intelligent Sampling: Collect Points of Interest (POI)
-        val pois = mutableSetOf<Double>()
-        pois.add(0.0)
-        pois.add(ctx.lengthInches)
-
-        ctx.loads.forEach { load ->
-            pois.add(load.locationStart.inches)
-            pois.add(load.locationEnd.inches)
-        }
-
-        braceState.forEach { brace ->
-            val localX = brace.x - globalXOffset
-            if (localX >= -1e-4 && localX <= ctx.lengthInches + 1e-4) {
-                pois.add(localX.coerceIn(0.0, ctx.lengthInches))
-            }
-        }
-
-        // Merge with Regular Grid (50 points)
-        val gridCount = 50
-        for (i in 0..gridCount) {
-            pois.add(i * ctx.lengthInches / gridCount)
-        }
-
-        // Sort and Deduplicate with tolerance
-        val sortedStations = pois.sorted().fold(mutableListOf<Double>()) { acc, x ->
-            if (acc.isEmpty() || x - acc.last() > 1e-4) acc.add(x)
-            acc
-        }
+        // Stations are already computed, sorted, and deduplicated in collectGlobalPois.
+        // We use the passed sortedStations parameter directly to maintain exact point load offsets.
 
         val shearPoints = mutableListOf<AnalysisPoint>()
         val momentPoints = mutableListOf<AnalysisPoint>()

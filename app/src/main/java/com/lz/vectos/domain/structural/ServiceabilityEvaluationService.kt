@@ -1,7 +1,16 @@
 package com.lz.vectos.domain.structural
 
+import com.lz.model.regulatory.LoadCategory
+import com.lz.model.regulatory.codes.BuildingCode
+import com.lz.model.structural.ServiceabilityResult
+import com.lz.model.structural.StructuralMember
+import com.lz.model.units.Force
+import com.lz.model.units.Length
+import com.lz.model.units.Moment
+import com.lz.model.units.inInches
+import com.lz.model.units.inches
 import com.lz.vectos.domain.structural.analysis.BeamAnalysisResult
-import com.lz.vectos.domain.units.*
+import com.lz.model.units.*
 import kotlin.math.abs
 
 /**
