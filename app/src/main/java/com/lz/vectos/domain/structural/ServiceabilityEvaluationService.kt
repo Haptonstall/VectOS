@@ -3,6 +3,7 @@ package com.lz.vectos.domain.structural
 import com.lz.model.regulatory.LoadCategory
 import com.lz.model.regulatory.codes.BuildingCode
 import com.lz.model.structural.ServiceabilityResult
+import com.lz.model.structural.StationDemand
 import com.lz.model.structural.StructuralMember
 import com.lz.model.units.Force
 import com.lz.model.units.Length
@@ -10,7 +11,7 @@ import com.lz.model.units.Moment
 import com.lz.model.units.inInches
 import com.lz.model.units.inches
 import com.lz.vectos.domain.structural.analysis.BeamAnalysisResult
-import com.lz.model.units.*
+import java.util.UUID
 import kotlin.math.abs
 
 /**
@@ -65,7 +66,7 @@ object ServiceabilityEvaluationService {
             .flatMap { it.spanResults }
             .flatMap { it.stationDemands }
             .maxByOrNull { abs(it.deflection.inInches) } 
-            ?: StationDemand(0.0.inches, Moment(0.0), Force(0.0), spanId = java.util.UUID.randomUUID())
+            ?: StationDemand(0.0.inches, Moment(0.0), Force(0.0), spanId = UUID.randomUUID())
     }
 
     private fun findMaxDeflectionForCategory(

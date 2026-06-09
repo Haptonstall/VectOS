@@ -2,6 +2,7 @@ package com.lz.vectos.domain.structural.analysis
 
 import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.SpanGeometry
+import com.lz.model.structural.StationDemand
 import com.lz.model.structural.SupportCondition
 import com.lz.model.units.Force
 import com.lz.model.units.Length

@@ -31,6 +31,7 @@ import com.lz.model.structural.SectionRepository
 import com.lz.model.structural.ShapeType
 import com.lz.vectos.domain.beam.*
 import com.lz.domain.calculation.CalculationMetadata
+import com.lz.model.structural.Flange
 import com.lz.vectos.domain.structural.*
 import com.lz.model.units.*
 import kotlinx.coroutines.Dispatchers

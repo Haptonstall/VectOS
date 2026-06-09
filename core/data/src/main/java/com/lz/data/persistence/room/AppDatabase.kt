@@ -1,6 +1,8 @@
-package com.lz.vectos.data.persistence.room
+package com.lz.data.persistence.room
 
+import android.content.Context
 import androidx.room.Database
+import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -67,10 +69,10 @@ import com.lz.data.persistence.room.entity.DefaultLoadCaseRoomEntity
         ServiceabilityCriterionRoomEntity::class,
         DefaultLoadCaseRoomEntity::class
     ],
-    version = 18,
+    version = 1,
     exportSchema = true
 )
-@TypeConverters(Converters::class, StandardTypeConverters::class)
+@TypeConverters(StandardTypeConverters::class)
 abstract class AppDatabase : RoomDatabase() {
     // Project DAOs
     abstract fun projectDao(): ProjectDao
@@ -87,8 +89,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun loadCombinationDao(): LoadCombinationDao
 
     companion object {
-        fun create(context: android.content.Context): AppDatabase {
-            return androidx.room.Room.databaseBuilder(
+        fun create(context: Context): AppDatabase {
+            return Room.databaseBuilder(
                 context,
                 AppDatabase::class.java,
                 "vectos.db"
@@ -100,7 +102,7 @@ abstract class AppDatabase : RoomDatabase() {
             .build()
         }
 
-        val CALLBACK = object : RoomDatabase.Callback() {
+        val CALLBACK = object : Callback() {
             override fun onOpen(db: SupportSQLiteDatabase) {
                 super.onOpen(db)
                 db.execSQL("PRAGMA foreign_keys = ON;")

@@ -22,7 +22,11 @@ fun StandardEntity.toDomainModel(): Standard {
         id = id,
         shortName = short_name,
         longName = long_name,
-        references = decodeReferences(references_json)
+        references = try {
+            json.decodeFromString<Map<StandardReferenceKey, String>>(this.references_json)
+        } catch (e: Exception) {
+            emptyMap()
+        }
     )
 }
 

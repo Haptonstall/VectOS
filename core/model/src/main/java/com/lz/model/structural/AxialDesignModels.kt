@@ -1,6 +1,4 @@
-package com.lz.vectos.domain.structural
-
-import com.lz.model.structural.DesignEquationTrace
+package com.lz.model.structural
 
 /**
  * Result of axial-flexural interaction check (AISC Chapter H).

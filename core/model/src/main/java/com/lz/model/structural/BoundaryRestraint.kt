@@ -1,4 +1,4 @@
-package com.lz.vectos.domain.structural
+package com.lz.model.structural
 
 /**
  * Low-level restraint flags for support conditions.

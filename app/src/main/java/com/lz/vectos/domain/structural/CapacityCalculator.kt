@@ -1,6 +1,7 @@
 package com.lz.vectos.domain.structural
 
 import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.StationDemand
 import com.lz.model.structural.StrengthDesignResult
 import com.lz.vectos.domain.structural.analysis.BeamAnalysisResult
 

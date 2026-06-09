@@ -12,8 +12,8 @@ import com.lz.model.structural.SectionProfile
 import com.lz.model.structural.ShapeType
 import com.lz.model.structural.MaterialGrade
 import com.lz.vectos.domain.structural.RawCapacityResult
-import com.lz.vectos.domain.structural.StationDemand
-import com.lz.vectos.domain.structural.Flange
+import com.lz.model.structural.StationDemand
+import com.lz.model.structural.Flange
 import com.lz.vectos.domain.structural.CapacityCalculator
 import com.lz.vectos.domain.structural.PointCapacityResult
 import com.lz.model.structural.StrengthDesignResult

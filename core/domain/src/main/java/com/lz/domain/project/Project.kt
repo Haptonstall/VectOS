@@ -6,7 +6,7 @@ import com.lz.model.structural.ProjectDesignContext
 import com.lz.model.units.UnitSystem
 import kotlinx.serialization.Serializable
 import java.util.UUID
-import com.lz.model.UUIDSerializer
+import com.lz.model.util.UUIDSerializer
 
 /**
  * Global engineering rules and design parameters governing the math engines.

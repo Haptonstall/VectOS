@@ -1,10 +1,11 @@
 package com.lz.vectos.domain.structural
 
 import com.lz.model.structural.StructuralMember
+import com.lz.model.regulatory.LoadCombination
 import com.lz.vectos.domain.structural.analysis.BeamAnalysisConfig
 import com.lz.vectos.domain.structural.analysis.BeamAnalysisResult
 import com.lz.vectos.domain.structural.analysis.BeamAnalysisSolver
-import com.lz.model.units.*
+//import com.lz.model.units.
 
 /**
  * Service to resolve governing load effects using matrix analysis.

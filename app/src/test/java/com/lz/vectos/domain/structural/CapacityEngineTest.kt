@@ -1,6 +1,7 @@
 package com.lz.vectos.domain.structural
 
 import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.Flange
 import com.lz.model.units.Area
 import com.lz.model.units.Force
 import com.lz.model.units.Length
@@ -11,9 +12,9 @@ import com.lz.model.units.SectionModulus
 import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.SectionAxisProperties
 import com.lz.model.structural.ShapeType
+import com.lz.model.structural.StationDemand
 import com.lz.model.structural.SteelProfile
 import com.lz.vectos.domain.structural.aisc.AiscSteelCapacityCalculator
-import com.lz.model.units.*
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.UUID

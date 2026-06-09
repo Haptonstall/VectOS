@@ -4,21 +4,12 @@ import com.lz.model.units.inIn2
 import com.lz.model.units.inIn3
 import com.lz.model.units.inInches
 import com.lz.model.units.inPsi
-import com.lz.model.units.lbIn
-import com.lz.model.units.poundsForce
 import com.lz.model.structural.SectionProfile
 import com.lz.model.structural.MaterialGrade
 import com.lz.vectos.domain.structural.CapacityCalculator
-import com.lz.vectos.domain.structural.PointCapacityResult
-import com.lz.model.structural.StrengthDesignResult
-import com.lz.model.structural.DesignMethodology
-import com.lz.vectos.domain.structural.CapacityEngine
-import com.lz.vectos.domain.structural.StationDemand
-import com.lz.model.structural.StrengthCheckResult
+import com.lz.model.structural.StationDemand
 import com.lz.vectos.domain.structural.RawCapacityResult
-import com.lz.vectos.domain.structural.analysis.BeamAnalysisResult
 import com.lz.model.units.*
-import kotlin.math.abs
 
 /**
  * NDS-aligned Wood Capacity Calculator (ASD/LRFD).

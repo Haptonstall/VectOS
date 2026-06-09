@@ -9,15 +9,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LineAxis
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,9 +38,11 @@ import com.lz.vectos.domain.structural.*
 import com.lz.model.units.*
 import com.lz.vectos.ui.tool.*
 import androidx.compose.material.icons.filled.VerticalAlignBottom
+import com.lz.model.structural.BoundaryRestraint
 import com.lz.model.structural.BracingMode
 import com.lz.model.structural.DesignEquationTrace
 import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.InteractionStatus
 import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.MaterialType
 import com.lz.model.structural.SectionProfile
@@ -66,8 +65,6 @@ import com.lz.model.units.inLbIn
 import com.lz.model.units.inNewtonMeters
 import com.lz.model.units.inPoundsForce
 import com.lz.vectos.presentation.BeamViewModel
-import com.lz.vectos.ui.beam.drawStructuralJoint
-import com.lz.vectos.ui.beam.drawStructuralSupport
 import java.util.UUID
 import kotlinx.coroutines.launch
 

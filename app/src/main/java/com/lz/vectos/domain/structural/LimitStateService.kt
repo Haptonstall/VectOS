@@ -2,6 +2,7 @@ package com.lz.vectos.domain.structural
 
 import com.lz.model.regulatory.codes.BuildingCode
 import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.GoverningEffect
 import com.lz.model.structural.StructuralMember
 import com.lz.model.units.Force
 import com.lz.model.units.Length
@@ -48,9 +49,21 @@ object LimitStateService {
             )
             LimitStateEnvelope(
                 limitState = state,
-                maxMoment = GoverningEffect(envelope.maxMoment, 0.0, envelope.governingCombinationName ?: "Governing"),
-                maxShear = GoverningEffect(envelope.maxShear, 0.0, envelope.governingCombinationName ?: "Governing"),
-                maxDeflection = GoverningEffect(envelope.maxDeflection, 0.0, envelope.governingCombinationName ?: "Governing")
+                maxMoment = GoverningEffect(
+                    envelope.maxMoment,
+                    0.0,
+                    envelope.governingCombinationName ?: "Governing"
+                ),
+                maxShear = GoverningEffect(
+                    envelope.maxShear,
+                    0.0,
+                    envelope.governingCombinationName ?: "Governing"
+                ),
+                maxDeflection = GoverningEffect(
+                    envelope.maxDeflection,
+                    0.0,
+                    envelope.governingCombinationName ?: "Governing"
+                )
             )
         }
     }

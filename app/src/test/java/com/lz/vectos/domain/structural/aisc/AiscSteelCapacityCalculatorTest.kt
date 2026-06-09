@@ -11,13 +11,11 @@ import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.SectionAxisProperties
 import com.lz.model.structural.ShapeType
 import com.lz.model.structural.SteelProfile
-import com.lz.vectos.domain.structural.Flange
-import com.lz.vectos.domain.structural.StationDemand
-import com.lz.model.units.*
+import com.lz.model.structural.Flange
+import com.lz.model.structural.StationDemand
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.UUID
-import kotlin.math.abs
 
 class AiscSteelCapacityCalculatorTest {
 
@@ -72,7 +70,7 @@ class AiscSteelCapacityCalculatorTest {
             shearY = Force(0.0),
             torque = Moment(0.0),
             deflection = Length(0.0),
-            spanId = java.util.UUID.randomUUID(),
+            spanId = UUID.randomUUID(),
             cb = 1.0,
             lbTop = Length(0.0),
             lbBottom = Length(0.0),

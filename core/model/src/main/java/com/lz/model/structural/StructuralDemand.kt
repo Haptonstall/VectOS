@@ -1,7 +1,5 @@
-package com.lz.vectos.domain.structural
+package com.lz.model.structural
 
-import com.lz.model.structural.DesignEquationTrace
-import com.lz.model.structural.DesignMethodology
 import com.lz.model.units.Force
 import com.lz.model.units.Moment
 

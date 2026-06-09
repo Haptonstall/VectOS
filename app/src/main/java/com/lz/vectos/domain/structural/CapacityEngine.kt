@@ -1,11 +1,12 @@
 package com.lz.vectos.domain.structural
 
 import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.Flange
 import com.lz.model.units.inInches
 import com.lz.model.units.inLbIn
 import com.lz.model.units.inPoundsForce
 import com.lz.model.structural.SectionProfile
-import com.lz.model.units.*
+import com.lz.model.structural.StationDemand
 import kotlinx.serialization.Serializable
 import kotlin.math.abs
 

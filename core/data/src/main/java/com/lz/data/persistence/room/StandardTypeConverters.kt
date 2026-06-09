@@ -1,4 +1,4 @@
-package com.lz.vectos.data.persistence.room
+package com.lz.data.persistence.room
 
 import androidx.room.TypeConverter
 import com.lz.model.regulatory.LoadCategory

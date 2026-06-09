@@ -1,4 +1,4 @@
-package com.lz.vectos.domain.structural
+package com.lz.model.structural
 
 import com.lz.model.units.Force
 import com.lz.model.units.Length
@@ -49,4 +49,3 @@ data class StationDemand(
     val lbBottom: Length = 0.0.inches,
     val compressionFlange: Flange = Flange.NONE
 )
-

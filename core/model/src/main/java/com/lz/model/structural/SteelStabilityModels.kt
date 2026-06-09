@@ -1,7 +1,4 @@
-package com.lz.vectos.domain.structural
-
-import com.lz.model.structural.CapacityEvaluationStatus
-import com.lz.model.structural.SectionOrientation
+package com.lz.model.structural
 
 /**
  * Governing modes for steel flexural failure.
