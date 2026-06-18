@@ -1,5 +1,8 @@
-package com.lz.domain.structural
+package com.lz.model.structural
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 enum class DegreeOfFreedom (
     val displayName: String
 ) {

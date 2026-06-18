@@ -49,6 +49,10 @@ VectOS
 │  │  │  │  └─ com
 │  │  │  │     └─ lz
 │  │  │  │        ├─ solver
+│  │  │  │        ├─ ui
+│  │  │  │        │  ├─ AnalysisChart.kt
+│  │  │  │        │  ├─ SectionPicker.kt
+│  │  │  │        │  └─ UtilizationHeatMap.kt
 │  │  │  │        └─ vectos
 │  │  │  │           ├─ app
 │  │  │  │           │  ├─ MainActivity.kt
@@ -84,8 +88,7 @@ VectOS
 │  │  │  │           │  │  ├─ CalculationProvenanceService.kt
 │  │  │  │           │  │  └─ ProvenanceModels.kt
 │  │  │  │           │  ├─ structural
-│  │  │  │           │  │  ├─ DecisionCaptureService.kt
-│  │  │  │           │  │  └─ ServiceabilityLimits.kt
+│  │  │  │           │  │  └─ DecisionCaptureService.kt
 │  │  │  │           │  ├─ units
 │  │  │  │           │  │  └─ UnitFormattingService.kt
 │  │  │  │           │  └─ versioning
@@ -98,11 +101,6 @@ VectOS
 │  │  │  │           │  └─ SettingsViewModel.kt
 │  │  │  │           ├─ ui
 │  │  │  │           │  ├─ beam
-│  │  │  │           │  │  ├─ AnalysisChart.kt
-│  │  │  │           │  │  ├─ BeamCalculatorScreen.kt
-│  │  │  │           │  │  ├─ SectionPicker.kt
-│  │  │  │           │  │  ├─ SupportConditionPicker.kt
-│  │  │  │           │  │  └─ UtilizationHeatMap.kt
 │  │  │  │           │  ├─ calculator
 │  │  │  │           │  │  ├─ BeamCalculatorDefinition.kt
 │  │  │  │           │  │  ├─ CalculatorDefinition.kt
@@ -287,6 +285,13 @@ VectOS
 │  │     │              │  ├─ ProjectRepository.kt
 │  │     │              │  └─ SettingsRepository.kt
 │  │     │              └─ structural
+│  │     │                 ├─ BoundaryConditionFactory.kt
+│  │     │                 ├─ BoundaryConditionPreset.kt
+│  │     │                 ├─ ConstraintType.kt
+│  │     │                 ├─ DeflectionLimits.kt
+│  │     │                 ├─ DegreeOfFreedom.kt
+│  │     │                 ├─ DofConstraint.kt
+│  │     │                 └─ NodeBoundaryCondition.kt
 │  │     └─ test
 │  │        └─ java
 │  │           └─ com
@@ -309,6 +314,8 @@ VectOS
 │  │     │     └─ com
 │  │     │        └─ lz
 │  │     │           └─ model
+│  │     │              ├─ presentation
+│  │     │              │  └─ ServiceabilityLimits.kt
 │  │     │              ├─ regulatory
 │  │     │              │  ├─ aci318
 │  │     │              │  │  └─ Aci318Versions.kt
@@ -353,7 +360,8 @@ VectOS
 │  │     │              │  ├─ StationDemand.kt
 │  │     │              │  ├─ SteelStabilityModels.kt
 │  │     │              │  ├─ StructuralDemand.kt
-│  │     │              │  └─ StructuralModels.kt
+│  │     │              │  ├─ StructuralModels.kt
+│  │     │              │  └─ StructuralNode.kt
 │  │     │              ├─ units
 │  │     │              │  ├─ UnitModels.kt
 │  │     │              │  └─ UnitSystem.kt
@@ -434,6 +442,16 @@ VectOS
 │        │     └─ com
 │        │        └─ lz
 │        │           └─ ui
+│        │              └─ boundary
+│        │                 ├─ BoundaryConditionPicker.kt
+│        │                 ├─ BoundaryConditionPickerConfig.kt
+│        │                 ├─ BoundaryConditionVisualizer.kt
+│        │                 ├─ BoundaryOptionItem.kt
+│        │                 ├─ BoundaryPresetOption.kt
+│        │                 ├─ ConstraintTypeDropdown.kt
+│        │                 ├─ DofConstraintEditor.kt
+│        │                 ├─ DofEditorConfig.kt
+│        │                 └─ SpringConstraintEditor.kt
 │        └─ test
 │           └─ java
 │              └─ com
@@ -486,6 +504,8 @@ VectOS
 │  │     │              │  ├─ BeamAnalysisConfig.kt
 │  │     │              │  └─ BeamAnalysisSolver.kt
 │  │     │              └─ ui
+│  │     │                 ├─ BeamBoundaryConditionConfig.kt
+│  │     │                 ├─ BeamCalculatorScreen.kt
 │  │     │                 ├─ BeamDiagram.kt
 │  │     │                 └─ StructuralDrawingUtils.kt
 │  │     └─ test

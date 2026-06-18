@@ -9,11 +9,14 @@ package com.lz.domain.structural
 enum class BoundaryConditionPreset(
     val displayName: String
 ) {
+    FREE("Free"),
     FIXED("Fixed"),
     PINNED("Pinned"),
     ROLLER_X("Roller X"),
     ROLLER_Y("Roller Y"),
     ROLLER_Z("Roller Z"),
-    FREE("Free"),
+    GUIDE_X("Guide X"),
+    GUIDE_Y("Guide Y"),
+    GUIDE_Z("Guide Z"),
     CUSTOM("Custom")
 }

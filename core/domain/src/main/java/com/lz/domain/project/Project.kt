@@ -1,6 +1,9 @@
 package com.lz.domain.project
 
+import com.lz.model.regulatory.AiscEdition
+import com.lz.model.regulatory.PrimaryBuildingCode
 import com.lz.model.regulatory.asce7.RiskCategory
+import com.lz.model.regulatory.codes.Standard
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.ProjectDesignContext
 import com.lz.model.units.UnitSystem
@@ -13,12 +16,14 @@ import com.lz.model.util.UUIDSerializer
  */
 @Serializable
 data class ProjectSettings(
-    val buildingCodeId: String = "IBC_2024",
+    //val buildingCodeId: String = "IBC_2024",
+    val buildingCode: PrimaryBuildingCode = PrimaryBuildingCode.IBC_2024,
     val designMethodology: DesignMethodology = DesignMethodology.ASD,
     val unitSystem: UnitSystem = UnitSystem.IMPERIAL,
     val riskCategory: RiskCategory = RiskCategory.II,
     val isWindDesignEnabled: Boolean = true,
-    val isSeismicDesignEnabled: Boolean = true
+    val isSeismicDesignEnabled: Boolean = true,
+    val steelStandardOverride: AiscEdition = AiscEdition.AISC_360_22
 )
 
 /**
