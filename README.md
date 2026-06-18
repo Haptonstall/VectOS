@@ -3,6 +3,7 @@
 VectOS
 ├─ .continue
 │  └─ rules
+│     ├─ LoadCase.kt
 │     └─ multi-module-rules.md
 ├─ .idea
 │  ├─ AndroidProjectSystem.xml
@@ -24,7 +25,8 @@ VectOS
 │  │  ├─ errors-1777038377613.log
 │  │  ├─ errors-1778238784233.log
 │  │  ├─ errors-1779823569391.log
-│  │  └─ errors-1779990756611.log
+│  │  ├─ errors-1779990756611.log
+│  │  └─ errors-1781267191864.log
 │  └─ sessions
 ├─ app
 │  ├─ proguard-rules.pro
@@ -46,10 +48,8 @@ VectOS
 │  │  │  ├─ java
 │  │  │  │  └─ com
 │  │  │  │     └─ lz
+│  │  │  │        ├─ solver
 │  │  │  │        └─ vectos
-│  │  │  │           ├─ .artifacts
-│  │  │  │           │  └─ 20260504-075725-23094890-8cf0-4a00-b3f9-a365877a2a21
-│  │  │  │           │     └─ implementation_plan.artifact.md
 │  │  │  │           ├─ app
 │  │  │  │           │  ├─ MainActivity.kt
 │  │  │  │           │  └─ VectosApplication.kt
@@ -65,28 +65,17 @@ VectOS
 │  │  │  │           │     ├─ mapper
 │  │  │  │           │     │  └─ RoomPersistenceMapper.kt
 │  │  │  │           │     ├─ repository
-│  │  │  │           │     │  ├─ AiscSectionRepository.kt
 │  │  │  │           │     │  ├─ CompositeSectionRepository.kt
 │  │  │  │           │     │  ├─ DataStoreSettingsRepository.kt
-│  │  │  │           │     │  ├─ NdsSectionRepository.kt
-│  │  │  │           │     │  ├─ RoomAiscSectionRepository.kt
 │  │  │  │           │     │  ├─ RoomCalculationRepository.kt
 │  │  │  │           │     │  └─ RoomProjectRepository.kt
 │  │  │  │           │     └─ room
 │  │  │  │           │        ├─ AiscSectionSeeder.kt
-│  │  │  │           │        ├─ dao
-│  │  │  │           │        │  └─ SectionDaos.kt
-│  │  │  │           │        ├─ entity
-│  │  │  │           │        │  └─ SectionRoomEntities.kt
-│  │  │  │           │        ├─ mapper
-│  │  │  │           │        │  └─ SectionMappers.kt
 │  │  │  │           │        ├─ MaterialSeeder.kt
 │  │  │  │           │        └─ StructuralDataSeeder.kt
 │  │  │  │           ├─ di
 │  │  │  │           │  └─ DatabaseModule.kt
 │  │  │  │           ├─ domain
-│  │  │  │           │  ├─ beam
-│  │  │  │           │  │  └─ BeamModels.kt
 │  │  │  │           │  ├─ calculation
 │  │  │  │           │  │  ├─ CalculationLifecycleService.kt
 │  │  │  │           │  │  ├─ EngineeringCalculation.kt
@@ -95,31 +84,8 @@ VectOS
 │  │  │  │           │  │  ├─ CalculationProvenanceService.kt
 │  │  │  │           │  │  └─ ProvenanceModels.kt
 │  │  │  │           │  ├─ structural
-│  │  │  │           │  │  ├─ aisc
-│  │  │  │           │  │  │  └─ AiscSteelCapacityCalculator.kt
-│  │  │  │           │  │  ├─ analysis
-│  │  │  │           │  │  │  ├─ BeamAnalysisConfig.kt
-│  │  │  │           │  │  │  ├─ BeamAnalysisSolver.kt
-│  │  │  │           │  │  │  ├─ core
-│  │  │  │           │  │  │  │  └─ StructuralSolver.kt
-│  │  │  │           │  │  │  └─ NextSteps.md
-│  │  │  │           │  │  ├─ BracingLogic.kt
-│  │  │  │           │  │  ├─ CapacityCalculator.kt
-│  │  │  │           │  │  ├─ CapacityEngine.kt
 │  │  │  │           │  │  ├─ DecisionCaptureService.kt
-│  │  │  │           │  │  ├─ DesignInterpretationService.kt
-│  │  │  │           │  │  ├─ LimitStateService.kt
-│  │  │  │           │  │  ├─ LoadCaseModels.kt
-│  │  │  │           │  │  ├─ LoadCombinationEngine.kt
-│  │  │  │           │  │  ├─ LoadModels.kt
-│  │  │  │           │  │  ├─ LoadResolutionService.kt
-│  │  │  │           │  │  ├─ nds
-│  │  │  │           │  │  │  └─ NdsWoodCapacityCalculator.kt
-│  │  │  │           │  │  ├─ ServiceabilityEvaluationService.kt
-│  │  │  │           │  │  ├─ ServiceabilityInterpretationService.kt
-│  │  │  │           │  │  ├─ ServiceabilityLimits.kt
-│  │  │  │           │  │  ├─ StrengthDesignService.kt
-│  │  │  │           │  │  └─ WoodPropertyService.kt
+│  │  │  │           │  │  └─ ServiceabilityLimits.kt
 │  │  │  │           │  ├─ units
 │  │  │  │           │  │  └─ UnitFormattingService.kt
 │  │  │  │           │  └─ versioning
@@ -127,7 +93,6 @@ VectOS
 │  │  │  │           │     └─ VersioningModels.kt
 │  │  │  │           ├─ presentation
 │  │  │  │           │  ├─ BeamDisplayModel.kt
-│  │  │  │           │  ├─ BeamViewModel.kt
 │  │  │  │           │  ├─ CalculationContext.kt
 │  │  │  │           │  ├─ ProjectViewModel.kt
 │  │  │  │           │  └─ SettingsViewModel.kt
@@ -135,9 +100,7 @@ VectOS
 │  │  │  │           │  ├─ beam
 │  │  │  │           │  │  ├─ AnalysisChart.kt
 │  │  │  │           │  │  ├─ BeamCalculatorScreen.kt
-│  │  │  │           │  │  ├─ BeamDiagram.kt
 │  │  │  │           │  │  ├─ SectionPicker.kt
-│  │  │  │           │  │  ├─ StructuralDrawingUtils.kt
 │  │  │  │           │  │  ├─ SupportConditionPicker.kt
 │  │  │  │           │  │  └─ UtilizationHeatMap.kt
 │  │  │  │           │  ├─ calculator
@@ -231,6 +194,9 @@ VectOS
 │  ├─ data
 │  │  ├─ consumer-rules.pro
 │  │  ├─ proguard-rules.pro
+│  │  ├─ schemas
+│  │  │  └─ com.lz.data.persistence.room.AppDatabase
+│  │  │     └─ 1.json
 │  │  └─ src
 │  │     ├─ androidTest
 │  │     │  └─ java
@@ -258,7 +224,8 @@ VectOS
 │  │     │              │     │  ├─ MaterialDao.kt
 │  │     │              │     │  ├─ project
 │  │     │              │     │  │  └─ CustomSectionDao.kt
-│  │     │              │     │  └─ ProjectDao.kt
+│  │     │              │     │  ├─ ProjectDao.kt
+│  │     │              │     │  └─ SectionDaos.kt
 │  │     │              │     ├─ entity
 │  │     │              │     │  ├─ BuildingCodeEntities.kt
 │  │     │              │     │  ├─ CalculationRoomEntity.kt
@@ -270,16 +237,21 @@ VectOS
 │  │     │              │     │  ├─ MaterialRoomEntity.kt
 │  │     │              │     │  ├─ project
 │  │     │              │     │  │  └─ CustomSectionRoomEntity.kt
-│  │     │              │     │  └─ ProjectRoomEntity.kt
+│  │     │              │     │  ├─ ProjectRoomEntity.kt
+│  │     │              │     │  └─ SectionRoomEntities.kt
 │  │     │              │     ├─ mapper
+│  │     │              │     │  ├─ SectionMappers.kt
 │  │     │              │     │  └─ StructuralMappers.kt
 │  │     │              │     ├─ Migrations.kt
 │  │     │              │     ├─ repository
 │  │     │              │     │  └─ RoomMaterialRepository.kt
 │  │     │              │     └─ StandardTypeConverters.kt
 │  │     │              └─ repository
+│  │     │                 ├─ AiscSectionRepository.kt
 │  │     │                 ├─ BuildingCodeRepository.kt
 │  │     │                 ├─ CalculationWriter.kt
+│  │     │                 ├─ NdsSectionRepository.kt
+│  │     │                 ├─ RoomAiscSectionRepository.kt
 │  │     │                 └─ RoomCalculationWriter.kt
 │  │     └─ test
 │  │        └─ java
@@ -310,10 +282,11 @@ VectOS
 │  │     │              │  └─ MaterialRepository.kt
 │  │     │              ├─ project
 │  │     │              │  └─ Project.kt
-│  │     │              └─ repository
-│  │     │                 ├─ CalculationRepository.kt
-│  │     │                 ├─ ProjectRepository.kt
-│  │     │                 └─ SettingsRepository.kt
+│  │     │              ├─ repository
+│  │     │              │  ├─ CalculationRepository.kt
+│  │     │              │  ├─ ProjectRepository.kt
+│  │     │              │  └─ SettingsRepository.kt
+│  │     │              └─ structural
 │  │     └─ test
 │  │        └─ java
 │  │           └─ com
@@ -365,11 +338,14 @@ VectOS
 │  │     │              │  ├─ AxialDesignModels.kt
 │  │     │              │  ├─ BoundaryRestraint.kt
 │  │     │              │  ├─ BracingModels.kt
+│  │     │              │  ├─ CapacityResults.kt
 │  │     │              │  ├─ DesignContextModels.kt
 │  │     │              │  ├─ DesignEquationTrace.kt
 │  │     │              │  ├─ DesignModels.kt
 │  │     │              │  ├─ InteractionModels.kt
 │  │     │              │  ├─ LimitState.kt
+│  │     │              │  ├─ LoadCase.kt
+│  │     │              │  ├─ LoadModels.kt
 │  │     │              │  ├─ MaterialModels.kt
 │  │     │              │  ├─ MaterialType.kt
 │  │     │              │  ├─ SectionModels.kt
@@ -407,9 +383,30 @@ VectOS
 │  │     │        └─ lz
 │  │     │           └─ solver
 │  │     │              ├─ analysis
+│  │     │              │  ├─ AnalysisConfig.kt
+│  │     │              │  ├─ LimitStateService.kt
+│  │     │              │  ├─ LoadResolutionService.kt
+│  │     │              │  ├─ MemberAnalysisSolver.kt
+│  │     │              │  └─ StructuralSolver.kt
+│  │     │              ├─ bracing
+│  │     │              │  ├─ BracingLogic.kt
+│  │     │              │  └─ StabilityFactorCalculator.kt
+│  │     │              ├─ capacity
+│  │     │              │  ├─ CapacityCalculator.kt
+│  │     │              │  ├─ CapacityEngine.kt
+│  │     │              │  └─ StrengthDesignService.kt
 │  │     │              ├─ envelope
+│  │     │              │  ├─ DemandEnvelopeResolver.kt
+│  │     │              │  ├─ DesignInterpretationService.kt
+│  │     │              │  ├─ ServiceabilityEvaluationService.kt
+│  │     │              │  └─ ServiceabilityInterpretationService.kt
 │  │     │              ├─ material
-│  │     │              │  └─ MaterialDesignResolver.kt
+│  │     │              │  ├─ AiscCbCalculator.kt
+│  │     │              │  ├─ AiscSteelCapacityCalculator.kt
+│  │     │              │  ├─ MaterialDesignResolver.kt
+│  │     │              │  ├─ NdsClCalculator.kt
+│  │     │              │  ├─ NdsWoodCapacityCalculator.kt
+│  │     │              │  └─ WoodPropertyService.kt
 │  │     │              └─ regulatory
 │  │     │                 ├─ LoadCombinationEngine.kt
 │  │     │                 └─ RegulatoryRegistry.kt
@@ -418,6 +415,8 @@ VectOS
 │  │           └─ com
 │  │              └─ lz
 │  │                 └─ solver
+│  │                    ├─ analysis
+│  │                    │  └─ LimitStateServiceTest.kt
 │  │                    └─ ExampleUnitTest.kt
 │  └─ ui
 │     ├─ consumer-rules.pro
@@ -443,7 +442,10 @@ VectOS
 │                       └─ ExampleUnitTest.kt
 ├─ docs
 │  ├─ ARCHITECTURE_CONTEXT.md
-│  └─ test example.pdf
+│  ├─ NextSteps.md
+│  ├─ rules.md
+│  ├─ test example.pdf
+│  └─ VECTOS_ARCHITECTURE.md
 ├─ feature
 │  ├─ beam
 │  │  ├─ consumer-rules.pro
@@ -471,12 +473,21 @@ VectOS
 │  │     │              │  │     └─ entity
 │  │     │              │  │        └─ BeamCalculationRoomEntity.kt
 │  │     │              │  └─ repository
+│  │     │              │     ├─ BeamPersistenceMapper.kt
 │  │     │              │     └─ RoomBeamCalculationRepository.kt
 │  │     │              ├─ domain
 │  │     │              │  ├─ BeamCalculationRepository.kt
 │  │     │              │  └─ repository
+│  │     │              ├─ model
+│  │     │              │  └─ BeamModels.kt
+│  │     │              ├─ presentation
+│  │     │              │  └─ BeamViewModel.kt
 │  │     │              ├─ solver
+│  │     │              │  ├─ BeamAnalysisConfig.kt
+│  │     │              │  └─ BeamAnalysisSolver.kt
 │  │     │              └─ ui
+│  │     │                 ├─ BeamDiagram.kt
+│  │     │                 └─ StructuralDrawingUtils.kt
 │  │     └─ test
 │  │        └─ java
 │  │           └─ com

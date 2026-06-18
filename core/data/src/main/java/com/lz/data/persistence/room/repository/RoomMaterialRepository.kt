@@ -49,6 +49,15 @@ class RoomMaterialRepository(private val dao: MaterialDao) : MaterialRepository 
                 shearModulus = shearModulusPsi.psi,
                 densityPcf = densityPcf
             )
+            MaterialType.ALUMINUM -> MaterialGrade.Aluminum(
+                id = id,
+                name = name,
+                yieldStrength = yieldStrengthPsi.psi,
+                ultimateStrength = ultimateStrengthPsi.psi,
+                modulusOfElasticity = modulusOfElasticityPsi.psi,
+                shearModulus = shearModulusPsi.psi,
+                densityPcf = densityPcf
+            )
             else -> MaterialGrade.Generic(
                 id = id,
                 name = name,
@@ -72,6 +81,17 @@ class RoomMaterialRepository(private val dao: MaterialDao) : MaterialRepository 
                 yieldStrengthPsi = yieldStrength.inPsi,
                 ultimateStrengthPsi = ultimateStrength.inPsi
             )
+            is MaterialGrade.Aluminum -> MaterialRoomEntity(
+                id = id,
+                name = name,
+                type = MaterialType.ALUMINUM,
+                modulusOfElasticityPsi = modulusOfElasticity.inPsi,
+                shearModulusPsi = shearModulus.inPsi,
+                densityPcf = densityPcf,
+                yieldStrengthPsi = yieldStrength.inPsi,
+                ultimateStrengthPsi = ultimateStrength.inPsi
+            )
+
             is MaterialGrade.Wood -> MaterialRoomEntity(
                 id = id,
                 name = name,

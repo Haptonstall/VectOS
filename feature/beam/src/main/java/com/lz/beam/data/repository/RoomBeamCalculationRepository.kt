@@ -2,7 +2,7 @@ package com.lz.beam.data.repository
 
 import com.lz.beam.data.persistence.room.dao.BeamCalculationDao
 import com.lz.beam.data.persistence.room.entity.BeamCalculationRoomEntity
-import com.lz.beam.domain.BeamCalculation
+import com.lz.beam.model.BeamCalculation
 import com.lz.beam.domain.BeamCalculationRepository
 import com.lz.data.repository.CalculationWriter
 import java.util.UUID

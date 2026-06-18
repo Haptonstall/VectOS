@@ -108,39 +108,6 @@ The following are accepted states of the current development:
 ---
 *Note: This file was initialized at Part 1 of the VectOS Baseline Initialization.*
 
-## 13. Canonical Package Layout
-The authoritative app source root is `app/src/main/java/com/lz/vectos/`.
-
-The project should be organized into these primary logical layers:
-
-- `com.lz.vectos.domain` – Pure engineering models, analysis, design, and interpretation logic.
-  - `domain.structural` – structural demand, capacity, load combinations, building code models, and interpretation services.
-  - `domain.beam` – beam-specific domain models, geometry, and beam analysis interfaces.
-  - `domain.project` – project settings, context, and domain-level project models.
-  - `domain.calculation` – calculation lifecycle, registry, and engineering calculation orchestration.
-  - `domain.provenance` – traceability, audit trail, and revision provenance.
-  - `domain.units` – unit system models, formatting, and unit conversion helper abstractions.
-  - `domain.versioning` – calculation versioning and change tracking models.
-
-- `com.lz.vectos.data` – Persistence and external data adapter implementations.
-  - `data.repository` – repository interfaces and concrete data store implementations.
-  - `data.persistence.room` – Room database classes, DAOs, entities, mappers, and seeders.
-  - `data.export` – CSV/PDF export and reporting adapters.
-
-- `com.lz.vectos.ui` – UI layer and presentation.
-  - `ui.navigation` – navigation routes and graph definitions.
-  - `ui.theme` – theming and visual design system.
-  - `ui.home`, `ui.project`, `ui.beam`, `ui.tool` – feature-specific Compose screens and supporting composables.
-  - `ui.settings` – global application settings UI.
-
-- `com.lz.vectos.presentation` or `com.lz.vectos.viewmodel` – UI state and ViewModel coordination.
-  - ViewModels should be the only boundary between UI and domain/data, exposing state to composables.
-
-- `com.lz.vectos.util` – general utilities such as serialization helpers.
-
-- `com.lz.vectos.application` – app wiring, cross-cutting orchestration, and bootstrapping.
-  - This package may only contain setup code and should not host domain logic or calculation algorithms.
-
 ## 13. Canonical Multi-Module Architecture
 
 VectOS is organized as a modular Android platform using Gradle modules and Dynamic Feature Modules.
@@ -475,7 +442,7 @@ There are currently files outside the canonical app source tree, notably:
 - `application/repository/SettingsRepository.kt`
 - `domain/structural/ServiceabilityInterpretationService.kt`
 
-These appear to be duplicates of `app/src/main/java/com/lz/vectos/...` files.
+These are legacy files outside the module structure. They must be merged into `:core:data` and `:shared:structural` respectively, then deleted from the root.
 
 - `application/repository/SettingsRepository.kt` currently has a larger interface surface than the app module copy.
 - `domain/structural/ServiceabilityInterpretationService.kt` is identical to the app module copy.
@@ -561,5 +528,3 @@ Editing a project after issuance creates a new revision rather than mutating his
   * foundation design,
   * connection design,
   * and multi-member structural systems.
-
-

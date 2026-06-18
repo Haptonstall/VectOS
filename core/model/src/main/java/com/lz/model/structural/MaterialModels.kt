@@ -64,6 +64,19 @@ sealed class MaterialGrade {
     }
 
     @Serializable
+    data class Aluminum (
+        override val id: String,
+        override val name: String,
+        val yieldStrength: Pressure,
+        val ultimateStrength: Pressure,
+        override val modulusOfElasticity: Pressure = 10000.0.ksi,
+        override val shearModulus: Pressure = 3600.0.ksi,
+        override val densityPcf: Double = 169.0
+    ) : MaterialGrade() {
+        override val type = MaterialType.ALUMINUM
+    }
+
+    @Serializable
     data class Wood(
         override val id: String,
         override val name: String,

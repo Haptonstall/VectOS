@@ -12,6 +12,7 @@ import kotlinx.serialization.Serializable
  * - Pressure: PSI (lb/in²)
  * - ForcePerLength: PLI (lb/in)
  * - MomentOfInertia: in⁴
+ * - TorsionalConstant: in⁴ (torsional constant J)
  *
  * Domain-layer calculators and the unit conversion system are permitted to access these
  * raw values, as they operate in the base unit system by design. For external consumers
@@ -84,10 +85,24 @@ val Double.kipPerFt get() = ForcePerLength(this * 1000.0 / 12.0)
 @JvmInline
 value class MomentOfInertia(public val inchesToFourth: Double)
 
+@Serializable
+@JvmInline
+value class TorsionalConstant(public val inchesToFourth: Double)
+
 /**
  * DSL for constructing unit-safe types from raw numbers.
  * Primarily for use in tests and domain setup.
  */
+
+// TorsionalConstant construction
+val Double.inJ get() = TorsionalConstant(this)
+val Double.cm4J get() = TorsionalConstant(this / 41.62314256)
+val Double.mm4J get() = TorsionalConstant(this / 416231.4256)
+
+// TorsionalConstant accessors
+val TorsionalConstant.inIn4J get() = inchesToFourth
+val TorsionalConstant.inCm4J get() = inchesToFourth * 41.62314256
+val TorsionalConstant.inMm4J get() = inchesToFourth * 416231.4256
 
 // Length construction
 val Double.inches get() = Length(this)

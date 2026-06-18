@@ -53,6 +53,21 @@ data class DiscreteBracePoint(
 )
 
 /**
+ * A lateral brace point expressed in global member coordinates (measured from
+ * the start of the first span). Produced by resolving per-span [BracingInput]
+ * into a single member-level brace list before passing to the solver.
+ *
+ * Contrast with [DiscreteBracePoint], which is span-local and UI-facing.
+ * [NormalizedBraceState] is solver-facing and member-global.
+ */
+@Serializable
+data class NormalizedBraceState(
+    val x: Length,
+    val isTopBraced: Boolean = true,
+    val isBotBraced: Boolean = false
+)
+
+/**
  * Material-specific bracing input captured from UI forms.
  * Each variant carries the parameters relevant to that material's code provisions.
  *

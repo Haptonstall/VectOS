@@ -23,9 +23,9 @@ shared/ → Cross-feature domain models
 └─ structural → Shared structural analysis models
 docs/ → Documentation only
 
-## 2. Dependency Rules
+## 2. Structural & Dependency Rules
 
-### 2.1 Strict Layer Boundaries Within Modules and Layer Dependency Direction
+### 2.1 Strict Layer Boundaries
 -Every feature module (`:feature:beam`, `:feature:column`, etc.) MUST strictly segregate code into three independent packages. No cross-layer imports are allowed:
 - **UI** → **Domain** → **Data** (dependencies point inward)
 - No layer may depend on an outer layer (e.g., Domain cannot depend on UI)
@@ -44,11 +44,11 @@ docs/ → Documentation only
 | `shared/*` | `core/model` | Any other module |
 
 ### 2.3 Package Naming Conventions
-- Base package: `com.lz.vectos`
+- Base package: `com.lz`
 - Module-specific subpackages follow the module path
-    - `com.lz.vectos.feature.beam`
-    - `com.lz.vectos.core.domain`
-    - `com.lz.vectos.core.data.persistence.room`
+    - `com.lz.feature.beam`
+    - `com.lz.core.domain`
+    - `com.lz.core.data.persistence.room`
 - Inside each module, use standard Clean Architecture subpackages:
     - `di` – Dependency injection modules
     - `domain` – Use cases, repository interfaces, business models

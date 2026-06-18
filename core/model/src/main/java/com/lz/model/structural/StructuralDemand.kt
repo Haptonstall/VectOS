@@ -1,5 +1,6 @@
 package com.lz.model.structural
 
+import com.lz.model.regulatory.LoadCombination
 import com.lz.model.units.Force
 import com.lz.model.units.Moment
 

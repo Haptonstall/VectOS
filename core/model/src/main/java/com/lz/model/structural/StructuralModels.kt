@@ -1,6 +1,6 @@
 package com.lz.model.structural
 
-import com.lz.model.UUIDSerializer
+import com.lz.model.util.UUIDSerializer
 import com.lz.model.units.Force
 import com.lz.model.units.Length
 import com.lz.model.units.Moment
@@ -29,12 +29,13 @@ data class SpanGeometry(
     @Serializable(with = UUIDSerializer::class)
     val id: UUID = UUID.randomUUID(),
     val length: Length,
-    val startSupport: SupportCondition,
-    val endSupport: SupportCondition,
+    @Serializable(with = UUIDSerializer::class)
+    val startNodeId: UUID,
+    @Serializable(with = UUIDSerializer::class)
+    val endNodeId: UUID,
 
-    // Crucial for the Heat Map Engine: The material-agnostic interval zones
-    // calculated by the BracingResolver from your user inputs.
-    val unbracedSegments: List<UnbracedSegment> = emptyList()
+    val unbracedSegments: List<UnbracedSegment> =
+        emptyList()
 ) {
     /**
      * Finds the active unbraced lengths (Lb) governing a specific calculation station coordinate.
@@ -59,6 +60,7 @@ data class SpanGeometry(
  */
 @Serializable
 data class StructuralMember(
+    val nodes: List<StructuralNode> = emptyList(),
     val spans: List<SpanGeometry>,
     val sectionProfileId: String? = null
 ) {

@@ -39,6 +39,7 @@ fun CombinationWithFactors.toDomainModel(methodology: DesignMethodology): LoadCo
         id = combination.id,
         name = combination.name,
         methodology = methodology,
+        type = combination.type,
         equationText = equationText,
         factors = factors.associate { it.category to it.factor },
         codeReference = ""

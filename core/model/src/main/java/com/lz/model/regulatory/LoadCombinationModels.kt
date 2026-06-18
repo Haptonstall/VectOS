@@ -1,5 +1,6 @@
 package com.lz.model.regulatory
 
+import com.lz.model.regulatory.loads.CombinationType
 import com.lz.model.structural.DesignMethodology
 import kotlinx.serialization.Serializable
 
@@ -12,6 +13,7 @@ data class LoadCombination(
     val id: String,
     val name: String, // Short identifier, e.g., "722_LRFD_2"
     val methodology: DesignMethodology,
+    val type: CombinationType,
     val equationText: String, // Readable string for calculation reports/UIs, e.g., "1.2D + 1.6L"
     val factors: Map<LoadCategory, Double>,
     val codeReference: String, // Legal source trail, e.g., "ASCE 7-22 Section 2.3.1, Eq. 2"

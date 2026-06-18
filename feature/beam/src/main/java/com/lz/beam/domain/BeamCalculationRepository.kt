@@ -1,5 +1,6 @@
 package com.lz.beam.domain
 
+import com.lz.beam.model.BeamCalculation
 import java.util.UUID
 
 /**

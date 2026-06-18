@@ -2,24 +2,25 @@ package com.lz.vectos.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lz.data.repository.IStructuralCodeRepository
 import com.lz.model.structural.MaterialType
 import com.lz.domain.project.Project
 import com.lz.domain.repository.CalculationRepository
 import com.lz.model.structural.ProjectDesignContext
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.regulatory.codes.BuildingCode
-import com.lz.vectos.domain.structural.Standard
 import com.lz.model.units.UnitSystem
 import com.lz.domain.repository.ProjectRepository
+import com.lz.model.regulatory.codes.Standard
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.util.UUID
 
-import com.lz.vectos.data.repository.IStructuralCodeRepository
 import com.lz.vectos.domain.calculation.ProjectCalculationRegistry
 import com.lz.vectos.domain.calculation.EngineeringCalculation
+import com.lz.vectos.domain.provenance.CalculationProvenance
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 
@@ -74,23 +75,24 @@ class ProjectViewModel(
         }
     }
 
-    fun addCalculationToRegistry(beamCalc: com.lz.vectos.domain.beam.BeamCalculation) {
+    fun addCalculationToRegistry(beamCalc: BeamCalculation) {
         val engineeringCalc = EngineeringCalculation(
             id = beamCalc.metadata.id,
             projectId = _activeProject.value.id,
             toolId = "BEAM",
             name = beamCalc.metadata.name,
-            latestVersion = com.lz.vectos.domain.versioning.CalculationVersion(
+            latestVersion = CalculationVersion(
                 versionNumber = 1,
                 createdAt = beamCalc.metadata.createdAt.toString(),
                 summaryNote = "Initial Save",
-                provenance = com.lz.vectos.domain.provenance.CalculationProvenance(
+                provenance = CalculationProvenance(
                     timestamp = beamCalc.metadata.createdAt.toString(),
                     projectId = _activeProject.value.id.toString(),
                     calculatorId = "BEAM",
                     buildingCode = _activeProject.value.designContext.buildingCode.shortName,
                     unitSystem = _activeProject.value.designContext.units.name,
-                    sectionDesignation = beamCalc.member.spans.firstOrNull()?.let { "Beam" } ?: "Unknown",
+                    sectionDesignation = beamCalc.member.spans.firstOrNull()?.let { "Beam" }
+                        ?: "Unknown",
                     spanLength = beamCalc.member.spans.sumOf { it.length.inches }.toString(),
                     loadCasesSummary = "",
                     assumptions = emptyList(),
