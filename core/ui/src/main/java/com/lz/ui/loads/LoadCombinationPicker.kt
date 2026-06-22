@@ -1,10 +1,19 @@
-package com.lz.vectos.ui.tool
+package com.lz.ui.loads
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.lz.model.regulatory.LoadCombination
 
@@ -26,17 +35,19 @@ fun LoadCombinationPicker(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary
             )
-            
+
             TextButton(onClick = { onCombinationSelected(null) }) {
                 Text("Show Governing", style = MaterialTheme.typography.labelSmall)
             }
         }
-        
+
         ScrollableTabRow(
-            selectedTabIndex = if (selectedCombination == null) 0 else combinations.indexOf(selectedCombination) + 1,
+            selectedTabIndex = if (selectedCombination == null) 0 else combinations.indexOf(
+                selectedCombination
+            ) + 1,
             edgePadding = 0.dp,
             divider = {},
-            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            containerColor = Color.Transparent,
             modifier = Modifier.padding(top = 4.dp)
         ) {
             Tab(

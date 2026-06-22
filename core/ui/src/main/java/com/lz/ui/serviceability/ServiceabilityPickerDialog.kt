@@ -1,16 +1,35 @@
-package com.lz.vectos.ui.tool
+package com.lz.ui.serviceability
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.lz.vectos.domain.structural.*
+import com.lz.model.presentation.ServiceabilityCategory
+import com.lz.model.presentation.ServiceabilityLimits
 
 @Composable
 fun ServiceabilityPickerDialog(
@@ -48,13 +67,19 @@ fun ServiceabilityPickerDialog(
                         Surface(
                             onClick = { state = state.copy(category = category) },
                             shape = MaterialTheme.shapes.medium,
-                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(
+                                alpha = 0.5f
+                            ),
+                            border = if (isSelected) BorderStroke(
+                                2.dp,
+                                MaterialTheme.colorScheme.primary
+                            ) else null,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
                                 Text(
-                                    category.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
+                                    category.name.replace("_", " ").lowercase()
+                                        .replaceFirstChar { it.uppercase() },
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -72,14 +97,18 @@ fun ServiceabilityPickerDialog(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = state.customLiveDenominator?.toString() ?: "",
-                            onValueChange = { state = state.copy(customLiveDenominator = it.toDoubleOrNull()) },
+                            onValueChange = {
+                                state = state.copy(customLiveDenominator = it.toDoubleOrNull())
+                            },
                             label = { Text("Live L/") },
                             modifier = Modifier.weight(1f),
                             textStyle = MaterialTheme.typography.bodySmall
                         )
                         OutlinedTextField(
                             value = state.customTotalDenominator?.toString() ?: "",
-                            onValueChange = { state = state.copy(customTotalDenominator = it.toDoubleOrNull()) },
+                            onValueChange = {
+                                state = state.copy(customTotalDenominator = it.toDoubleOrNull())
+                            },
                             label = { Text("Total L/") },
                             modifier = Modifier.weight(1f),
                             textStyle = MaterialTheme.typography.bodySmall

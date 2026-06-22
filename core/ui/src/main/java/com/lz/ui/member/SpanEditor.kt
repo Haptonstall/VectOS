@@ -1,29 +1,24 @@
-package com.lz.vectos.ui.tool
+package com.lz.ui.member
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import com.lz.model.structural.SpanGeometry
 import com.lz.model.units.Length
 import com.lz.model.units.feet
 import com.lz.model.units.inFeet
-import com.lz.model.structural.SpanGeometry
-import com.lz.model.units.*
 import java.util.Locale
 import java.util.UUID
 
@@ -46,7 +41,11 @@ fun SpanEditor(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Beam Layout", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Beam Layout",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
             Button(
                 onClick = onAddSpan,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
@@ -116,13 +115,16 @@ fun SpanItem(
     Card(
         onClick = onSelect,
         colors = CardDefaults.cardColors(
-            containerColor = if (isActive) 
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f) 
-            else 
+            containerColor = if (isActive)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+            else
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
         ),
         shape = RoundedCornerShape(16.dp),
-        border = if (isActive) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)),
+        border = if (isActive) BorderStroke(
+            2.dp,
+            MaterialTheme.colorScheme.primary
+        ) else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -130,43 +132,55 @@ fun SpanItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
-                    "Span ${index + 1}", 
-                    style = MaterialTheme.typography.labelLarge, 
+                    "Span ${index + 1}",
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
-                
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     // Length Field
                     OutlinedTextField(
                         value = lengthText,
-                        onValueChange = { 
+                        onValueChange = {
                             lengthText = it
                         },
                         label = { Text("Length", style = MaterialTheme.typography.labelSmall) },
-                        suffix = { Text("ft", style = MaterialTheme.typography.bodySmall) }, // Changed to ft as per image
+                        suffix = {
+                            Text(
+                                "ft",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }, // Changed to ft as per image
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         textStyle = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier
                             .width(100.dp)
                             .onFocusChanged { focusState ->
                                 if (!focusState.isFocused) {
-                                    lengthText.toDoubleOrNull()?.let { m -> 
-                                        onUpdateLength(m.feet) 
+                                    lengthText.toDoubleOrNull()?.let { m ->
+                                        onUpdateLength(m.feet)
                                         // Format it back nicely after validation
                                         lengthText = String.format(Locale.US, "%.2f", m)
                                     } ?: run {
                                         // Reset to original value if invalid
-                                        lengthText = String.format(Locale.US, "%.2f", span.length.inFeet)
+                                        lengthText =
+                                            String.format(Locale.US, "%.2f", span.length.inFeet)
                                     }
                                 }
                             },
                         shape = RoundedCornerShape(8.dp),
                         singleLine = true
                     )
-                    
+
                     // Bracing Button
                     Surface(
                         onClick = onEditBracing,
@@ -178,8 +192,17 @@ fun SpanItem(
                             modifier = Modifier.padding(horizontal = 8.dp),
                             verticalArrangement = Arrangement.Center
                         ) {
-                            Text("Bracing", style = MaterialTheme.typography.labelSmall, color = Color(0xFF7D5248).copy(alpha = 0.6f))
-                            Text("${span.bracing.topType.label} / ${span.bracing.bottomType.label}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFF7D5248))
+                            Text(
+                                "Bracing",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF7D5248).copy(alpha = 0.6f)
+                            )
+                            Text(
+                                "${span.bracing.topType.label} / ${span.bracing.bottomType.label}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF7D5248)
+                            )
                         }
                     }
 
@@ -194,8 +217,17 @@ fun SpanItem(
                             modifier = Modifier.padding(horizontal = 8.dp),
                             verticalArrangement = Arrangement.Center
                         ) {
-                            Text("Deflect", style = MaterialTheme.typography.labelSmall, color = Color(0xFF7D5248).copy(alpha = 0.6f))
-                            Text("floor", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFF7D5248))
+                            Text(
+                                "Deflect",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF7D5248).copy(alpha = 0.6f)
+                            )
+                            Text(
+                                "floor",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF7D5248)
+                            )
                         }
                     }
                 }
@@ -203,7 +235,12 @@ fun SpanItem(
 
             if (canRemove) {
                 IconButton(onClick = onRemove) {
-                    Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color(0xFFD32F2F), modifier = Modifier.size(28.dp))
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Remove",
+                        tint = Color(0xFFD32F2F),
+                        modifier = Modifier.size(28.dp)
+                    )
                 }
             }
         }

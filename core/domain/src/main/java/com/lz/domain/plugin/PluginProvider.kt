@@ -2,7 +2,10 @@ package com.lz.domain.plugin
 
 interface PluginProvider {
 
-    fun getPlugin(
+    suspend fun getPluginManifest(
         moduleId: String
-    ): CalculatorPlugin?
+    ): PluginManifest?
+
+    suspend fun getInstalledPlugins():
+        List<PluginManifest>
 }

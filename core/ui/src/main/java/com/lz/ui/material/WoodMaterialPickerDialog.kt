@@ -1,17 +1,31 @@
-package com.lz.vectos.ui.tool
+package com.lz.ui.material
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.WoodGrade
-import com.lz.vectos.domain.structural.WoodPropertyService
 import com.lz.model.structural.WoodSpecies
+import com.lz.solver.material.WoodPropertyService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,7 +49,11 @@ fun WoodMaterialPickerDialog(
             ) {
                 // Species Selection
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Species", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Species",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
                     WoodSpecies.entries.forEach { species ->
                         Row(modifier = Modifier.fillMaxWidth()) {
                             RadioButton(
@@ -54,28 +72,39 @@ fun WoodMaterialPickerDialog(
 
                 // Grade Selection
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Grade", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    WoodGrade.entries.filter { !it.name.startsWith("G_") || selectedSpecies.isGlulam }.forEach { grade ->
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            RadioButton(
-                                selected = selectedGrade == grade,
-                                onClick = { selectedGrade = grade }
-                            )
-                            Text(
-                                text = grade.name.replace("_", " "),
-                                modifier = Modifier.padding(start = 8.dp)
-                            )
+                    Text(
+                        "Grade",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    WoodGrade.entries.filter { !it.name.startsWith("G_") || selectedSpecies.isGlulam }
+                        .forEach { grade ->
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                RadioButton(
+                                    selected = selectedGrade == grade,
+                                    onClick = { selectedGrade = grade }
+                                )
+                                Text(
+                                    text = grade.name.replace("_", " "),
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
                         }
-                    }
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                val props = WoodPropertyService.getReferenceProperties(selectedSpecies, selectedGrade)
+                val props =
+                    WoodPropertyService.getReferenceProperties(selectedSpecies, selectedGrade)
                 val newGrade = MaterialGrade.Wood(
                     id = "WOOD_${selectedSpecies.name}_${selectedGrade.name}",
-                    name = "${selectedSpecies.name.replace("_", " ")} ${selectedGrade.name.replace("_", " ")}",
+                    name = "${
+                        selectedSpecies.name.replace(
+                            "_",
+                            " "
+                        )
+                    } ${selectedGrade.name.replace("_", " ")}",
                     species = selectedSpecies,
                     grade = selectedGrade,
                     referenceBending = props.bending,

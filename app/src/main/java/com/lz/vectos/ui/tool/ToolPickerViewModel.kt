@@ -3,6 +3,7 @@ package com.lz.vectos.ui.tool
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lz.domain.calculation.CalculationContext
+import com.lz.domain.plugin.InstallResult
 import com.lz.domain.plugin.ModuleAction
 import com.lz.domain.plugin.ModuleInstaller
 import com.lz.domain.plugin.ModuleLauncher
@@ -10,10 +11,13 @@ import com.lz.domain.plugin.ModuleRegistry
 import com.lz.domain.plugin.PurchaseManager
 import com.lz.domain.plugin.PurchaseResult
 import com.lz.domain.plugin.SubscriptionRepository
+import com.lz.domain.plugin.ToolPickerEvent
 import com.lz.domain.plugin.ToolPickerItem
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
 class ToolPickerViewModel(
@@ -24,11 +28,20 @@ class ToolPickerViewModel(
     private val purchaseManager: PurchaseManager
 ) : ViewModel() {
 
+    private val _context =
+        MutableStateFlow<CalculationContext?>(null)
+
     private val _tools =
         MutableStateFlow<List<ToolPickerItem>>(emptyList())
 
     val tools: StateFlow<List<ToolPickerItem>>
         get() = _tools
+
+    private val _events =
+        MutableSharedFlow<ToolPickerEvent>()
+
+    val events =
+        _events.asSharedFlow()
 
     fun onModuleAction(
         action: ModuleAction
@@ -50,27 +63,29 @@ class ToolPickerViewModel(
     fun loadTools(
         context: CalculationContext
     ) {
-
-        currentContext = context
+        _context.value = context
 
         viewModelScope.launch {
-
-            val items = buildToolList(
-                context
-            )
-
-            _tools.value = items
+            _tools.value =
+                createToolList(
+                    context
+                )
         }
     }
 
     private suspend fun refreshTools() {
+
+        val context =
+            _context.value
+                ?: return
+
         _tools.value =
-            buildToolList(
-                currentContext
+            createToolList(
+                context
             )
     }
 
-    private suspend fun buildToolList(
+    private suspend fun createToolList(
         context: CalculationContext
     ): List<ToolPickerItem> {
         return registry
@@ -79,6 +94,7 @@ class ToolPickerViewModel(
                 when (context) {
                     is CalculationContext.ProjectContext ->
                         descriptor.supportsProjectMode
+
                     is CalculationContext.QuickCalcContext ->
                         descriptor.supportsQuickCalcMode
                 }
@@ -92,19 +108,19 @@ class ToolPickerViewModel(
                         ),
                     licensed =
                         subscriptions.isLicensed(
-                        descriptor.id
+                            descriptor.id
                         )
                 )
             }
-    }
 
+    }
     private fun openModule(
         moduleId: String
     ) {
-
         viewModelScope.launch {
-            launcher.open(
-                moduleId = moduleId
+            val route = launcher.open(moduleId)
+            _events.emit(
+                ToolPickerEvent.Navigate(route)
             )
         }
     }
@@ -113,11 +129,34 @@ class ToolPickerViewModel(
         moduleId: String
     ) {
         viewModelScope.launch {
-            installer.install(
-                moduleId = moduleId
-            )
-
-            refreshTools()
+            when (
+                installer.install(
+                    moduleId
+                )
+            ) {
+                InstallResult.Success -> {
+                    _events.emit(
+                        ToolPickerEvent.ShowMessage(
+                            "Module innstalled."
+                        )
+                    )
+                    refreshTools()
+                }
+                InstallResult.Cancelled -> {
+                    _events.emit(
+                        ToolPickerEvent.ShowMessage(
+                            "Installation cancelled."
+                        )
+                    )
+                }
+                is InstallResult.Error -> {
+                    _events.emit(
+                        ToolPickerEvent.ShowMessage(
+                            "Installation failed."
+                        )
+                    )
+                }
+            }
         }
     }
 
@@ -131,16 +170,28 @@ class ToolPickerViewModel(
                 )
             ) {
                 PurchaseResult.Success -> {
-                    refreshTools()
+                    _events.emit(
+                        ToolPickerEvent.ShowMessage(
+                            "Purchase successful."
+                        )
+                    )
+                    loadTools()
                 }
 
                 PurchaseResult.Cancelled -> {
-                    // no-op
+                    _events.emit(
+                        ToolPickerEvent.ShowMessage(
+                            "Purchase cancelled."
+                        )
+                    )
                 }
 
                 is PurchaseResult.Error -> {
-                    // TODO
-                    // surface to UI
+                    _events.emit(
+                        ToolPickerEvent.ShowMessage(
+                            "Purchase failed."
+                        )
+                    )
                 }
             }
         }

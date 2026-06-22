@@ -1,19 +1,50 @@
-package com.lz.vectos.ui.tool
+package com.lz.ui.loads
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.SignalCellularAlt
+import androidx.compose.material.icons.filled.VerticalAlignBottom
+import androidx.compose.material.icons.filled.ViewStream
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.lz.model.structural.Load
+import com.lz.model.structural.LoadDirection
+import com.lz.model.structural.SpanGeometry
 import com.lz.model.units.UnitSystem
 import com.lz.model.units.feet
 import com.lz.model.units.kiloNewtons
@@ -23,11 +54,8 @@ import com.lz.model.units.lbPerFt
 import com.lz.model.units.lbPerIn
 import com.lz.model.units.meters
 import com.lz.model.units.poundsForce
-import com.lz.model.regulatory.LoadCategory
-import com.lz.model.structural.Load
-import com.lz.vectos.domain.structural.LoadDirection
-import com.lz.model.structural.SpanGeometry
-import com.lz.model.units.*
+import com.lz.ui.formatting.EngineeringUnitFormatter
+import com.lz.ui.formatting.UnitFormatter
 import java.util.UUID
 
 @Composable
@@ -90,7 +118,7 @@ fun LoadEditor(
             memberLength = memberLength,
             unitSystem = unitSystem,
             onDismiss = { showAddDialog = false },
-            onConfirm = { 
+            onConfirm = {
                 onAddLoad(it)
                 showAddDialog = false
             },
@@ -111,9 +139,9 @@ fun LoadItem(
         onClick = onSelect,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) 
-                MaterialTheme.colorScheme.primaryContainer 
-            else 
+            containerColor = if (isSelected)
+                MaterialTheme.colorScheme.primaryContainer
+            else
                 MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
@@ -130,7 +158,7 @@ fun LoadItem(
                 else -> Icons.Default.ViewStream
             }
             Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
-            
+
             Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 val title = when (load) {
                     is Load.PointLoad -> "Point Load"
@@ -141,22 +169,55 @@ fun LoadItem(
                     is Load.PointTorque -> "Torsion"
                     else -> "Load"
                 }
-                Text("$title (${load.direction.name.replace("_", " ")})", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                
+                Text(
+                    "$title (${load.direction.name.replace("_", " ")})",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
                 val details = when (load) {
-                    is Load.PointLoad -> "${formatter.force(load.value.pounds)} @ ${formatter.length(load.locationStart.inches)}"
-                    is Load.UniformDistributedLoad -> "${formatter.distributedLoad(load.value.pli)} [${formatter.length(load.locationStart.inches)} - ${formatter.length(load.locationEnd.inches)}]"
-                    is Load.TrapezoidalLoad -> "${formatter.distributedLoad(load.valueStart.pli)} to ${formatter.distributedLoad(load.valueEnd.pli)} [${formatter.length(load.locationStart.inches)} - ${formatter.length(load.locationEnd.inches)}]"
+                    is Load.PointLoad -> "${formatter.force(load.value.pounds)} @ ${
+                        formatter.length(
+                            load.locationStart.inches
+                        )
+                    }"
+
+                    is Load.UniformDistributedLoad -> "${formatter.distributedLoad(load.value.pli)} [${
+                        formatter.length(
+                            load.locationStart.inches
+                        )
+                    } - ${formatter.length(load.locationEnd.inches)}]"
+
+                    is Load.TrapezoidalLoad -> "${formatter.distributedLoad(load.valueStart.pli)} to ${
+                        formatter.distributedLoad(
+                            load.valueEnd.pli
+                        )
+                    } [${formatter.length(load.locationStart.inches)} - ${formatter.length(load.locationEnd.inches)}]"
+
                     is Load.AxialLoad -> formatter.force(load.value.pounds)
-                    is Load.PointMoment -> "${formatter.moment(load.value.lbIn)} @ ${formatter.length(load.locationStart.inches)}"
-                    is Load.PointTorque -> "${formatter.moment(load.value.lbIn)} @ ${formatter.length(load.locationStart.inches)}"
+                    is Load.PointMoment -> "${formatter.moment(load.value.lbIn)} @ ${
+                        formatter.length(
+                            load.locationStart.inches
+                        )
+                    }"
+
+                    is Load.PointTorque -> "${formatter.moment(load.value.lbIn)} @ ${
+                        formatter.length(
+                            load.locationStart.inches
+                        )
+                    }"
+
                     else -> ""
                 }
                 Text(details, style = MaterialTheme.typography.bodySmall)
             }
 
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.error
+                )
             }
         }
     }
@@ -187,10 +248,10 @@ fun AddLoadDialog(
                 val types = listOf("Point", "UDL", "Moment", "Axial")
                 ScrollableTabRow(selectedTabIndex = loadType, edgePadding = 0.dp) {
                     types.forEachIndexed { index, title ->
-                        Tab(selected = loadType == index, onClick = { 
-                            loadType = index 
+                        Tab(selected = loadType == index, onClick = {
+                            loadType = index
                             // Set default direction based on type
-                            direction = when(index) {
+                            direction = when (index) {
                                 2 -> LoadDirection.MOMENT_CLOCKWISE
                                 3 -> LoadDirection.AXIAL_COMPRESSION
                                 else -> LoadDirection.VERTICAL_DOWN
@@ -202,7 +263,10 @@ fun AddLoadDialog(
                 }
 
                 // Direction Dropdown (Mocked for brevity, but should list relevant directions)
-                Text("Direction: ${direction.name.replace("_", " ")}", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "Direction: ${direction.name.replace("_", " ")}",
+                    style = MaterialTheme.typography.bodySmall
+                )
 
                 val magnitudeLabel = when (loadType) {
                     0 -> if (unitSystem == UnitSystem.METRIC) "Magnitude (kN)" else "Magnitude (lb)"
@@ -236,7 +300,8 @@ fun AddLoadDialog(
                 }
 
                 if (loadType == 1) {
-                    val endPosLabel = if (unitSystem == UnitSystem.METRIC) "End Position (m)" else "End Position (ft)"
+                    val endPosLabel =
+                        if (unitSystem == UnitSystem.METRIC) "End Position (m)" else "End Position (ft)"
                     OutlinedTextField(
                         value = pos2,
                         onValueChange = { pos2 = it },
@@ -253,7 +318,7 @@ fun AddLoadDialog(
                     val v1 = value1.toDoubleOrNull() ?: 0.0
                     val p1raw = pos1.toDoubleOrNull() ?: 0.0
                     val p2raw = pos2.toDoubleOrNull() ?: (memberLength / 12.0)
-                    
+
                     val p1 = if (unitSystem == UnitSystem.METRIC) p1raw.meters else p1raw.feet
                     val p2 = if (unitSystem == UnitSystem.METRIC) p2raw.meters else p2raw.feet
 
@@ -265,18 +330,22 @@ fun AddLoadDialog(
                             if (unitSystem == UnitSystem.METRIC) v1.kiloNewtons else v1.poundsForce,
                             targetSpanId, p1, direction = direction
                         )
+
                         1 -> Load.UniformDistributedLoad(
                             if (unitSystem == UnitSystem.METRIC) (v1 / 4.4482216).lbPerIn else v1.lbPerFt,
                             targetSpanId, p1, p2, direction = direction
                         )
+
                         2 -> Load.PointMoment(
                             if (unitSystem == UnitSystem.METRIC) (v1 * 8.8507).lbIn else v1.lbFt,
                             targetSpanId, p1, direction = direction
                         )
+
                         3 -> Load.AxialLoad(
                             if (unitSystem == UnitSystem.METRIC) v1.kiloNewtons else v1.poundsForce,
                             targetSpanId, direction = direction
                         )
+
                         else -> Load.PointLoad(v1.poundsForce, targetSpanId, p1)
                     }
                     onConfirm(load)
@@ -291,4 +360,3 @@ fun AddLoadDialog(
         }
     )
 }
-

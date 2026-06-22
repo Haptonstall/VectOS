@@ -1,7 +1,6 @@
-package com.lz.vectos.ui.tool
+package com.lz.ui.formatting
 
 import com.lz.model.units.UnitSystem
-import com.lz.model.units.*
 import java.util.Locale
 
 /**
@@ -17,7 +16,7 @@ interface UnitFormatter {
 }
 
 class EngineeringUnitFormatter(private val unitSystem: UnitSystem) : UnitFormatter {
-    
+
     override fun length(value: Double): String {
         // Internal base: Inches
         return if (unitSystem == UnitSystem.METRIC) {
