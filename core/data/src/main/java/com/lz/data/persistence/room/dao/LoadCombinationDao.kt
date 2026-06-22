@@ -37,4 +37,7 @@ interface LoadCombinationDao {
     @Transaction
     @Query("SELECT * FROM load_combination_sets WHERE source_id IN (:sourceIds)")
     suspend fun getCombinationSetsBySources(sourceIds: List<String>): List<CombinationSetWithDetails>
+
+    @Query("SELECT COUNT(*) FROM load_combination_sets")
+    suspend fun getCount(): Int
 }

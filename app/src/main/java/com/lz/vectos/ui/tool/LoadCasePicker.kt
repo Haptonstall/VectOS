@@ -1,19 +1,17 @@
 package com.lz.vectos.ui.tool
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.lz.vectos.domain.structural.LoadCase
+import com.lz.model.regulatory.LoadCategory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoadCasePicker(
-    loadCases: List<LoadCase>,
+    loadCases: List<LoadCategory>,
     activeCaseId: String,
     onCaseSelected: (String) -> Unit,
     modifier: Modifier = Modifier

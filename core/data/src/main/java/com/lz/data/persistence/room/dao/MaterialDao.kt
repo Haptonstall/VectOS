@@ -17,4 +17,7 @@ interface MaterialDao {
 
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
     suspend fun insertAll(materials: List<MaterialRoomEntity>)
+
+    @Query("SELECT COUNT(*) FROM materials")
+    suspend fun getCount(): Int
 }

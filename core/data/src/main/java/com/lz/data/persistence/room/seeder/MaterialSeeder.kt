@@ -1,11 +1,12 @@
-package com.lz.vectos.data.persistence.room
+package com.lz.data.persistence.room.seeder
 
+import com.lz.data.persistence.room.dao.MaterialDao
+import com.lz.data.persistence.room.entity.MaterialRoomEntity
 import com.lz.model.structural.MaterialType
-import com.lz.vectos.data.persistence.room.dao.MaterialDao
-import com.lz.vectos.data.persistence.room.entity.MaterialRoomEntity
 
 class MaterialSeeder(private val dao: MaterialDao) {
     suspend fun seed() {
+        if (dao.getCount() > 0) return
         val materials = listOf(
             MaterialRoomEntity(
                 id = "A992",
@@ -31,11 +32,12 @@ class MaterialSeeder(private val dao: MaterialDao) {
                 id = "DF_L_No2",
                 name = "Douglas Fir-Larch No. 2",
                 type = MaterialType.WOOD,
-                yieldStrengthPsi = 900.0, // Fb
+                yieldStrengthPsi = 0.0,
                 ultimateStrengthPsi = 0.0,
                 modulusOfElasticityPsi = 1600000.0,
                 shearModulusPsi = 0.0,
-                densityPcf = 35.0
+                densityPcf = 35.0,
+                referenceBendingPsi = 900.0
             )
         )
         dao.insertAll(materials)

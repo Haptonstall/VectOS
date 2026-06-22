@@ -49,4 +49,7 @@ interface CodeRegistryDao {
 
     @Delete
     suspend fun deleteBuildingCode(code: BuildingCodeEntity)
+
+    @Query("SELECT COUNT(*) FROM building_codes")
+    suspend fun getCount(): Int
 }

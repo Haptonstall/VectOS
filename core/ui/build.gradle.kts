@@ -40,6 +40,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.runtime)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -50,6 +51,7 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     implementation(project(":core:model"))
     implementation(project(":core:domain"))
+    implementation(project(":core:solver"))
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

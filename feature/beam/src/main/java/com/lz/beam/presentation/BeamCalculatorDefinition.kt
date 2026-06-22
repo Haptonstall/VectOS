@@ -1,14 +1,12 @@
-package com.lz.vectos.ui.calculator
+package com.lz.beam.presentation
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ShowChart
-import com.lz.vectos.presentation.CalculationContext
+import com.lz.domain.CalculationContext
 
 object BeamCalculatorDefinition : CalculatorDefinition {
 
-    override val id = "beam_simply_supported"
+    override val id = "beam"
     override val displayName = "Beam Design"
-    override val description = "Analyze bending, shear, and deflection"
+    override val description = "Analyze bending, shear, torsion, and deflection"
     override val icon = Icons.Default.ShowChart
     override val supportsQuickCalc = true
 

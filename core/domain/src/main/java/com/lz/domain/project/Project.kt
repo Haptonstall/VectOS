@@ -23,7 +23,7 @@ data class ProjectSettings(
     val riskCategory: RiskCategory = RiskCategory.II,
     val isWindDesignEnabled: Boolean = true,
     val isSeismicDesignEnabled: Boolean = true,
-    val steelStandardOverride: AiscEdition = AiscEdition.AISC_360_22
+    val steelStandardOverride: AiscEdition? = AiscEdition.AISC_360_22
 )
 
 /**
@@ -74,7 +74,7 @@ data class Project(
     val clientName: String? = null,
     val engineerName: String? = null,
     val firmName: String? = null,
-    val createdAtIso: String,
+    val createdAt: String,
 
     // Strongly-typed sub-domains
     val settings: ProjectSettings = ProjectSettings(),

@@ -1,7 +1,7 @@
 # VectOS — Architecture Specification
 
-**Version:** 1.0  
-**Last Updated:** June 2026  
+**Version:** 1.1
+**Last Updated:** June 2026
 **Platform:** Android (Kotlin / Jetpack Compose)
 
 ---
@@ -63,539 +63,435 @@ The subscription check occurs at the UI navigation layer in the `app` module. Wh
 
 ## 3. Module Structure and Dependency Graph
 
-### Module Inventory
+### Gradle Module Inventory
 
 ```
 VectOS/
 ├── app/                    Android application module — entry point, navigation, DI wiring
-├── ui/                     Shared Compose design system — theme, reusable components, tool dialogs
-├── domain/                 Shared domain contracts — repository interfaces, core entities
-├── model/                  Pure data models — no Android deps, no logic, no DB
-├── solver/                 Calculation engines — pure Kotlin, no Android deps
-├── core.data/              Room persistence implementation — DAOs, entities, seeders, mappers
+├── core/ui/                Shared Compose design system — theme, reusable components
+├── core/domain/            Shared domain contracts — repository interfaces, core entities
+├── core/model/             Pure data models — no Android deps, no logic, no DB
+├── core/solver/            Calculation engines — pure Kotlin, no Android deps
+├── core/data/              Room persistence — DAOs, entities, seeders, mappers, repositories
 ├── feature/beam/           Beam calculation module — self-contained feature
-├── feature/column/         Column calculation module — self-contained feature (planned)
-├── feature/pole/           Pole calculation module — self-contained feature (planned)
-└── shared/                 Reserved — currently empty, available for future cross-feature content
+├── feature/column/         Column calculation module — planned
+└── feature/pole/           Pole calculation module — planned
 ```
+
+> Note: Gradle module paths use colon notation — `:core:model`, `:core:data`, `:feature:beam`, etc.
 
 ### Dependency Graph
 
-Dependencies flow strictly inward. No module may depend on a module further out than itself. The `app` module is the only module that may depend on everything.
+Dependencies flow strictly inward. No module may depend on a module further out than itself.
 
 ```
 app
- ├── depends on: ui, domain, model, core.data, solver
- ├── depends on: feature/beam, feature/column, feature/pole
+ ├── depends on: core:ui, core:domain, core:model, core:data, core:solver
+ ├── depends on: feature:beam, feature:column, feature:pole
  └── owns: MainActivity, VectosApplication, DatabaseModule (Hilt), navigation
 
-ui
- ├── depends on: model, domain
+core:ui
+ ├── depends on: core:model, core:domain
  └── owns: theme, shared Compose components, cross-feature tool dialogs
 
 feature/beam
- ├── depends on: ui, domain, model, solver, core.data
+ ├── depends on: core:ui, core:domain, core:model, core:solver, core:data
  └── owns: BeamViewModel, beam screens, BeamDatabase, beam solver wiring
 
-feature/column
- ├── depends on: ui, domain, model, solver, core.data
- └── owns: ColumnViewModel, column screens, ColumnDatabase, column solver wiring
-
-feature/pole
- ├── depends on: ui, domain, model, solver, core.data
- └── owns: PoleViewModel, pole screens, PoleDatabase, pole solver wiring
-
-core.data
- ├── depends on: domain, model
+core:data
+ ├── depends on: core:domain, core:model
  └── owns: AppDatabase, Room entities, DAOs, seeders, mappers, repositories
 
-solver
- ├── depends on: model
+core:solver
+ ├── depends on: core:model
  └── owns: capacity calculators, analysis engines, load combination logic
 
-domain
- ├── depends on: model
+core:domain
+ ├── depends on: core:model
  └── owns: repository interfaces, core domain entities
 
-model
+core:model
  ├── depends on: nothing (pure Kotlin + kotlinx.serialization only)
  └── owns: all data shapes, enums, constants, standard registries
 ```
 
 **Absolute rules enforced by this graph:**
 
-- `model` has zero dependencies on any other project module
-- `solver` has zero Android dependencies — it is pure Kotlin
-- `domain` has zero Android dependencies — it is pure Kotlin
+- `core:model` has zero dependencies on any other project module
+- `core:solver` has zero Android dependencies — it is pure Kotlin
+- `core:domain` has zero Android dependencies — it is pure Kotlin
 - No feature module depends on another feature module
 - No feature module depends on `app`
-- `core.data` does not depend on any feature module
+- `core:data` does not depend on any feature module
 
 ---
 
 ## 4. Module Descriptions and File Ownership
 
-### 4.1 `model` — Data Shapes and Standard Registries
+### 4.1 `core:model` — Data Shapes and Standard Registries
 
 **Package root:** `com.lz.model`
 
-This module is the foundation of the entire project. It contains only pure data — enums, data classes, sealed classes, and standard reference registries. It has no Android dependencies, no database access, no business logic, and no coroutines. Every other module depends on it.
+Pure data — enums, data classes, sealed classes, and standard reference registries. No Android dependencies, no database access, no business logic, no coroutines.
 
 ```
-model/src/main/java/com/lz/model/
+core/model/src/main/java/com/lz/model/
 │
 ├── util/
-│   └── UUIDSerializer.kt               Kotlinx serialization for java.util.UUID
+│   └── UUIDSerializer.kt
 │
 ├── units/
-│   ├── UnitModels.kt                   Force, Length, Moment, Pressure, Stress, ElasticModulus,
-    │                                   ForcePerLength, MomentOfInertia, Area, SectionModulus, TorsionalConstant
-│   └── UnitSystem.kt                   IMPERIAL / METRIC enum
+│   ├── UnitModels.kt                   Force, Length, Moment, Pressure, Stress,
+│   │                                   ElasticModulus, ForcePerLength, MomentOfInertia,
+│   │                                   Area, SectionModulus, TorsionalConstant
+│   ├── UnitSystem.kt                   IMPERIAL / METRIC enum
+│   └── UnitFormattingService.kt        Formats unit values for display  ← PENDING MOVE
 │
 ├── structural/
-│   ├── MaterialType.kt                 STEEL, CONCRETE, WOOD, COLD_FORMED_STEEL,
-│   │                                   MASONRY, ALUMINUM
+│   ├── MaterialType.kt
 │   ├── MaterialModels.kt               MaterialGrade sealed class (Steel, Wood, Generic)
 │   ├── SectionModels.kt                SectionProfile, SteelProfile, axis properties
-│   ├── StructuralModels.kt             SpanGeometry, StructuralMember, SupportCondition,
-│   │                                   SectionCapacity, CapacityEvaluationStatus
-│   ├── BracingModels.kt                BracingInput sealed class (Steel, Aluminum, Wood,
-│   │                                   Masonry), BracingMode, DiscreteBracePoint,
-│   │                                   UnbracedSegment, BracingResolver, NormalizedBraceState
-│   ├── LimitState.kt                   LimitState, DetailedLimitState, DeflectionCriteria
-│   ├── DesignModels.kt                 StrengthDesignResult, StrengthCheckResult
-│   ├── DesignContextModels.kt          ProjectDesignContext, DesignContextIssue,
-│   │                                   IssueSeverity
-│   ├── DesignEquationTrace.kt          Traceable calculation step records
-│   ├── ServiceabilityModels.kt         ServiceabilityResult
-│   ├── AxialDesignModels.kt            Axial capacity and interaction models
-│   └── CapacityResults.kt              CodeCheck, PointCapacityResult
+│   ├── StructuralModels.kt             StructuralMember, SpanSegment, SupportCondition
+│   ├── StructuralNode.kt
+│   ├── AnalysisModels.kt               AnalysisResult, StationResult, DeflectionProfile
+│   ├── DesignModels.kt                 DesignResult, UtilizationRecord
+│   ├── CapacityResults.kt              PointCapacityResult, ServiceabilityResult
+│   ├── AxialDesignModels.kt
+│   ├── InteractionModels.kt
+│   ├── BracingModels.kt                BracingInput sealed class variants
+│   ├── SteelStabilityModels.kt         NormalizedBraceState, lateral torsional buckling models
+│   ├── BoundaryRestraint.kt
+│   ├── ConstraintType.kt
+│   ├── DegreeOfFreedom.kt
+│   ├── DofConstraint.kt
+│   ├── NodeBoundaryCondition.kt
+│   ├── DesignContextModels.kt          ProjectDesignContext, DesignMethodology
+│   ├── DesignEquationTrace.kt
+│   ├── LimitState.kt
+│   ├── LoadCase.kt
+│   ├── LoadModels.kt
+│   ├── ServiceabilityModels.kt
+│   ├── StationDemand.kt
+│   └── StructuralDemand.kt
 │
 ├── regulatory/
-│   ├── RegulatoryEnums.kt              DesignMethodology (ASD / LRFD)
-│   ├── LoadCategory.kt                 D, L, S, W, E, Lr, etc.
-│   ├── LoadCombinationModels.kt        LoadCombination, LoadCombinationSet,
-│   │                                   CombinationSource
-│   ├── StandardReferenceKey.kt         Typed keys for standard section citations
-│   │
-│   ├── codes/
-│   │   ├── BuildingCode.kt             BuildingCode domain object
-│   │   ├── Standard.kt                 Standard domain object
-│   │   ├── StandardEdition.kt          Sealed class: Asce7, Aisc360, Nds, Aci318,
-│   │   │                               Unknown
-│   │   ├── CodeReferenceKey.kt         Typed keys for building code citations
-│   │   └── ServiceabilityCriterion.kt  ServiceabilityLimitType, ServiceabilityCriterion
-│   │
-│   ├── loads/
-│   │   ├── CombinationType.kt          STRENGTH, SERVICEABILITY, STABILITY,
-│   │   │                               EXTRAORDINARY
-│   │   └── DesignFactors.kt            DesignFactor (value + citation)
-│   │
-│   ├── asce7/
-│   │   └── Asce7Versions.kt            Asce7Edition, RiskCategory,
-│   │                                   SeismicDesignParameters,
-│   │                                   Asce7SpecificationConstants,
-│   │                                   Asce7VersionRegistry
-│   │
+│   ├── LoadCategory.kt
+│   ├── LoadCombinationModels.kt
+│   ├── RegulatoryEnums.kt              PrimaryBuildingCode, AiscEdition, etc.
+│   ├── StandardReferenceKey.kt
+│   ├── aci318/
+│   │   └── Aci318Versions.kt
 │   ├── aisc/
-│   │   ├── AiscDesignFactors.kt        AiscDesignFactors data class
-│   │   └── AiscDesignFactorRegistry.kt Registry: get(edition, methodology)
-│   │
-│   ├── nds/
-│   │   ├── NdsVersions.kt              NdsEdition, ServiceCondition, TemperatureRange,
-│   │   │                               LoadDurationClass, LumberSizeClass,
-│   │   │                               WetServiceFactors, TemperatureFactors,
-│   │   │                               NdsSpecificationConstants, NdsVersionRegistry
-│   │   └── NdsAdjustmentFactors.kt     CD, CM, Ct, CL, CF chain — adjusted F' values
-│   │
-│   └── aci318/
-│       └── Aci318Versions.kt           Aci318Edition, ExposureCategory,
-│                                       ReinforcementType, LightweightConcreteClass,
-│                                       Aci318StrengthReductionFactors,
-│                                       Aci318SpecificationConstants,
-│                                       Aci318VersionRegistry
+│   │   ├── AiscDesignFactors.kt
+│   │   └── AiscDesignFactorRegistry.kt
+│   ├── asce7/
+│   │   └── Asce7Versions.kt
+│   ├── codes/
+│   │   ├── BuildingCode.kt
+│   │   ├── CodeReferenceKey.kt
+│   │   ├── ServiceabilityCriterion.kt
+│   │   ├── Standard.kt
+│   │   └── StandardEdition.kt
+│   ├── loads/
+│   │   ├── CombinationType.kt
+│   │   └── DesignFactors.kt
+│   └── nds/
+│       ├── NdsAdjustmentFactors.kt
+│       └── NdsVersions.kt
+│
+└── presentation/
+    └── ServiceabilityLimits.kt
 ```
-
-**What does not belong here:** Any Android import, any Room annotation, any coroutine, any repository, any ViewModel, any calculation logic beyond constant lookup tables.
 
 ---
 
-### 4.2 `domain` — Contracts and Core Entities
+### 4.2 `core:domain` — Repository Interfaces and Domain Entities
 
 **Package root:** `com.lz.domain`
 
-This module defines the contracts that the application depends on — repository interfaces and core domain entities that cross module boundaries. It has no Android dependencies and no implementation details. It depends only on `model`.
+Pure Kotlin. Defines the contracts that `core:data` and feature modules implement. No Android dependencies.
 
 ```
-domain/src/main/java/com/lz/domain/
+core/domain/src/main/java/com/lz/domain/
 │
 ├── project/
-│   └── Project.kt                      Root project entity — id, name, settings,
-│                                       coordinates, seismic data, design context
+│   └── Project.kt                      Root domain entity — ProjectSettings,
+│                                       GeographicCoordinates, SeismicHazardData
 │
 ├── calculation/
-│   └── CalculationMetadata.kt          Shared metadata for all calculation types —
-│                                       id, projectId, type, timestamp, title
+│   └── CalculationMetadata.kt          Shared calculation summary (id, name, timestamp)
 │
 ├── material/
-│   └── MaterialRepository.kt           Interface: getMaterialsByType(), getMaterialById(),
-│                                       saveMaterials()
+│   └── MaterialRepository.kt           Interface for material property lookup
 │
-└── repository/
-    ├── ProjectRepository.kt            Interface: getProject(), saveProject(),
-    │                                   getAllProjects(), deleteProject()
-    ├── CalculationRepository.kt        Interface: getCalculation(), saveCalculation(),
-    │                                   getCalculationsForProject(), deleteCalculation()
-    └── SettingsRepository.kt           Interface: getSettings(), saveSettings()
+├── repository/
+│   ├── ProjectRepository.kt            CRUD for Project
+│   ├── CalculationRepository.kt        Metadata read/write across all calculation types
+│   └── SettingsRepository.kt           UnitSystem and DesignMethodology preferences
+│
+└── structural/
+    ├── BoundaryConditionDefinition.kt
+    ├── BoundaryConditionPreset.kt
+    ├── BoundaryConditionValidator.kt
+    ├── BoundaryConditions.kt
+    ├── DeflectionLimits.kt
+    └── ValidationResult.kt
 ```
-
-**What belongs here:** Repository interfaces, core entity definitions that multiple modules share, domain-level enums that are not model-layer constants.
-
-**What does not belong here:** Any Room entity, any DAO, any ViewModel, any Compose, any implementation class, any calculation logic.
 
 ---
 
-### 4.3 `solver` — Calculation Engines
+### 4.3 `core:solver` — Calculation Engines
 
 **Package root:** `com.lz.solver`
 
-This module contains all structural calculation logic. It is pure Kotlin — no Android dependencies, no database access, no UI. It depends on `model` only. Feature modules call into this module for their calculation work; they do not re-implement physics.
+Pure Kotlin. No Android dependencies. All calculation logic lives here or in `feature/` modules that extend it.
 
 ```
-solver/src/main/java/com/lz/solver/
+core/solver/src/main/java/com/lz/solver/
 │
 ├── analysis/
-│   ├── AnalysisConfig.kt           Generic analysis input contract — member, loads,
-│   │                               combinations, section properties (unit-typed)
-│   ├── LoadResolutionService.kt    Public API for load envelope resolution —
-│   │                               assembles AnalysisConfig, delegates to
-│   │                               MemberAnalysisSolver
-│   ├── MemberAnalysisSolver.kt     FEM / direct stiffness analysis engine —
-│   │                               generic, material-agnostic
-│   ├── LimitStateService.kt        Limit state resolution utilities
-│   └── StructuralSolver.kt         Core solver interface / orchestration
-│
-├── material/
-│   ├── MaterialDesignResolver.kt   Resolves AiscDesignFactors / NdsAdjustmentFactors
-│   ├── AiscSteelCapacityCalculator.kt  AISC 360 flexure, shear, axial, torsion,
-│   │                                   LTB, FLB — full chapter F/G/D/E/H
-│   ├── NdsWoodCapacityCalculator.kt    NDS ASD/LRFD capacity with adjustment chain
-│   ├── AluminumCapacityCalculator.kt   ADM Part I Section F (planned)
-│   └── MasonryCapacityCalculator.kt    TMS 402 Chapters 8/9 (planned)
+│   ├── AnalysisConfig.kt
+│   ├── LimitStateService.kt
+│   ├── LoadResolutionService.kt
+│   ├── MemberAnalysisSolver.kt         Generic FEM analysis engine
+│   └── StructuralSolver.kt
 │
 ├── bracing/
-│   └── BracingLogic.kt             Enriches StationDemand with Lb, Cb,
-│                                   compressionFlange from UnbracedSegments
+│   ├── BracingLogic.kt                 Generic Cb bracing calculations
+│   └── StabilityFactorCalculator.kt
 │
 ├── capacity/
-│   ├── CapacityEngine.kt           Applies phi/omega factors, computes utilization
-│   │                               ratios across all limit states at every station
-│   └── RawCapacityResult.kt        Internal handoff type between material calculators
-│                                   and CapacityEngine — solver-internal only
+│   ├── CapacityCalculator.kt
+│   ├── CapacityEngine.kt
+│   └── StrengthDesignService.kt
 │
-├── regulatory/
-│   ├── DemandEnvelopeResolver.kt    Generates LoadCombinationSet for a given
-│   │                               BuildingCode + DesignMethodology
-│   └── RegulatoryRegistry.kt       Resolves standard editions from BuildingCode
+├── envelope/
+│   ├── DemandEnvelopeResolver.kt
+│   ├── DesignInterpretationService.kt
+│   ├── ServiceabilityEvaluationService.kt
+│   └── ServiceabilityInterpretationService.kt
 │
-└── envelope/
-    └── DemandEnvelopeResolver.kt   Resolves governing demand envelope across all stations
-                                    and combinations — produces MemberEnvelopeResult with
-                                    strength and serviceability envelopes
+├── material/
+│   ├── AiscCbCalculator.kt             AISC 360 steel-specific Cb calculation
+│   ├── AiscSteelCapacityCalculator.kt
+│   ├── MaterialDesignResolver.kt
+│   ├── NdsClCalculator.kt
+│   ├── NdsWoodCapacityCalculator.kt
+│   └── WoodPropertyService.kt
+│
+└── regulatory/
+    ├── LoadCombinationEngine.kt
+    └── RegulatoryRegistry.kt
 ```
-
-**What belongs here:** Any class that takes structural inputs and produces structural outputs through mathematical operations. Capacity calculators, analysis solvers, load combination assemblers, stability evaluators.
-
-**What does not belong here:** Any UI, any ViewModel, any Room entity, any repository, any Android import.
 
 ---
 
-### 4.4 `core.data` — Persistence Implementation
+### 4.4 `core:data` — Room Persistence
 
 **Package root:** `com.lz.data`
 
-This module provides the Room database implementation for all shared persistent data. It implements the repository interfaces defined in `domain` and owns the core `AppDatabase`. It depends on `domain` and `model`. Feature modules depend on `core.data` to access shared data (sections, materials, building codes) but `core.data` does not depend on any feature module.
+Owns `AppDatabase`, all shared Room entities, DAOs, seeders, mappers, and repository implementations. Must not depend on any feature module.
 
 ```
-core.data/src/main/java/com/lz/data/
+core/data/src/main/java/com/lz/data/
 │
 ├── persistence/
 │   └── room/
-│       ├── AppDatabase.kt              @Database registering all core entities,
-│       │                               version 1 baseline
-│       ├── Migrations.kt               Migration registry — empty at v1 baseline
-│       ├── StandardTypeConverters.kt   Room TypeConverters for enums and UUID
-│       │
+│       ├── AppDatabase.kt
+│       ├── Migrations.kt
+│       ├── StandardTypeConverters.kt
 │       ├── dao/
+│       │   ├── ProjectDao.kt
+│       │   ├── CalculationDao.kt
+│       │   ├── CodeRegistryDao.kt
+│       │   ├── LoadCombinationDao.kt
+│       │   ├── MaterialDao.kt
+│       │   ├── SectionDaos.kt
+│       │   ├── BuildingCodeDao.kt
 │       │   ├── catalog/
-│       │   │   ├── AiscSectionDao.kt   getAllSections(), getSectionById(),
-│       │   │   │                       getSectionsByType(), getCount()
-│       │   │   └── WoodSectionDao.kt   getAllSections(), getSectionById(),
-│       │   │                           getSectionsByWidth()
-│       │   ├── project/
-│       │   │   ├── ProjectDao.kt       CRUD for projects
-│       │   │   ├── CalculationDao.kt   CRUD for calculation metadata
-│       │   │   └── CustomSectionDao.kt CRUD for user-defined sections
-│       │   ├── MaterialDao.kt          getMaterialsByType(), getMaterialById(),
-│       │   │                           insertAll()
-│       │   ├── CodeRegistryDao.kt      getBuildingCodeById(), getAllBuildingCodes(),
-│       │   │                           getAllStandards(), insertBuildingCode(),
-│       │   │                           insertStandard(), insertCrossRef()
-│       │   │                           BuildingCodeWithDetails composite result
-│       │   └── LoadCombinationDao.kt   getCombinationSetsBySources(),
-│       │                               insertCombinationSet(), insertCombination(),
-│       │                               insertLoadFactors()
-│       │                               CombinationSetWithDetails composite result
-│       │
+│       │   │   ├── AiscSectionDao.kt
+│       │   │   └── WoodSectionDao.kt
+│       │   └── project/
+│       │       └── CustomSectionDao.kt
 │       ├── entity/
+│       │   ├── ProjectRoomEntity.kt
+│       │   ├── CalculationRoomEntity.kt
+│       │   ├── BuildingCodeEntities.kt
+│       │   ├── CodeRegistryEntities.kt
+│       │   ├── LoadCombinationEntities.kt
+│       │   ├── MaterialRoomEntity.kt
+│       │   ├── SectionRoomEntities.kt
 │       │   ├── catalog/
 │       │   │   ├── AiscSectionRoomEntity.kt
 │       │   │   └── WoodSectionRoomEntity.kt
-│       │   ├── project/
-│       │   │   ├── ProjectRoomEntity.kt
-│       │   │   ├── CalculationRoomEntity.kt
-│       │   │   └── CustomSectionRoomEntity.kt
-│       │   ├── CodeRegistryEntities.kt  BuildingCodeEntity, StandardEntity,
-│       │   │                            BuildingCodeStandardCrossRef
-│       │   ├── LoadCombinationEntities.kt LoadCombinationSetEntity,
-│       │   │                              LoadCombinationEntity, LoadFactorEntity
-│       │   ├── MaterialRoomEntity.kt
-│       │   └── BuildingCodeEntities.kt  DefaultMaterialStandardEntity,
-│       │                                ServiceabilityCriterionRoomEntity,
-│       │                                DefaultLoadCaseRoomEntity
-│       │
-│       ├── mapper/
-│       │   ├── StructuralMappers.kt    toDomainModel() extensions for building code
-│       │   │                           and combination entities
-│       │   └── SectionMappers.kt       toDomainModel() extensions for section entities
-│       │
-│       └── seeder/
-│           ├── BuildingCodeSeeder.kt   Seeds IBC 2021, IBC 2024, CBC 2025 and all
-│           │                           standard cross-references
-│           ├── AiscSectionSeeder.kt    Seeds AISC v15.0 shapes from assets TXT file
-│           ├── MaterialSeeder.kt       Seeds reference material grades
-│           └── StructuralDataSeeder.kt Seeds any remaining structural reference data
+│       │   └── project/
+│       │       └── CustomSectionRoomEntity.kt
+│       └── mapper/
+│           ├── ProjectPersistenceMapper.kt     Project ↔ ProjectRoomEntity
+│           ├── CalculationMetadataMapper.kt    CalculationRoomEntity → CalculationMetadata
+│           ├── SectionMappers.kt
+│           └── StructuralMappers.kt
 │
 └── repository/
-    ├── BuildingCodeRepository.kt       IBuildingCodeRepository interface
-    ├── BuildingCodeRepositoryImpl.kt   Implements getBuildingCode(), getAllBuildingCodes(),
-    │                                   getAllStandards(), getDefaultBuildingCode()
-    │                                   using CodeRegistryDao
-    └── RoomCalculationWriter.kt        Implements CalculationWriter — writes core
-                                        CalculationRoomEntity for feature modules
-                                        to call atomically with their own payload save
+    ├── BuildingCodeRepository.kt       IStructuralCodeRepository + StructuralCodeRepositoryImpl
+    ├── CalculationWriter.kt            Interface for core metadata writes
+    ├── RoomCalculationWriter.kt        Implements CalculationWriter via CalculationDao
+    ├── RoomProjectRepository.kt        Implements ProjectRepository
+    ├── DataStoreSettingsRepository.kt  Implements SettingsRepository via DataStore
+    ├── AiscSectionRepository.kt        Interface for AISC section lookup
+    ├── RoomAiscSectionRepository.kt    Implements AiscSectionRepository
+    ├── NdsSectionRepository.kt         NDS section lookup from JSON asset
+    └── RoomMaterialRepository.kt       Material property lookup
 ```
-
-**What belongs here:** All Room entities, DAOs, database class, migrations, type converters, seeders, and repository implementations for shared data. The `CalculationWriter` bridge that feature modules call to write core metadata without depending on `AppDatabase` directly.
-
-**What does not belong here:** Any ViewModel, any Compose, any feature-specific entity (beam calculations live in `feature/beam`), any calculation logic.
 
 ---
 
-### 4.5 `ui` — Shared Design System
+### 4.5 `core:ui` — Shared Compose Components
 
 **Package root:** `com.lz.ui`
 
-This module provides the visual design system and shared Compose components that are used across two or more feature modules or by the app shell. It depends on `model` and `domain`. Feature modules depend on `ui` for shared dialogs and design tokens.
+Compose UI components shared across the app and feature modules. Depends on `core:model` and `core:domain` only.
 
 ```
-ui/src/main/java/com/lz/ui/
+core/ui/src/main/java/com/lz/ui/
 │
-├── theme/
-│   ├── Color.kt                        VectOS color palette and semantic color tokens
-│   ├── Theme.kt                        MaterialTheme configuration, VectOSTheme wrapper
-│   └── Type.kt                         Typography scale
+├── boundary/
+│   ├── BoundaryConditionPicker.kt
+│   ├── BoundaryConditionPickerConfig.kt
+│   ├── BoundaryConditionVisualizer.kt
+│   ├── BoundaryOptionItem.kt
+│   ├── BoundaryPresetOption.kt
+│   ├── ConstraintTypeDropdown.kt
+│   ├── DofConstraintEditor.kt
+│   ├── DofEditorConfig.kt
+│   └── SpringConstraintEditor.kt
 │
-├── components/
-│   ├── VectosCard.kt                   Styled card with consistent rounding and shadow
-│   ├── VectosButton.kt                 Primary, secondary, destructive button variants
-│   ├── SectionBadge.kt                 Compact display for section designation
-│   ├── UtilizationBar.kt               Color-coded utilization ratio indicator
-│   └── CodeReferenceChip.kt            Inline citation display (e.g. "AISC 360-22 F1")
-│
-└── tool/
-    ├── BracingPickerDialog.kt          Material-aware bracing configuration dialog
-    │                                   (Steel/Aluminum/Wood/Masonry/Concrete)
-    ├── LoadCasePicker.kt               Load case selection UI
-    ├── LoadCombinationPicker.kt        Load combination selection and review UI
-    ├── LoadCombinationViewer.kt        Read-only combination display
-    ├── LoadEditor.kt                   Load magnitude and type entry
-    ├── ServiceabilityPickerDialog.kt   Serviceability limit selection
-    ├── SpanEditor.kt                   Span geometry and support condition entry
-    ├── AssumptionEditor.kt             Engineering assumption capture and display
-    └── WoodMaterialPickerDialog.kt     Wood species and grade selection
+│   ← PENDING MOVE from app/src/main/java/com/lz/ui/
+├── AnalysisChart.kt
+├── SectionPicker.kt
+└── UtilizationHeatMap.kt
 ```
-
-**What belongs here:** Any Compose component used by more than one feature module, all theme definitions, all shared tool dialogs that feature modules open. The rule of thumb is: if two different feature screens need it, it lives in `ui`.
-
-**What does not belong here:** Any ViewModel, any repository, any Room entity, any feature-specific screen, any navigation logic.
 
 ---
 
-### 4.6 `feature/beam` — Beam Design Module
-
-**Package root:** `com.lz.beam`
-
-This is the first and most developed calculation module. It provides multi-span beam design for steel (AISC 360), wood (NDS), and aluminum (ADM). It is entirely self-contained — a user without this module sees no beam-related UI.
-
-```
-feature/beam/src/main/java/com/lz/beam/
-│
-├── data/
-│   ├── persistence/
-│   │   └── room/
-│   │       ├── BeamDatabase.kt         @Database for beam_calculations table,
-│   │       │                           version 1, shares vectos.db file with AppDatabase
-│   │       ├── BeamTypeConverters.kt   UUID TypeConverter for BeamDatabase
-│   │       ├── dao/
-│   │       │   └── BeamCalculationDao.kt  insert(), update(), getByCalculationId(),
-│   │       │                              deleteByCalculationId(), getAll()
-│   │       └── entity/
-│   │           └── BeamCalculationRoomEntity.kt  calculationId (FK to core),
-│   │                                              memberJson, resultsJson,
-│   │                                              assumptionsJson, summary fields
-│   └── repository/
-│       └── RoomBeamCalculationRepository.kt  Implements BeamCalculationRepository —
-│                                              calls CalculationWriter for metadata,
-│                                              BeamCalculationDao for payload
-│
-├── domain/
-│   ├── BeamCalculationRepository.kt    Interface: getBeamCalculation(), saveBeamCalculation()
-│   ├── BeamCalculation.kt              Full beam calculation domain object
-│   └── BeamPersistenceMapper.kt        Maps BeamCalculation ↔ Room entities
-│
-├── model/
-│   └── BeamModels.kt               BeamCalculation, BeamCalculationResults,
-│                                   beam-specific domain types
-├── solver/
-│   ├── BeamAnalysisConfig.kt       Beam-specific analysis config — wraps AnalysisConfig
-│   │                               with section, material, methodology, deflection limits
-│   └── BeamAnalysisSolver.kt       Beam orchestrator — calls MemberAnalysisSolver,
-│                                   runs BracingLogic, CapacityEngine, assembles
-│                                   BeamAnalysisResult│
-└── ui/
-    ├── BeamCalculatorScreen.kt         Main beam calculator screen
-    ├── BeamViewModel.kt                @HiltViewModel — owns beam calculation state
-    ├── BeamDisplayModel.kt             UI-layer display representation
-    ├── AnalysisChart.kt                Moment, shear, deflection diagram rendering
-    ├── BeamDiagram.kt                  Member geometry visualization
-    ├── SectionPicker.kt                Section selection from AISC/wood catalogs
-    ├── SupportConditionPicker.kt       End condition selection UI
-    └── UtilizationHeatMap.kt           Color-mapped utilization along member length
-```
-
-**What belongs here:** Everything specific to beam calculations that no other module needs. The BeamDatabase, beam-specific entities, beam ViewModel, beam screens, beam solver orchestration.
-
-**What does not belong here:** Any capacity calculator logic (that lives in `solver/material/`), any shared dialog (that lives in `ui/tool/`), any building code data (that lives in `core.data/`).
-
----
-
-### 4.7 `feature/column` and `feature/pole` (Planned)
-
-These modules follow the identical structural pattern as `feature/beam`. Each will have:
-
-```
-feature/column/
-└── com/lz/column/
-    ├── data/persistence/room/          ColumnDatabase — column_calculations table
-    ├── domain/                         ColumnCalculationRepository interface
-    ├── solver/                         Column solver orchestration
-    └── ui/                             ColumnCalculatorScreen, ColumnViewModel
-```
-
-Column design covers axial compression (AISC 360 Chapter E), combined axial + flexure (Chapter H interaction equations), and NDS post/column design (Section 3.7).
-
-Pole design covers embedded pole lateral resistance, moment at grade, and passive pressure distribution per IBC Section 1807.
-
----
-
-### 4.8 `app` — Application Shell
+### 4.6 `app` — Entry Point and Navigation
 
 **Package root:** `com.lz.vectos`
 
-The app module is intentionally thin. Its only responsibilities are application entry point, Hilt dependency injection wiring, and navigation hosting. It contains no business logic, no calculation engines, and no database implementation.
+Owns the Android entry point, Hilt wiring, navigation host, and app-level ViewModels. App-specific domain services that orchestrate across feature modules also live here.
 
 ```
 app/src/main/java/com/lz/vectos/
 │
 ├── app/
-│   ├── MainActivity.kt                 @AndroidEntryPoint — hosts NavHost, calls
-│   │                                   hiltViewModel() for each ViewModel, no manual
-│   │                                   factory construction
-│   └── VectosApplication.kt            @HiltAndroidApp — triggers Hilt, runs seeders
-│                                       via applicationScope on IO dispatcher
+│   ├── VectosApplication.kt            @HiltAndroidApp entry point, seeds DB on onCreate
+│   └── MainActivity.kt                 Single activity, NavHost host
 │
 ├── di/
-│   └── DatabaseModule.kt               @Module @InstallIn(SingletonComponent) —
-│                                       provides AppDatabase, BeamDatabase, all DAOs,
-│                                       CalculationWriter, repositories
-│
-├── ui/
-│   ├── HomeScreen.kt                   Project list and quick-calc entry point
-│   ├── SettingsScreen.kt               App-level settings
-│   ├── navigation/
-│   │   └── NavRoutes.kt                Screen sealed class, route strings
-│   ├── project/
-│   │   ├── NewProjectScreen.kt         Project creation and editing
-│   │   ├── ProjectLibraryScreen.kt     Calculation list within a project
-│   │   └── ProjectSettingsScreen.kt    Building code, methodology, risk category
-│   └── calculator/
-│       ├── CalculatorDefinition.kt     Interface for tool registration
-│       ├── CalculatorRegistry.kt       Maps module IDs to CalculatorDefinition
-│       ├── CalculatorRoute.kt          Sealed navigation destinations for calculators
-│       ├── BeamCalculatorDefinition.kt Registers beam module with the registry
-│       └── ToolPickerScreen.kt         Displays available and locked modules
+│   └── DatabaseModule.kt               Provides AppDatabase, repositories via Hilt
 │
 ├── presentation/
 │   ├── ProjectViewModel.kt             @HiltViewModel — project CRUD, active project state
-│   └── SettingsViewModel.kt            @HiltViewModel — app settings
+│   ├── SettingsViewModel.kt            @HiltViewModel — app settings
+│   ├── BeamDisplayModel.kt
+│   └── CalculationContext.kt
 │
 ├── domain/
 │   ├── calculation/
-│   │   ├── CalculationLifecycleService.kt  Orchestrates save/load/delete across
-│   │   │                                   core metadata + feature payload
-│   │   ├── EngineeringCalculation.kt       Union type wrapping any calculation variant
-│   │   └── ProjectCalculationRegistry.kt  Maps calculation type strings to handlers
+│   │   ├── CalculationLifecycleService.kt
+│   │   ├── EngineeringCalculation.kt
+│   │   └── ProjectCalculationRegistry.kt
 │   ├── provenance/
-│   │   ├── CalculationProvenanceService.kt Records design decision audit trail
-│   │   └── ProvenanceModels.kt             ProvenanceEntry, DecisionRecord
+│   │   ├── CalculationProvenanceService.kt
+│   │   └── ProvenanceModels.kt
 │   ├── versioning/
-│   │   ├── CalculationVersioningService.kt Manages calculation revision history
-│   │   └── VersioningModels.kt             VersionSnapshot, RevisionRecord
-│   └── units/
-│       └── UnitFormattingService.kt        Formats unit values for display
+│   │   ├── CalculationVersioningService.kt
+│   │   └── VersioningModels.kt
+│   └── structural/
+│       └── DecisionCaptureService.kt
 │
 ├── data/
-│   ├── export/
-│   │   ├── CalculationExporter.kt          Exports calculation to PDF/text
-│   │   ├── CalculationFormatter.kt         Formats calculation results for reports
-│   │   └── ReportingService.kt             Orchestrates report generation
-│   └── persistence/
-│       ├── mapper/
-│       │   └── RoomPersistenceMapper.kt    Maps project/calculation entities to domain
-│       └── repository/
-│           ├── RoomProjectRepository.kt    Implements ProjectRepository
-│           ├── RoomCalculationRepository.kt Implements CalculationRepository
-│           ├── DataStoreSettingsRepository.kt Implements SettingsRepository via DataStore
-│           ├── CompositeSectionRepository.kt Aggregates AISC + NDS section sources
-│           ├── RoomAiscSectionRepository.kt  Implements section lookup from Room
-│           └── NdsSectionRepository.kt       Implements NDS section lookup from JSON asset
+│   └── export/
+│       ├── CalculationExporter.kt
+│       ├── CalculationFormatter.kt
+│       └── ReportingService.kt
+│
+├── ui/
+│   ├── HomeScreen.kt
+│   ├── SettingsScreen.kt
+│   ├── navigation/
+│   │   └── NavRoutes.kt
+│   ├── project/
+│   │   ├── NewProjectScreen.kt
+│   │   ├── ProjectLibraryScreen.kt
+│   │   └── ProjectSettingsScreen.kt
+│   ├── calculator/
+│   │   ├── CalculatorDefinition.kt
+│   │   ├── CalculatorRegistry.kt
+│   │   ├── CalculatorRoute.kt
+│   │   ├── BeamCalculatorDefinition.kt
+│   │   └── ToolPickerScreen.kt         (currently ToolPickerScreen.kt in tool/)
+│   └── tool/
+│       ├── AssumptionEditor.kt
+│       ├── BracingPickerDialog.kt
+│       ├── LoadCasePicker.kt
+│       ├── LoadCombinationPicker.kt
+│       ├── LoadCombinationViewer.kt
+│       ├── LoadEditor.kt
+│       ├── RevisionHistory.kt
+│       ├── ServiceabilityPickerDialog.kt
+│       ├── SpanEditor.kt
+│       ├── UnitFormatter.kt
+│       └── WoodMaterialPickerDialog.kt
 │
 └── util/
     └── serialization/
-        └── LocalDateTimeSerializer.kt      Kotlinx serialization for LocalDateTime
+        └── LocalDateTimeSerializer.kt
 ```
 
-**Files still to migrate out of `app/domain/structural/`:**
+---
 
-These files are currently in `app` but belong in `solver` or `model`. Moving them unblocks `feature/column` and `feature/pole` from depending on any part of `app`.
+### 4.7 `feature/beam` — Beam Calculation Module
 
-| Current Location | Target Location | Reason |
-|---|---|---|
-| `domain/structural/analysis/BeamAnalysisSolver.kt` | `solver/analysis/` | Analysis engine |
-| `domain/structural/analysis/BeamAnalysisConfig.kt` | `solver/analysis/` | Analysis config |
-| `domain/structural/DemandEnvelopeResolver.kt` | `solver/regulatory/` | Already present |
-| `domain/structural/DecisionCaptureService.kt` | `app/domain/` | App-level service |
+**Package root:** `com.lz.beam`
+
+Self-contained beam calculation feature. Owns its own Room database, ViewModel, solver wiring, and UI screens.
+
+```
+feature/beam/src/main/java/com/lz/beam/
+│
+├── model/
+│   └── BeamModels.kt                   BeamCalculation, BeamCalculationResults, Assumptions
+│
+├── domain/
+│   └── BeamCalculationRepository.kt    Interface for beam calculation persistence
+│
+├── data/
+│   ├── persistence/
+│   │   └── room/
+│   │       ├── BeamDatabase.kt
+│   │       ├── BeamTypeConverters.kt
+│   │       ├── dao/
+│   │       │   └── BeamCalculationDao.kt
+│   │       └── entity/
+│   │           └── BeamCalculationRoomEntity.kt
+│   └── repository/
+│       ├── BeamPersistenceMapper.kt    BeamCalculation ↔ Room entities
+│       └── RoomBeamCalculationRepository.kt
+│
+├── solver/
+│   ├── BeamAnalysisConfig.kt
+│   └── BeamAnalysisSolver.kt           Beam-specific analysis wiring over MemberAnalysisSolver
+│
+├── presentation/
+│   └── BeamViewModel.kt
+│
+└── ui/
+    ├── BeamCalculatorScreen.kt
+    ├── BeamBoundaryConditionConfig.kt
+    ├── BeamDiagram.kt
+    └── StructuralDrawingUtils.kt
+```
 
 ---
 
@@ -603,26 +499,25 @@ These files are currently in `app` but belong in `solver` or `model`. Moving the
 
 ### Two Databases, One File
 
-VectOS uses two Room `@Database` classes that share a single SQLite file (`vectos.db`). This pattern allows feature modules to own their schema independently while permitting cross-database operations at the SQLite layer.
+VectOS uses two Room `@Database` classes that share a single SQLite file (`vectos.db`).
 
 | Database | Module | Tables | Purpose |
 |---|---|---|---|
-| `AppDatabase` | `core.data` | projects, calculations, building_codes, standards, aisc_sections, wood_sections, custom_sections, materials, load_combinations, serviceability_criteria, etc. | All shared persistent data |
+| `AppDatabase` | `core:data` | projects, calculations, building_codes, standards, aisc_sections, wood_sections, custom_sections, materials, load_combinations, serviceability_criteria | All shared persistent data |
 | `BeamDatabase` | `feature/beam` | beam_calculations | Beam calculation payloads |
-| `ColumnDatabase` | `feature/column` (planned) | column_calculations | Column calculation payloads |
 
 ### Cross-Database Atomicity
 
-When a beam calculation is saved, two writes must occur atomically: the `CalculationRoomEntity` in `AppDatabase` and the `BeamCalculationRoomEntity` in `BeamDatabase`. Because Room cannot span transactions across two `@Database` instances, VectOS uses a **metadata-first ordering convention**:
+When a beam calculation is saved, two writes must occur in order:
 
 1. `CalculationWriter.writeMetadata()` — writes core metadata to `AppDatabase`
 2. `BeamCalculationDao.insert()` — writes payload to `BeamDatabase`
 
-If step 2 fails, the metadata record is orphaned but non-destructive. The project calculation list will not surface incomplete records because the UI queries by joined result. True atomic cross-database writes are available at the SQLite level if needed in the future.
+If step 2 fails, the metadata record is orphaned but non-destructive. The UI queries by joined result so incomplete records are not surfaced.
 
 ### Seeding Strategy
 
-All reference data (building codes, standards, AISC sections, materials) is seeded at application start via idempotency-checked seeders. Each seeder checks its own record count before writing. Seeders run on an IO coroutine in `VectosApplication.onCreate()`. The order is:
+Reference data is seeded at application start via idempotency-checked seeders running on an IO coroutine in `VectosApplication.onCreate()`:
 
 ```
 1. BuildingCodeSeeder     — building codes and standard relationships
@@ -635,51 +530,51 @@ All reference data (building codes, standards, AISC sections, materials) is seed
 
 ## 6. Dependency Injection
 
-VectOS uses Hilt for dependency injection throughout. The injection graph is:
+VectOS uses Hilt throughout. The injection graph is:
 
 ```
 VectosApplication (@HiltAndroidApp)
 └── DatabaseModule (@InstallIn SingletonComponent)
     ├── provides AppDatabase (singleton)
-    ├── provides BeamDatabase (singleton)
-    ├── provides all DAOs (from their respective databases)
-    ├── provides CalculationWriter (bridges core metadata writes for feature modules)
-    └── provides repository implementations
+    ├── provides ProjectRepository → RoomProjectRepository
+    └── provides SettingsRepository → DataStoreSettingsRepository
 ```
 
-ViewModels are annotated with `@HiltViewModel` and injected with `hiltViewModel()` at the composable call site. No manual `ViewModelProvider.Factory` construction exists anywhere in the project.
+ViewModels are annotated with `@HiltViewModel` and injected with `hiltViewModel()` at the composable call site.
 
 ---
 
 ## 7. Calculation Traceability Model
 
-Every calculation result in VectOS carries a complete provenance record. This is a product requirement, not just an implementation detail.
+Every calculation result carries a complete provenance record:
 
-A complete calculation record includes:
-
-- **Metadata** — id, project, timestamp, engineer, title (stored in `CalculationRoomEntity`)
+- **Metadata** — id, project, timestamp, engineer, title (`CalculationRoomEntity`)
 - **Inputs** — member geometry, loads, section, material (serialized to JSON in feature entity)
 - **Assumptions** — design methodology, code edition, bracing assumptions (serialized)
 - **Results** — governing load combination, governing limit state, utilization ratios (serialized)
 - **Design factors** — phi or omega values with their code citations (`DesignFactor.citation`)
 - **Equation traces** — step-by-step intermediate values (`DesignEquationTrace`)
-- **Revision history** — prior versions of the calculation if modified after initial save
-
-This model ensures that a calculation saved today can be fully reconstructed and reviewed years later, even if code editions or default assumptions have changed.
+- **Revision history** — prior versions if modified after initial save
 
 ---
 
-## 8. Known Cleanup Items
+## 8. Pending Work
 
-These are architectural debts identified during the module migration that should be resolved before the next feature module is started:
+### Immediate (before next feature module)
 
-| Item | Location | Action |
-|---|---|---|
-| Duplicate UUIDSerializer | `model/Uuidserializer.kt` | Delete — canonical version is `model/util/UUIDSerializer.kt` |
-| Empty `shared/` directories | `shared/codes/`, `shared/materials/`, etc. | Delete — purpose fulfilled by `model` module |
-| Empty `domain/repository/` folder | `domain/repository/` (outside src) | Delete — Android Studio artifact |
-| `app/domain/structural/` cluster | 25+ files | Migrate to `solver/` and `model/structural/` per table in Section 4.8 |
-| `fallbackToDestructiveMigration()` | `AppDatabase.create()` | Remove before production release |
-| Schema JSON files in `app/schemas/` | Both schema subfolders | Delete old files — `core.data/schemas/1.json` is the new baseline |
-| `BeamViewModel` injecting `ProjectViewModel` | `app/presentation/` | Refactor to shared StateFlow or SavedStateHandle pattern |
+| Item | Action |
+|---|---|
+| `app/src/main/java/com/lz/ui/` — `AnalysisChart.kt`, `SectionPicker.kt`, `UtilizationHeatMap.kt` | Move to `core/ui/src/main/java/com/lz/ui/` |
+| `app/.../domain/units/UnitFormattingService.kt` | Move to `core/model/src/main/java/com/lz/model/units/` |
+| `app/src/main/java/com/lz/vectos/VectosApplication.kt` (stub) | Delete — real entry point is `app/src/main/java/com/lz/vectos/app/VectosApplication.kt`. Update `AndroidManifest.xml` `android:name` to `.app.VectosApplication` |
+| `app/.../data/persistence/entity/CalculationEntity.kt` and `ProjectEntity.kt` | Delete — superseded by `core:data` entities |
+| `app/.../data/persistence/room/` seeders (`AiscSectionSeeder`, `MaterialSeeder`, `StructuralDataSeeder`) | Delete — superseded by seeders in `core:data` |
+| `.continue/rules/LoadCase.kt` | Delete — stray AI context file, not real source |
+| `fallbackToDestructiveMigration()` in `AppDatabase` | Remove before production release |
 
+### Needs evaluation before moving or deleting
+
+| Item | Notes |
+|---|---|
+| `app/domain/` cluster — `CalculationLifecycleService`, `EngineeringCalculation`, `ProjectCalculationRegistry`, `CalculationProvenanceService`, `ProvenanceModels`, `CalculationVersioningService`, `VersioningModels`, `DecisionCaptureService` | These are in `com.lz.vectos.domain.*` and reference each other. Some reference `com.lz.vectos.domain.structural.LoadCase` which no longer exists in source. Determine which are actively called by ViewModels before deciding on delete vs. port to `core:domain`. |
+| `app/data/export/` — `CalculationExporter`, `CalculationFormatter`, `ReportingService` | No callers found in current codebase. Confirm whether these are intended future work or dead code before deciding to keep or delete. |

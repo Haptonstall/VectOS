@@ -1,6 +1,5 @@
 package com.lz.vectos.ui.project
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -163,7 +162,14 @@ fun ProjectSummaryCard(
                 
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     val client = project.clientName ?: "None"
-                    val site = project.siteLocation ?: "None"
+                    val city = project.coordinates.city
+                    val state = project.coordinates.state
+                    val location = when {
+                        city.isNotBlank() && state.isNotBlank() -> "$city, $state"
+                        city.isNotBlank() -> city
+                        state.isNotBlank() -> state
+                        else -> "None"
+                    }
                     
                     Text(
                         text = "Client: $client",
@@ -171,7 +177,7 @@ fun ProjectSummaryCard(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Site: $site",
+                        text = "Site: $location",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -180,8 +186,8 @@ fun ProjectSummaryCard(
                 Spacer(modifier = Modifier.height(4.dp))
                 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TagItem(text = project.designContext.buildingCode.shortName)
-                    TagItem(text = project.designContext.methodology.name)
+                    TagItem(text = project.settings.buildingCode.name)
+                    TagItem(text = project.settings.designMethodology.name)
                 }
             }
             

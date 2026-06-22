@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lz.domain.project.Project
+import com.lz.model.regulatory.PrimaryBuildingCode
 import com.lz.model.regulatory.codes.BuildingCode
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.units.UnitSystem
@@ -37,21 +38,30 @@ fun NewProjectScreen(
     
     var name by remember { mutableStateOf(projectToEdit?.name ?: "") }
     var projectNumber by remember { mutableStateOf(projectToEdit?.projectNumber ?: "") }
-    var siteLocation by remember { mutableStateOf(projectToEdit?.siteLocation ?: "") }
     var description by remember { mutableStateOf(projectToEdit?.description ?: "") }
     var client by remember { mutableStateOf(projectToEdit?.clientName ?: "") }
     var engineer by remember { mutableStateOf(projectToEdit?.engineerName ?: "") }
+    var firmName by remember { mutableStateOf(projectToEdit?.firmName ?: "") }
     
-    var selectedCode by remember { mutableStateOf<BuildingCode?>(projectToEdit?.designContext?.buildingCode) }
-    var unitSystem by remember { mutableStateOf(projectToEdit?.designContext?.units ?: UnitSystem.IMPERIAL) }
-    var methodology by remember { mutableStateOf(projectToEdit?.designContext?.methodology ?: DesignMethodology.ASD) }
+    var streetAddress by remember { mutableStateOf(projectToEdit?.coordinates?.streetAddress ?: "") }
+    var city by remember { mutableStateOf(projectToEdit?.coordinates?.city ?: "") }
+    var state by remember { mutableStateOf(projectToEdit?.coordinates?.state ?: "") }
+    var zipCode by remember { mutableStateOf(projectToEdit?.coordinates?.zipCode ?: "") }
+    
+    var selectedCode by remember { mutableStateOf<BuildingCode?>(null) }
+    var unitSystem by remember { mutableStateOf(projectToEdit?.settings?.unitSystem ?: UnitSystem.IMPERIAL) }
+    var methodology by remember { mutableStateOf(projectToEdit?.settings?.designMethodology ?: DesignMethodology.ASD) }
     
     var showCodeDropdown by remember { mutableStateOf(false) }
 
     // Initialize selectedCode when buildingCodes are loaded
-    LaunchedEffect(buildingCodes) {
+    LaunchedEffect(buildingCodes, projectToEdit) {
         if (selectedCode == null && buildingCodes.isNotEmpty()) {
-            selectedCode = buildingCodes.find { it.id == "IBC_2021" } ?: buildingCodes.first()
+            selectedCode = if (projectToEdit != null) {
+                buildingCodes.find { it.id == projectToEdit.settings.buildingCode.name }
+            } else {
+                buildingCodes.find { it.id == "IBC_2021" } ?: buildingCodes.first()
+            }
         }
     }
 
@@ -74,29 +84,35 @@ fun NewProjectScreen(
                                     viewModel.createProject(
                                         name = name,
                                         projectNumber = projectNumber,
-                                        siteLocation = siteLocation,
                                         description = description,
                                         client = client,
                                         engineer = engineer,
+                                        firmName = firmName,
+                                        streetAddress = streetAddress,
+                                        city = city,
+                                        state = state,
+                                        zipCode = zipCode,
                                         units = unitSystem,
                                         methodology = methodology,
-                                        buildingCode = code,
-                                        loadingStandard = code.standards.firstOrNull() ?: com.lz.vectos.domain.structural.Standard(id = "EMPTY", shortName = "None", longName = "None"),
-                                        materialStandards = emptyMap()
+                                        buildingCode = code
                                     )
                                 } else {
                                     val updatedProject = projectToEdit.copy(
                                         name = name,
                                         projectNumber = projectNumber,
-                                        siteLocation = siteLocation,
                                         description = description,
                                         clientName = client,
                                         engineerName = engineer,
-                                        designContext = projectToEdit.designContext.copy(
-                                            units = unitSystem,
-                                            methodology = methodology,
-                                            buildingCode = code,
-                                            loadingStandard = code.standards.firstOrNull() ?: com.lz.vectos.domain.structural.Standard(id = "EMPTY", shortName = "None", longName = "None")
+                                        settings = projectToEdit.settings.copy(
+                                            unitSystem = unitSystem,
+                                            designMethodology = methodology,
+                                            buildingCode = PrimaryBuildingCode.valueOf(code.id)
+                                        ),
+                                        coordinates = projectToEdit.coordinates.copy(
+                                            streetAddress = streetAddress,
+                                            city = city,
+                                            state = state,
+                                            zipCode = zipCode
                                         )
                                     )
                                     viewModel.updateProject(updatedProject)
@@ -137,12 +153,39 @@ fun NewProjectScreen(
             )
 
             OutlinedTextField(
-                value = siteLocation,
-                onValueChange = { siteLocation = it },
-                label = { Text("Site / Location") },
+                value = streetAddress,
+                onValueChange = { streetAddress = it },
+                label = { Text("Street Address") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                OutlinedTextField(
+                    value = city,
+                    onValueChange = { city = it },
+                    label = { Text("City") },
+                    modifier = Modifier.weight(1.5f),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                OutlinedTextField(
+                    value = state,
+                    onValueChange = { state = it },
+                    label = { Text("State") },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                OutlinedTextField(
+                    value = zipCode,
+                    onValueChange = { zipCode = it },
+                    label = { Text("Zip") },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
 
             OutlinedTextField(
                 value = description,

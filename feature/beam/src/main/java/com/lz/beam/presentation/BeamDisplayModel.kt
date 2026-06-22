@@ -1,4 +1,4 @@
-package com.lz.vectos.presentation
+package com.lz.beam.presentation
 
 /**
  * UI-facing display model for Beam calculation results.
@@ -10,5 +10,5 @@ data class BeamDisplayModel(
     val maxBendingMoment: String,
     val maxShear: String,
     val maxDeflection: String,
-    val timestamp: String
+    val createdAt: String
 )

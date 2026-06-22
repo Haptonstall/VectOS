@@ -23,8 +23,8 @@ import com.lz.model.units.lbPerFt
 import com.lz.model.units.lbPerIn
 import com.lz.model.units.meters
 import com.lz.model.units.poundsForce
-import com.lz.vectos.domain.structural.Load
 import com.lz.model.regulatory.LoadCategory
+import com.lz.model.structural.Load
 import com.lz.vectos.domain.structural.LoadDirection
 import com.lz.model.structural.SpanGeometry
 import com.lz.model.units.*

@@ -1,29 +1,23 @@
-package com.lz.vectos.data.persistence.room
+package com.lz.data.persistence.room.seeder
 
 import android.content.Context
 import android.util.Log
-import com.lz.vectos.data.persistence.room.dao.AiscSectionDao
-import com.lz.vectos.data.persistence.room.entity.AiscSectionRoomEntity
+import com.lz.data.persistence.room.dao.catalog.AiscSectionDao
+import com.lz.data.persistence.room.entity.catalog.AiscSectionRoomEntity
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
-/**
- * Seeder to populate the AISC sections from the assets TXT file.
- */
 class AiscSectionSeeder(
     private val context: Context,
     private val aiscDao: AiscSectionDao
 ) {
     suspend fun seed() {
-        // Check if already seeded to avoid redundant work
-        val count = aiscDao.getCount()
         if (aiscDao.getCount() > 0) return
-
         try {
             val sections = parseAiscFile()
             if (sections.isNotEmpty()) {
                 aiscDao.insertAll(sections)
-                Log.d("AiscSectionSeeder", "Successfully seeded ${sections.size} AISC sections.")
+                Log.d("AiscSectionSeeder", "Seeded ${sections.size} AISC sections.")
             } else {
                 Log.w("AiscSectionSeeder", "No AISC sections parsed from file.")
             }
@@ -37,39 +31,36 @@ class AiscSectionSeeder(
         val inputStream = context.assets.open("AISC Shapes Database v15.0.txt")
         val reader = BufferedReader(InputStreamReader(inputStream))
 
-        // Read header
         val header = reader.readLine() ?: return emptyList()
-        // Use limit = 0 to keep trailing empty columns (standard Kotlin behavior)
         val columns = header.split(",")
-        
-        // Find indices for required columns
-        val typeIdx = columns.indexOf("Type")
-        val idIdx = columns.indexOf("EDI_Std_Nomenclature")
-        val labelIdx = columns.indexOf("AISC_Manual_Label")
-        val areaIdx = columns.indexOf("A")
-        val depthIdx = columns.indexOf("d")
-        val twIdx = columns.indexOf("tw")
-        val bfIdx = columns.indexOf("bf")
-        val tfIdx = columns.indexOf("tf")
-        val ixIdx = columns.indexOf("Ix")
-        val sxIdx = columns.indexOf("Sx")
-        val zxIdx = columns.indexOf("Zx")
-        val rxIdx = columns.indexOf("rx")
-        val iyIdx = columns.indexOf("Iy")
-        val syIdx = columns.indexOf("Sy")
-        val zyIdx = columns.indexOf("Zy")
-        val ryIdx = columns.indexOf("ry")
-        val jIdx = columns.indexOf("J")
-        val cwIdx = columns.indexOf("Cw")
 
-        val maxIdx = listOf(typeIdx, idIdx, labelIdx, areaIdx, depthIdx, twIdx, bfIdx, tfIdx, ixIdx, sxIdx, zxIdx, rxIdx, iyIdx, syIdx, zyIdx, ryIdx, jIdx, cwIdx).maxOrNull() ?: -1
+        val typeIdx    = columns.indexOf("Type")
+        val idIdx      = columns.indexOf("EDI_Std_Nomenclature")
+        val labelIdx   = columns.indexOf("AISC_Manual_Label")
+        val areaIdx    = columns.indexOf("A")
+        val depthIdx   = columns.indexOf("d")
+        val twIdx      = columns.indexOf("tw")
+        val bfIdx      = columns.indexOf("bf")
+        val tfIdx      = columns.indexOf("tf")
+        val ixIdx      = columns.indexOf("Ix")
+        val sxIdx      = columns.indexOf("Sx")
+        val zxIdx      = columns.indexOf("Zx")
+        val rxIdx      = columns.indexOf("rx")
+        val iyIdx      = columns.indexOf("Iy")
+        val syIdx      = columns.indexOf("Sy")
+        val zyIdx      = columns.indexOf("Zy")
+        val ryIdx      = columns.indexOf("ry")
+        val jIdx       = columns.indexOf("J")
+        val cwIdx      = columns.indexOf("Cw")
+
+        val maxIdx = listOf(typeIdx, idIdx, labelIdx, areaIdx, depthIdx, twIdx, bfIdx, tfIdx,
+            ixIdx, sxIdx, zxIdx, rxIdx, iyIdx, syIdx, zyIdx, ryIdx, jIdx, cwIdx).maxOrNull() ?: -1
         if (maxIdx == -1) {
             Log.e("AiscSectionSeeder", "Required columns missing in header")
             return emptyList()
         }
 
         reader.forEachLine { line ->
-            // Ensure values size matches header
             val values = line.split(",")
             if (values.size > maxIdx) {
                 try {
@@ -93,16 +84,12 @@ class AiscSectionSeeder(
                         torsionalJ = values.getOrNull(jIdx)?.toDoubleOrNull() ?: 0.0,
                         warpingCw = values.getOrNull(cwIdx)?.toDoubleOrNull() ?: 0.0
                     )
-                    // Only add if it has a valid ID and type
-                    if (entity.id.isNotEmpty() && entity.type.isNotEmpty()) {
-                        sections.add(entity)
-                    }
+                    if (entity.id.isNotEmpty() && entity.type.isNotEmpty()) sections.add(entity)
                 } catch (e: Exception) {
                     Log.w("AiscSectionSeeder", "Skipping malformed row: $line", e)
                 }
             }
         }
-        
         return sections
     }
 }

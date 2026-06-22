@@ -3,6 +3,7 @@ package com.lz.vectos.ui.project
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -11,10 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lz.model.regulatory.codes.BuildingCode
+import com.lz.model.regulatory.codes.Standard
 import com.lz.model.structural.DesignMethodology
-import com.lz.model.structural.IssueSeverity
-import com.lz.model.structural.MaterialType
-import com.lz.vectos.domain.structural.*
 import com.lz.model.units.UnitSystem
 import com.lz.vectos.presentation.ProjectViewModel
 
@@ -26,15 +25,18 @@ fun ProjectSettingsScreen(
 ) {
     val projectState by viewModel.activeProject.collectAsState()
     val buildingCodes by viewModel.buildingCodes.collectAsState()
-    val standards by viewModel.standards.collectAsState()
     val scrollState = rememberScrollState()
 
     projectState.let { activeProject ->
-        var units by remember { mutableStateOf(activeProject.designContext.units) }
-        var methodology by remember { mutableStateOf(activeProject.designContext.methodology) }
-        var buildingCode by remember { mutableStateOf(activeProject.designContext.buildingCode) }
-        var standard by remember { mutableStateOf(activeProject.designContext.loadingStandard) }
-        var materialStandards by remember { mutableStateOf(activeProject.designContext.materialStandards) }
+        var units by remember { mutableStateOf(activeProject.settings.unitSystem) }
+        var methodology by remember { mutableStateOf(activeProject.settings.designMethodology) }
+        // Note: activeProject.settings.buildingCode is an enum, we need to find the full object
+        var selectedCodeId by remember { mutableStateOf(activeProject.settings.buildingCode.name) }
+        var buildingCode by remember { mutableStateOf<BuildingCode?>(null) }
+
+        LaunchedEffect(buildingCodes, selectedCodeId) {
+            buildingCode = buildingCodes.find { it.id == selectedCodeId }
+        }
 
         Scaffold(
             topBar = {
@@ -47,8 +49,10 @@ fun ProjectSettingsScreen(
                     },
                     actions = {
                         TextButton(onClick = {
-                            viewModel.updateProjectSettings(units, methodology, buildingCode, standard, materialStandards)
-                            onBack()
+                            buildingCode?.let {
+                                viewModel.updateProjectSettings(units, methodology, it)
+                                onBack()
+                            }
                         }) {
                             Text("SAVE")
                         }
@@ -115,33 +119,38 @@ fun ProjectSettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text("Governing Codes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     
-                    ObjectSelector("Building Code", buildingCode, buildingCodes) { 
-                        buildingCode = it 
-                        // Note: In Task 6, we would ideally offer to reset standards here.
+                    buildingCode?.let { currentCode ->
+                        ObjectSelector("Building Code", currentCode, buildingCodes) { 
+                            selectedCodeId = it.id
+                        }
                     }
-                    ObjectSelector("Loading Standard", standard, standards.filter { it.shortName.contains("ASCE") }) { standard = it }
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Material Design Standards", style = MaterialTheme.typography.titleSmall)
-
-                    // Dynamically render selectors for materials supported by the building code
-                    MaterialType.entries.forEach { type ->
-                        val currentStd = materialStandards[type] ?: buildingCode.defaultMaterialStandards[type]
-                        if (currentStd != null) {
-                            val options = standards.filter { 
-                                when(type) {
-                                    MaterialType.STEEL -> it.shortName.contains("AISC")
-                                    MaterialType.WOOD -> it.shortName.contains("NDS")
-                                    else -> true
+                    
+                    // Display governing standards for information
+                    buildingCode?.let { code ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    "Governing Standards (Auto-Resolved)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                code.standards.forEach { standard ->
+                                    Text(
+                                        standard.shortName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                            }
-                            
-                            ObjectSelector(
-                                label = "${type.name.lowercase().replaceFirstChar { it.uppercase() }} Standard",
-                                selected = currentStd,
-                                options = options
-                            ) { newStd ->
-                                materialStandards = materialStandards + (type to newStd)
                             }
                         }
                     }
@@ -150,31 +159,7 @@ fun ProjectSettingsScreen(
                 HorizontalDivider()
 
                 // 4. Validation Issues (Intelligence)
-                val currentContext = activeProject.designContext.copy(
-                    units = units,
-                    methodology = methodology,
-                    buildingCode = buildingCode,
-                    loadingStandard = standard,
-                    materialStandards = materialStandards
-                )
-                val issues = currentContext.validate()
-
-                if (issues.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Compatibility Notes", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.secondary)
-                        issues.forEach { issue ->
-                            val color = when(issue.severity) {
-                                IssueSeverity.ERROR -> MaterialTheme.colorScheme.error
-                                IssueSeverity.WARNING -> MaterialTheme.colorScheme.primary
-                                IssueSeverity.INFO -> MaterialTheme.colorScheme.outline
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("•", color = color, style = MaterialTheme.typography.bodySmall)
-                                Text(issue.message, style = MaterialTheme.typography.bodySmall, color = color)
-                            }
-                        }
-                    }
-                }
+                // Note: Validation logic will be updated when the domain validation service is ready
             }
         }
     }
