@@ -1,4 +1,4 @@
-package com.lz.vectos.util.serialization
+package com.lz.model.util
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.PrimitiveKind

@@ -11,7 +11,7 @@ import java.time.LocalDateTime
 data class EngineeringCalculation(
     val id: UUID,
     val projectId: UUID,
-    val toolId: String, // e.g., "BEAM", "COLUMN"
+    val toolId: String,
     val name: String,
     val latestVersion: CalculationVersion,
     val versionHistory: List<CalculationVersion>,

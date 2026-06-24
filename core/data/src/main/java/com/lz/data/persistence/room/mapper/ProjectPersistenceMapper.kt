@@ -5,6 +5,7 @@ import com.lz.domain.project.GeographicCoordinates
 import com.lz.domain.project.Project
 import com.lz.domain.project.ProjectSettings
 import com.lz.domain.project.SeismicHazardData
+import java.time.LocalDateTime
 
 fun Project.toRoomEntity(): ProjectRoomEntity = ProjectRoomEntity(
     id = id,
@@ -14,7 +15,7 @@ fun Project.toRoomEntity(): ProjectRoomEntity = ProjectRoomEntity(
     clientName = clientName,
     engineerName = engineerName,
     firmName = firmName,
-    createdAtIso = createdAtIso,
+    createdAtIso = createdAt.toString(),
 
     // Settings
     buildingCode = settings.buildingCode,
@@ -53,7 +54,7 @@ fun ProjectRoomEntity.toDomain(): Project = Project(
     clientName = clientName,
     engineerName = engineerName,
     firmName = firmName,
-    createdAtIso = createdAtIso,
+    createdAt = LocalDateTime.parse(createdAtIso),
 
     settings = ProjectSettings(
         buildingCode = buildingCode,

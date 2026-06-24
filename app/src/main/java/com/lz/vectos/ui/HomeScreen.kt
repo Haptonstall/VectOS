@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lz.domain.project.Project
-import com.lz.vectos.ui.navigation.Screen
 import com.lz.vectos.presentation.ProjectViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -184,4 +183,3 @@ fun ProjectItem(
     }
 }
 
-// Deleted NewProjectDialog

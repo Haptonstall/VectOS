@@ -34,6 +34,8 @@ data class SpanGeometry(
     @Serializable(with = UUIDSerializer::class)
     val endNodeId: UUID,
 
+    val bracing: BracingInput = BracingInput.Steel(),
+
     val unbracedSegments: List<UnbracedSegment> =
         emptyList()
 ) {
@@ -73,13 +75,15 @@ data class StructuralMember(
             startSupport: SupportCondition = SupportCondition.PINNED,
             endSupport: SupportCondition = SupportCondition.ROLLER
         ): StructuralMember {
+            val n1Id = UUID.randomUUID()
+            val n2Id = UUID.randomUUID()
             return StructuralMember(
                 spans = listOf(
                     SpanGeometry(
                         id = UUID.randomUUID(),
                         length = length,
-                        startSupport = startSupport,
-                        endSupport = endSupport,
+                        startNodeId = n1Id,
+                        endNodeId = n2Id,
                         unbracedSegments = emptyList() // Defaults to fully unbraced over its length
                     )
                 )

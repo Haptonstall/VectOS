@@ -76,6 +76,9 @@ data class NormalizedBraceState(
  */
 @Serializable
 sealed class BracingInput {
+    abstract val topType: BracingMode
+    abstract val bottomType: BracingMode
+    abstract val discreteTable: List<DiscreteBracePoint>
 
     /**
      * AISC 360 steel bracing configuration.
@@ -86,8 +89,11 @@ sealed class BracingInput {
     data class Steel(
         val topMode: BracingMode = BracingMode.UNBRACED,
         val bottomMode: BracingMode = BracingMode.UNBRACED,
-        val discreteTable: List<DiscreteBracePoint> = emptyList()
-    ) : BracingInput()
+        override val discreteTable: List<DiscreteBracePoint> = emptyList()
+    ) : BracingInput() {
+        override val topType: BracingMode get() = topMode
+        override val bottomType: BracingMode get() = bottomMode
+    }
 
     /**
      * Aluminum Design Manual (ADM) bracing configuration.
@@ -100,8 +106,11 @@ sealed class BracingInput {
     data class Aluminum(
         val topMode: BracingMode = BracingMode.UNBRACED,
         val bottomMode: BracingMode = BracingMode.UNBRACED,
-        val discreteTable: List<DiscreteBracePoint> = emptyList()
-    ) : BracingInput()
+        override val discreteTable: List<DiscreteBracePoint> = emptyList()
+    ) : BracingInput() {
+        override val topType: BracingMode get() = topMode
+        override val bottomType: BracingMode get() = bottomMode
+    }
 
     /**
      * TMS 402 masonry bracing configuration.
@@ -125,8 +134,11 @@ sealed class BracingInput {
         val compressionFaceMode: BracingMode = BracingMode.UNBRACED,
         val tensionFaceMode: BracingMode = BracingMode.UNBRACED,
         val isReinforced: Boolean = true,
-        val discreteTable: List<DiscreteBracePoint> = emptyList()
-    ) : BracingInput()
+        override val discreteTable: List<DiscreteBracePoint> = emptyList()
+    ) : BracingInput() {
+        override val topType: BracingMode get() = compressionFaceMode
+        override val bottomType: BracingMode get() = tensionFaceMode
+    }
 
     /**
      * NDS wood bracing configuration.
@@ -144,8 +156,11 @@ sealed class BracingInput {
         val bottomMode: BracingMode = BracingMode.UNBRACED,
         val luTopSpacing: Length = 24.0.inches,     // e.g. 24" o.c. bridging
         val luBottomSpacing: Length = 96.0.inches,  // e.g. 8 ft o.c. blocking
-        val discreteTable: List<DiscreteBracePoint> = emptyList()
-    ) : BracingInput()
+        override val discreteTable: List<DiscreteBracePoint> = emptyList()
+    ) : BracingInput() {
+        override val topType: BracingMode get() = topMode
+        override val bottomType: BracingMode get() = bottomMode
+    }
 }
 
 /**

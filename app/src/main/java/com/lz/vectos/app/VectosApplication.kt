@@ -42,7 +42,7 @@ class VectosApplication : Application() {
                 // Order matters — BuildingCodeSeeder must run before StructuralDataSeeder
                 // since structural data references building code IDs
                 BuildingCodeSeeder(database.codeRegistryDao()).seed()
-                StructuralDataSeeder(database.structuralDataDao()).seed()
+                StructuralDataSeeder(database.loadCombinationDao()).seed()
                 AiscSectionSeeder(applicationContext, database.aiscSectionDao()).seed()
                 MaterialSeeder(database.materialDao()).seed()
             } catch (e: Exception) {

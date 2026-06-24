@@ -133,7 +133,7 @@ class ProjectViewModel @Inject constructor(
                 clientName = client,
                 engineerName = engineer,
                 firmName = firmName,
-                createdAt = Instant.now().toString(),
+                createdAt = LocalDateTime.now(),
                 settings = ProjectSettings(
                     buildingCode = PrimaryBuildingCode.valueOf(buildingCode.id),
                     designMethodology = methodology,
@@ -251,7 +251,7 @@ class ProjectViewModel @Inject constructor(
         description = "A temporary project for calculations.",
         clientName = "Internal",
         engineerName = "Default User",
-        createdAt = Instant.now().toString()
+        createdAt = LocalDateTime.now()
     )
 
     private fun CalculationMetadata.toEngineeringCalculation(projectId: UUID): EngineeringCalculation {

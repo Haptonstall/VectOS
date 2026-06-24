@@ -7,9 +7,11 @@ import com.lz.model.regulatory.codes.Standard
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.ProjectDesignContext
 import com.lz.model.units.UnitSystem
-import kotlinx.serialization.Serializable
-import java.util.UUID
+import com.lz.model.util.LocalDateTimeSerializer
 import com.lz.model.util.UUIDSerializer
+import kotlinx.serialization.Serializable
+import java.time.LocalDateTime
+import java.util.UUID
 
 /**
  * Global engineering rules and design parameters governing the math engines.
@@ -74,7 +76,8 @@ data class Project(
     val clientName: String? = null,
     val engineerName: String? = null,
     val firmName: String? = null,
-    val createdAt: String,
+    @Serializable(with = LocalDateTimeSerializer::class)
+    val createdAt: LocalDateTime,
 
     // Strongly-typed sub-domains
     val settings: ProjectSettings = ProjectSettings(),
