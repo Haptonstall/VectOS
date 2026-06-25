@@ -38,7 +38,8 @@ import com.lz.model.structural.SpanGeometry
 import com.lz.model.structural.StandardLoadCases
 import com.lz.model.structural.StrengthDesignResult
 import com.lz.model.structural.StructuralMember
-import com.lz.model.structural.SupportCondition
+import com.lz.model.structural.StructuralNode
+import com.lz.model.structural.NodeBoundaryCondition
 import com.lz.model.units.ElasticModulus
 import com.lz.model.units.ForcePerLength
 import com.lz.model.units.Length
@@ -84,7 +85,7 @@ class BeamViewModel(
 
     // --- State: Geometry & Properties ---
     var structuralMember by mutableStateOf(
-        StructuralMember.createSimple(length = Length(120.0), startSupport = SupportCondition.PINNED, endSupport = SupportCondition.ROLLER)
+        StructuralMember.createSimple(length = Length(120.0))
     )
     var activeSpanId by mutableStateOf<UUID?>(structuralMember.spans.firstOrNull()?.id)
 
@@ -411,17 +412,33 @@ class BeamViewModel(
     // --- UI Event Handlers ---
 
     fun addSpan() {
+        val lastNode = structuralMember.nodes.last()
+        val newNode = StructuralNode()
         val newSpan = SpanGeometry(
             length = Length(120.0),
-            startSupport = SupportCondition.PINNED,
-            endSupport = SupportCondition.ROLLER
+            startNodeId = lastNode.id,
+            endNodeId = newNode.id
         )
-        structuralMember = structuralMember.copy(spans = structuralMember.spans + newSpan)
+        structuralMember = structuralMember.copy(
+            nodes = structuralMember.nodes + newNode,
+            spans = structuralMember.spans + newSpan
+        )
         activeSpanId = newSpan.id
     }
 
     fun removeSpan(id: UUID) {
-        structuralMember = structuralMember.copy(spans = structuralMember.spans.filter { it.id != id })
+        val spanToRemove = structuralMember.spans.find { it.id == id } ?: return
+        val nodesToRemove = mutableSetOf<UUID>()
+        
+        // If it's the last span, we might want to keep the start node if it's the only one left, 
+        // but typically we just remove the end node of the removed span if it's not shared.
+        // In a simple chain, removing a span removes its end node.
+        nodesToRemove.add(spanToRemove.endNodeId)
+
+        structuralMember = structuralMember.copy(
+            nodes = structuralMember.nodes.filter { it.id !in nodesToRemove },
+            spans = structuralMember.spans.filter { it.id != id }
+        )
         if (activeSpanId == id) activeSpanId = structuralMember.spans.firstOrNull()?.id
     }
 
@@ -457,15 +474,13 @@ class BeamViewModel(
 
     var editingSupportNodeIndex by mutableStateOf<Int?>(null)
 
-    fun updateSupportCondition(nodeIndex: Int, condition: SupportCondition) {
-        val spans = structuralMember.spans.toMutableList()
-        if (nodeIndex == 0) {
-            spans[0] = spans[0].copy(startSupport = condition)
-        } else if (nodeIndex <= spans.size) {
-            spans[nodeIndex - 1] = spans[nodeIndex - 1].copy(endSupport = condition)
+    fun updateBoundaryCondition(nodeIndex: Int, condition: NodeBoundaryCondition) {
+        val nodes = structuralMember.nodes.toMutableList()
+        if (nodeIndex >= 0 && nodeIndex < nodes.size) {
+            nodes[nodeIndex] = nodes[nodeIndex].copy(boundaryCondition = condition)
+            structuralMember = structuralMember.copy(nodes = nodes)
+            calculate()
         }
-        structuralMember = structuralMember.copy(spans = spans)
-        calculate()
     }
 
     // --- Load Management ---
@@ -546,7 +561,10 @@ class BeamViewModel(
             val spanLen = span.length.inches
             val input = spanBracingInputs[span.id]
 
-            if (span.startSupport != SupportCondition.FREE) {
+            val startNode = structuralMember.nodes.find { it.id == span.startNodeId }
+            val endNode = structuralMember.nodes.find { it.id == span.endNodeId }
+
+            if (startNode?.boundaryCondition?.isConstrained() == true) {
                 globalBraces.add(NormalizedBraceState(currentX.inches, true, true))
             }
 
@@ -566,7 +584,7 @@ class BeamViewModel(
                 ))
             }
 
-            if (span.endSupport != SupportCondition.FREE) {
+            if (endNode?.boundaryCondition?.isConstrained() == true) {
                 globalBraces.add(NormalizedBraceState((currentX + spanLen).inches, true, true))
             }
 

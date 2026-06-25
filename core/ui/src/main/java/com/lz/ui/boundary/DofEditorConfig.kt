@@ -1,7 +1,7 @@
 package com.lz.ui.boundary
 
-import com.lz.domain.structural.ConstraintType
-import com.lz.domain.structural.DegreeOfFreedom
+import com.lz.model.structural.ConstraintType
+import com.lz.model.structural.DegreeOfFreedom
 
 data class DofEditorConfig(
     val editableDofs: Set<DegreeOfFreedom>,

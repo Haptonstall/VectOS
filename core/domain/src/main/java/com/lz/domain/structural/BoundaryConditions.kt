@@ -50,9 +50,7 @@ object BoundaryConditions {
             preset = BoundaryConditionPreset.ROLLER_X,
             name = "Roller X",
             description = "Restrains translation in X only.",
-            condition = NodeBoundaryCondition(
-                ux = fixed()
-            )
+            condition = NodeBoundaryCondition(ux = fixed())
         )
 
     val RollerY =
@@ -60,9 +58,7 @@ object BoundaryConditions {
             preset = BoundaryConditionPreset.ROLLER_Y,
             name = "Roller Y",
             description = "Restrains translation in Y only.",
-            condition = NodeBoundaryCondition(
-                uy = fixed()
-            )
+            condition = NodeBoundaryCondition(uy = fixed())
         )
 
     val RollerZ =
@@ -70,9 +66,7 @@ object BoundaryConditions {
             preset = BoundaryConditionPreset.ROLLER_Z,
             name = "Roller Z",
             description = "Restrains translation in Z only.",
-            condition = NodeBoundaryCondition(
-                uz = fixed()
-            )
+            condition = NodeBoundaryCondition(uz = fixed())
         )
 
     /**
@@ -155,24 +149,25 @@ object BoundaryConditions {
             it.preset == preset
         } ?: Free
 
-    fun spring(
-        dof: DegreeOfFreedom,
-        stiffness: Double
-    ): NodeBoundaryCondition =
-        NodeBoundaryCondition(
-            uy = DofConstraint(
-                type = ConstraintType.SPRING,
-                stiffness = stiffness
-            )
-        )
+    /**
+     * Creates a spring restraint on a single DOF with the given stiffness (kip/in or
+     * kip·in/rad for rotational springs). All other DOFs remain FREE.
+     *
+     * Previously this always hardcoded UY regardless of the [dof] argument — fixed.
+     */
+    fun spring(dof: DegreeOfFreedom, stiffness: Double): NodeBoundaryCondition {
+        val springConstraint = DofConstraint(ConstraintType.SPRING, stiffness)
+        return when (dof) {
+            DegreeOfFreedom.UX -> NodeBoundaryCondition(ux = springConstraint)
+            DegreeOfFreedom.UY -> NodeBoundaryCondition(uy = springConstraint)
+            DegreeOfFreedom.UZ -> NodeBoundaryCondition(uz = springConstraint)
+            DegreeOfFreedom.RX -> NodeBoundaryCondition(rx = springConstraint)
+            DegreeOfFreedom.RY -> NodeBoundaryCondition(ry = springConstraint)
+            DegreeOfFreedom.RZ -> NodeBoundaryCondition(rz = springConstraint)
+        }
+    }
 
-    private fun fixed() =
-        DofConstraint(
-            type = ConstraintType.FIXED
-        )
+    private fun fixed() = DofConstraint(ConstraintType.FIXED)
 
-    private fun free() =
-        DofConstraint(
-            type = ConstraintType.FREE
-        )
+    private fun free() = DofConstraint(ConstraintType.FREE)
 }

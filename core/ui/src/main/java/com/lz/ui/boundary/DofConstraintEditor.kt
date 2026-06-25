@@ -9,10 +9,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.lz.domain.structural.ConstraintType
-import com.lz.domain.structural.DofConstraint
-import com.lz.domain.structural.DegreeOfFreedom
-import com.lz.domain.structural.NodeBoundaryCondition
+import com.lz.model.structural.ConstraintType
+import com.lz.model.structural.NodeBoundaryCondition
 
 @Composable
 fun DofConstraintEditor(

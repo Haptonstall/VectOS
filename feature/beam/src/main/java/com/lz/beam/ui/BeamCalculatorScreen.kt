@@ -57,8 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lz.beam.presentation.BeamViewModel
 import com.lz.beam.ui.drawBracingIcons
-import com.lz.beam.ui.drawSupport
-import com.lz.domain.structural.NodeBoundaryCondition
+import com.lz.model.structural.NodeBoundaryCondition
 import com.lz.domain.project.Project
 import com.lz.model.regulatory.LoadCombination
 import com.lz.model.structural.BracingMode
@@ -291,16 +290,16 @@ fun BeamCalculatorScreen(
 
             // Support Picker Dialog Overlay
             viewModel.editingSupportNodeIndex?.let { nodeIdx ->
-                val spans = viewModel.structuralMember.spans
-                val condition = if (nodeIdx == 0) spans[0].startSupport else spans[nodeIdx - 1].endSupport
+                val condition = viewModel.structuralMember.nodes.getOrNull(nodeIdx)?.boundaryCondition
+                    ?: NodeBoundaryCondition()
 
                 BoundaryConditionPicker(
-                    config = BoundaryConditionPickerConfig.config,
+                    config = BeamBoundaryConditionConfig.config,
                     currentCondition = condition,
                     onDismiss = {
                         viewModel.editingSupportNodeIndex = null
                     },
-                    onConfirmed = { newCondition, ->
+                    onConfirmed = { newCondition ->
                         viewModel.updateBoundaryCondition(
                             nodeIdx,
                             newCondition
@@ -374,12 +373,18 @@ fun BeamSideView(
 
                 // Draw Start Support
                 if (idx == 0) {
-                    drawSupport(0f, centerY + beamHeightPx / 2f, span.startSupport)
+                    val startNode = member.nodes.getOrNull(0)
+                    if (startNode != null) {
+                        drawStructuralSupport(startNode.boundaryCondition, 0f, centerY + beamHeightPx / 2f, 30f, Color.Gray)
+                    }
                     drawStructuralJoint(0f, centerY + beamHeightPx / 2f, if (showJointLabels) "0" else null, Color.Gray, showJointLabels)
                 }
 
                 // Draw End Support
-                drawSupport(currentX + spanWidth, centerY + beamHeightPx / 2f, span.endSupport)
+                val endNode = member.nodes.getOrNull(idx + 1)
+                if (endNode != null) {
+                    drawStructuralSupport(endNode.boundaryCondition, currentX + spanWidth, centerY + beamHeightPx / 2f, 30f, Color.Gray)
+                }
                 drawStructuralJoint(currentX + spanWidth, centerY + beamHeightPx / 2f, if (showJointLabels) "${idx + 1}" else null, Color.Gray, showJointLabels)
 
                 // Draw Span Dividers (Vertical ticks)
@@ -526,53 +531,6 @@ fun BeamSideView(
                 // Actually we just use a simplified approach for alignment in this demo
             }
         }
-    }
-}
-
-private fun DrawScope.drawSupport(x: Float, y: Float, condition: SupportCondition) {
-    when (condition) {
-        SupportCondition.PINNED -> {
-            // Triangle
-            val path = Path().apply {
-                moveTo(x, y)
-                lineTo(x - 15f, y + 25f)
-                lineTo(x + 15f, y + 25f)
-                close()
-            }
-            drawPath(path, Color.Gray)
-        }
-        SupportCondition.FIXED -> {
-            // Vertical bar with hashes
-            drawLine(Color.DarkGray, Offset(x, y - 30f), Offset(x, y + 30f), 8f)
-            for (i in -3..3) {
-                drawLine(Color.Gray, Offset(x, y + i * 8f), Offset(x - 10f, y + i * 8f - 5f), 2f)
-            }
-        }
-        SupportCondition.ROLLER -> {
-            // Circle
-            drawCircle(Color.Gray, radius = 10f, center = Offset(x, y + 15f))
-            drawLine(Color.Gray, Offset(x - 20f, y + 25f), Offset(x + 20f, y + 25f), 4f)
-        }
-        else -> {} // Free/Custom
-    }
-}
-
-private fun DrawScope.drawBracingIcons(x: Float, width: Float, y: Float, mode: BracingMode, color: Color, isTop: Boolean) {
-    val yOff = if (isTop) -25f else 25f
-    when (mode) {
-        BracingMode.CONTINUOUS -> {
-            drawLine(
-                color = color,
-                start = Offset(x, y + yOff),
-                end = Offset(x + width, y + yOff),
-                strokeWidth = 2f,
-                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
-            )
-        }
-        BracingMode.DISCRETE -> {
-            drawCircle(color, 6f, Offset(x + width / 2f, y + yOff))
-        }
-        else -> {}
     }
 }
 

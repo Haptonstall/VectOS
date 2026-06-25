@@ -9,18 +9,6 @@ import kotlinx.serialization.Serializable
 import java.util.UUID
 
 /**
- * Supported physical boundary conditions for structural member span nodes.
- */
-@Serializable
-enum class SupportCondition {
-    PINNED,
-    FIXED,
-    ROLLER,
-    FREE,
-    CUSTOM
-}
-
-/**
  * Represents a single physical span within a multi-span structural member.
  * Contains geometric boundaries and pre-resolved stability segment zones.
  */
@@ -33,32 +21,25 @@ data class SpanGeometry(
     val startNodeId: UUID,
     @Serializable(with = UUIDSerializer::class)
     val endNodeId: UUID,
-
-    val bracing: BracingInput = BracingInput.Steel(),
-
-    val unbracedSegments: List<UnbracedSegment> =
-        emptyList()
+    val unbracedSegments: List<UnbracedSegment> = emptyList()
 ) {
     /**
-     * Finds the active unbraced lengths (Lb) governing a specific calculation station coordinate.
-     * Maps the analytical station straight to its corresponding spatial zone.
+     * Returns the unbraced segment enclosing coordinate x, or a fully-unbraced
+     * fallback if none was defined.
      */
-    fun getUnbracedSegmentAt(x: Length): UnbracedSegment {
-        // Find the precise zone enclosing coordinate X
-        val matchingSegment = unbracedSegments.find { it.contains(x) }
-
-        // Fallback: If no segments were generated, treat the entire span as completely unbraced
-        return matchingSegment ?: UnbracedSegment(
-            startX = 0.0.inches,
-            endX = length,
-            lbTop = length,
-            lbBottom = length
-        )
-    }
+    fun getUnbracedSegmentAt(x: Length): UnbracedSegment =
+        unbracedSegments.find { it.contains(x) }
+            ?: UnbracedSegment(
+                startX = 0.0.inches,
+                endX = length,
+                lbTop = length,
+                lbBottom = length
+            )
 }
 
 /**
- * A generalized multi-span structural member segment (e.g., a continuous beam or column line).
+ * A generalized multi-span structural member.
+ * Boundary conditions are owned by [nodes]; spans reference nodes by UUID.
  */
 @Serializable
 data class StructuralMember(
@@ -67,24 +48,32 @@ data class StructuralMember(
     val sectionProfileId: String? = null
 ) {
     companion object {
-        /**
-         * Factory utility to quickly instantiate a standard single-span member.
+         /**
+         * Creates a simple single-span member with the two most common preset
+         * boundary conditions. Preset-to-DOF resolution happens here so callers
+         * in tests and BeamViewModel do not need to know about NodeBoundaryCondition
+         * internals.
+         *
+         * Default: simply-supported (pinned + roller).
          */
         fun createSimple(
             length: Length,
-            startSupport: SupportCondition = SupportCondition.PINNED,
-            endSupport: SupportCondition = SupportCondition.ROLLER
-        ): StructuralMember {
-            val n1Id = UUID.randomUUID()
-            val n2Id = UUID.randomUUID()
+            startCondition: NodeBoundaryCondition = NodeBoundaryCondition.pinned(),
+            endCondition: NodeBoundaryCondition = NodeBoundaryCondition.roller()
+       ): StructuralMember {
+            val startId = UUID.randomUUID()
+            val endId = UUID.randomUUID()
             return StructuralMember(
+                nodes = listOf(
+                    StructuralNode(id = startId, boundaryCondition = startCondition),
+                     StructuralNode(id = endId, boundaryCondition = endCondition)
+                ),
                 spans = listOf(
                     SpanGeometry(
                         id = UUID.randomUUID(),
                         length = length,
-                        startNodeId = n1Id,
-                        endNodeId = n2Id,
-                        unbracedSegments = emptyList() // Defaults to fully unbraced over its length
+                        startNodeId = startId,
+                        endNodeId = endId
                     )
                 )
             )

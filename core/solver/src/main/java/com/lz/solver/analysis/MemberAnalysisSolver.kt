@@ -5,7 +5,8 @@ import com.lz.model.structural.LoadDirection
 import com.lz.model.structural.NormalizedBraceState
 import com.lz.model.structural.SpanGeometry
 import com.lz.model.structural.StationDemand
-import com.lz.model.structural.SupportCondition
+import com.lz.model.structural.ConstraintType
+import com.lz.model.structural.NodeBoundaryCondition
 import com.lz.model.units.Force
 import com.lz.model.units.Length
 import com.lz.model.units.Moment
@@ -444,10 +445,17 @@ object MemberAnalysisSolver {
             ))
         }
 
-        // 3. Apply Boundary Conditions
+        // 3. Apply Boundary Conditions from NodeBoundaryCondition on each StructuralNode.
+        // Each node in member.nodes is matched to its solver node index via the
+        // span startNodeId/endNodeId references.
+        val nodeIdToSolverIndex = mutableMapOf<java.util.UUID, Int>()
         config.member.spans.forEachIndexed { idx, span ->
-            if (idx == 0) applySupport(system, nodeIndices[0], span.startSupport)
-            applySupport(system, nodeIndices[idx + 1], span.endSupport)
+            nodeIdToSolverIndex[span.startNodeId] = nodeIndices[idx]
+            nodeIdToSolverIndex[span.endNodeId]   = nodeIndices[idx + 1]
+        }
+        config.member.nodes.forEach { structuralNode ->
+            val solverIdx = nodeIdToSolverIndex[structuralNode.id] ?: return@forEach
+            applyNodeBoundaryCondition(system, solverIdx, structuralNode.boundaryCondition)
         }
 
         // 4. Apply Loads
@@ -483,7 +491,7 @@ object MemberAnalysisSolver {
                 lateralForce = Force(rxn[DofType.UZ] ?: 0.0),
                 momentY = Moment(rxn[DofType.RY] ?: 0.0),
                 torque = Moment(rxn[DofType.RX] ?: 0.0),
-                label = if (idx < config.member.spans.size) config.member.spans[idx].startSupport.name else config.member.spans.last().endSupport.name
+                label = "Node $idx"
             )
         }
 
@@ -526,34 +534,33 @@ object MemberAnalysisSolver {
         )
     }
 
-    private fun applySupport(system: StructuralSystem, nodeIdx: Int, support: SupportCondition) {
-        when (support) {
-            SupportCondition.PINNED -> {
-                system.fixNode(nodeIdx, DofType.UX)
-                system.fixNode(nodeIdx, DofType.UY)
-                system.fixNode(nodeIdx, DofType.UZ)
-                system.fixNode(nodeIdx, DofType.RX)
+    /**
+     * Applies a [NodeBoundaryCondition] to a solver node, translating each DOF
+     * constraint into either a fixed restraint (penalty method) or a spring
+     * (direct stiffness addition). FREE DOFs are left unconstrained.
+     */
+    private fun applyNodeBoundaryCondition(
+        system: StructuralSystem,
+        nodeIdx: Int,
+        bc: NodeBoundaryCondition
+    ) {
+        bc.toOrderedList().forEach { (dof, constraint) ->
+            val solverDof = when (dof) {
+                com.lz.model.structural.DegreeOfFreedom.UX -> DofType.UX
+                com.lz.model.structural.DegreeOfFreedom.UY -> DofType.UY
+                com.lz.model.structural.DegreeOfFreedom.UZ -> DofType.UZ
+                com.lz.model.structural.DegreeOfFreedom.RX -> DofType.RX
+                com.lz.model.structural.DegreeOfFreedom.RY -> DofType.RY
+                com.lz.model.structural.DegreeOfFreedom.RZ -> DofType.RZ
             }
-            SupportCondition.FIXED -> {
-                system.fixNode(nodeIdx, DofType.UX)
-                system.fixNode(nodeIdx, DofType.UY)
-                system.fixNode(nodeIdx, DofType.UZ)
-                system.fixNode(nodeIdx, DofType.RX)
-                system.fixNode(nodeIdx, DofType.RY)
-                system.fixNode(nodeIdx, DofType.RZ)
-            }
-            SupportCondition.ROLLER -> {
-                system.fixNode(nodeIdx, DofType.UY)
-                system.fixNode(nodeIdx, DofType.RX)
-                system.fixNode(nodeIdx, DofType.UZ)
-            }
-            SupportCondition.FREE -> { /* No-op */ }
-            SupportCondition.CUSTOM -> {
-                // If CUSTOM is used without specific DOF overrides, default to pinned
-                system.fixNode(nodeIdx, DofType.UX)
-                system.fixNode(nodeIdx, DofType.UY)
-                system.fixNode(nodeIdx, DofType.UZ)
-                system.fixNode(nodeIdx, DofType.RX)
+            when (constraint.type) {
+                ConstraintType.FIXED -> system.fixNode(nodeIdx, solverDof)
+                ConstraintType.SPRING -> {
+                    val k = constraint.stiffness
+                    if (k != null && k > 0.0) system.addSpringNode(nodeIdx, solverDof, k)
+                }
+                ConstraintType.FREE -> { /* unconstrained — no action */ }
+                else -> { /* GAP, TENSION_ONLY, NONLINEAR_SPRING — not yet implemented */ }
             }
         }
     }

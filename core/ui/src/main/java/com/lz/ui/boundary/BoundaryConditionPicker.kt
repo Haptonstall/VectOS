@@ -19,10 +19,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.lz.domain.structural.BoundaryConditionFactory
+import com.lz.domain.structural.BoundaryConditions
 import com.lz.domain.structural.BoundaryConditionPreset
-import com.lz.domain.structural.NodeBoundaryCondition
-import com.lz.model.structural.SupportCondition
+import com.lz.model.structural.NodeBoundaryCondition
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,8 +31,6 @@ fun BoundaryConditionPicker(
     onDismiss: () -> Unit,
     onConfirmed: (NodeBoundaryCondition) -> Unit
 ) {
-    val dofEditorConfig: DofEditorConfig
-
     var selectedPreset by remember {
         mutableStateOf<BoundaryConditionPreset?>(null)
     }
@@ -76,7 +73,7 @@ fun BoundaryConditionPicker(
                         selectedPreset = option.preset
 
                         condition =
-                            BoundaryConditionFactory
+                            BoundaryConditions
                                 .fromPreset(option.preset)
                     }
                 }
