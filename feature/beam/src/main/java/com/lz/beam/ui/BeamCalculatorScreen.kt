@@ -19,12 +19,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.LineAxis
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -41,25 +48,31 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.offset
+import com.lz.beam.R
+import com.lz.beam.model.BeamCalculationResults
 import com.lz.beam.presentation.BeamViewModel
-import com.lz.beam.ui.drawBracingIcons
-import com.lz.model.structural.NodeBoundaryCondition
 import com.lz.domain.project.Project
 import com.lz.model.regulatory.LoadCombination
+import com.lz.model.structural.BracingInput
 import com.lz.model.structural.BracingMode
 import com.lz.model.structural.DesignEquationTrace
 import com.lz.model.structural.DesignMethodology
@@ -68,6 +81,8 @@ import com.lz.model.structural.Load
 import com.lz.model.structural.LoadCase
 import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.MaterialType
+import com.lz.model.structural.NodeBoundaryCondition
+import com.lz.model.structural.PointCapacityResult
 import com.lz.model.structural.SectionProfile
 import com.lz.model.structural.ServiceabilityResult
 import com.lz.model.structural.ShapeType
@@ -75,10 +90,10 @@ import com.lz.model.structural.SpanGeometry
 import com.lz.model.structural.StrengthCheckResult
 import com.lz.model.structural.StrengthDesignResult
 import com.lz.model.structural.StructuralMember
-import com.lz.model.structural.PointCapacityResult
 import com.lz.model.units.Force
 import com.lz.model.units.Length
 import com.lz.model.units.Moment
+import com.lz.model.units.UnitFormattingService
 import com.lz.model.units.UnitSystem
 import com.lz.model.units.inInches
 import com.lz.model.units.inKiloNewtons
@@ -87,9 +102,16 @@ import com.lz.model.units.inLbFt
 import com.lz.model.units.inLbIn
 import com.lz.model.units.inNewtonMeters
 import com.lz.model.units.inPoundsForce
+import com.lz.solver.analysis.AnalysisResult
+import com.lz.solver.analysis.ReactionResult
+import com.lz.ui.AnalysisChart
+import com.lz.ui.SectionPicker
 import com.lz.ui.boundary.BoundaryConditionPicker
 import com.lz.ui.boundary.BoundaryConditionPickerConfig
-import com.lz.beam.ui.BeamBoundaryConditionConfig
+import com.lz.ui.loads.LoadEditor
+import com.lz.ui.material.WoodMaterialPickerDialog
+import com.lz.ui.member.BracingPickerDialog
+import com.lz.ui.member.SpanEditor
 import kotlinx.coroutines.launch
 import java.util.UUID
 import kotlin.isFinite
@@ -104,11 +126,11 @@ fun BeamCalculatorScreen(
     val context = LocalContext.current
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf(
-        stringResource(R.string.tab_geometry),
-        stringResource(R.string.tab_loads),
+        "Geometry",
+        "Loads",
         "LCs",
-        stringResource(R.string.tab_analysis),
-        stringResource(R.string.tab_design)
+        "Analysis",
+        "Design"
     )
 
     val strengthDesignResults = viewModel.governingCapacityResults
@@ -210,6 +232,7 @@ fun BeamCalculatorScreen(
                     showJointLabels = viewModel.showJointLabels,
                     showLoads = viewModel.showLoadsOnPlot,
                     loads = viewModel.loadCases.flatMap { it.loads }, // All loads by default
+                    spanBracing = viewModel.spanBracingInputs,
                     modifier = Modifier.fillMaxSize(),
                     onNodeClicked = { idx -> viewModel.editingSupportNodeIndex = idx }
                 )
@@ -336,6 +359,7 @@ fun BeamSideView(
     showJointLabels: Boolean,
     showLoads: Boolean,
     loads: List<Load>,
+    spanBracing: Map<UUID, BracingInput>,
     modifier: Modifier = Modifier,
     onNodeClicked: (Int) -> Unit
 ) {
@@ -392,8 +416,11 @@ fun BeamSideView(
 
                 // Draw Bracing Icons if enabled
                 if (showBracing) {
-                    drawBracingIcons(currentX, spanWidth, centerY, span.bracing.topType, Color.Blue, true)
-                    drawBracingIcons(currentX, spanWidth, centerY, span.bracing.bottomType, Color.Red, false)
+                    val bracing = spanBracing[span.id]
+                    if (bracing != null) {
+                        drawBracingIcons(currentX, spanWidth, centerY, bracing.topType, Color.Blue, true)
+                        drawBracingIcons(currentX, spanWidth, centerY, bracing.bottomType, Color.Red, false)
+                    }
                 }
 
                 currentX += spanWidth
@@ -576,7 +603,7 @@ fun GeometryTab(viewModel: BeamViewModel) {
     )
 
     if (isWoodPickerVisible) {
-        com.lz.vectos.ui.tool.WoodMaterialPickerDialog(
+        WoodMaterialPickerDialog(
             currentGrade = viewModel.activeMaterialGrade as? MaterialGrade.Wood,
             onDismiss = { isWoodPickerVisible = false },
             onConfirm = {
@@ -588,9 +615,11 @@ fun GeometryTab(viewModel: BeamViewModel) {
 
     viewModel.editingBracingSpanId?.let { spanId ->
         val span = viewModel.structuralMember.spans.find { it.id == spanId }
-        if (span != null) {
+        val bracing = viewModel.spanBracingInputs[spanId]
+        if (span != null && bracing != null) {
             BracingPickerDialog(
-                currentBracing = span.bracing,
+                currentBracing = bracing,
+                materialType = viewModel.selectedMaterial,
                 unitSystem = viewModel.unitSystem,
                 onDismiss = { viewModel.editingBracingSpanId = null },
                 onConfirmed = {
@@ -703,7 +732,7 @@ fun LoadCombinationsTab(viewModel: BeamViewModel) {
                     )
                     Column(modifier = Modifier.padding(start = 8.dp)) {
                         Text(combo.name, style = MaterialTheme.typography.bodyMedium)
-                        Text(combo.equation, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text(combo.equationText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -1257,7 +1286,7 @@ private fun DesignCard(label: String, check: StrengthCheckResult<*>, unitSystem:
                 }
 
                 CircularProgressIndicator(
-                    progress = { check.utilization.toFloat().coerceAtMost(1f) },
+                    progress = check.utilization.toFloat().coerceAtMost(1f),
                     modifier = Modifier.size(32.dp),
                     color = getUtilizationColor(check.utilization),
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,

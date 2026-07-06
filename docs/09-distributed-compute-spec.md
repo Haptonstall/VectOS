@@ -20,7 +20,7 @@ This document defines how VectOS executes computational workloads across:
 
 Compute is abstracted behind engines.
 
-Execution location is a runtime decision.
+Execution location is a runtimeEnvironment decision.
 
 ---
 

@@ -1,9 +1,9 @@
 package com.lz.beam.plugin
 
-import com.lz.domain.plugin.CalculatorPlugin
-import com.lz.domain.plugin.ModuleDescriptor
-import com.lz.domain.plugin.ModuleType
-import com.lz.domain.plugin.PluginEntryPoint
+import com.lz.domain.module.CalculatorPlugin
+import com.lz.domain.module.ModuleDescriptor
+import com.lz.domain.module.ModuleType
+import com.lz.domain.module.ModuleEntryPoint
 
 class BeamPlugin : CalculatorPlugin {
 
@@ -19,6 +19,6 @@ class BeamPlugin : CalculatorPlugin {
             supportsQuickCalcMode = true
         )
 
-    override val entryPoint: PluginEntryPoint =
+    override val entryPoint: ModuleEntryPoint =
         BeamEntryPoint()
 }

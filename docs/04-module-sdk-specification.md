@@ -12,7 +12,7 @@ This document defines the standard for building, packaging, versioning, and exec
 
 Modules are the unit of extensibility in the VectOS platform.
 
-A module is a **self-contained engineering capability package** that exposes:
+A runtimeModule is a **self-contained engineering capability package** that exposes:
 
 * Tools
 * Services
@@ -25,13 +25,13 @@ Modules must be platform-independent and engine-agnostic.
 
 # 2. Module Philosophy
 
-A module is NOT:
+A runtimeModule is NOT:
 
 * A UI screen
 * A feature bundle
 * A monolithic library
 
-A module IS:
+A runtimeModule IS:
 
 * A packaged set of engineering capabilities
 * A registry of tools
@@ -42,11 +42,11 @@ A module IS:
 
 # 3. Module Structure
 
-Standard module layout:
+Standard runtimeModule layout:
 
 ```text id="m1s0"
-module-name/
-├── module.json
+runtimeModule-name/
+├── runtimeModule.json
 ├── tools/
 ├── services/
 ├── workflows/
@@ -60,7 +60,7 @@ module-name/
 
 # 4. Module Manifest
 
-Every module must contain a manifest file:
+Every runtimeModule must contain a manifest file:
 
 ```json id="m2s1"
 {
@@ -89,7 +89,7 @@ Every module must contain a manifest file:
 
 # 5. Module Entry Point
 
-Each module must expose a single entry point:
+Each runtimeModule must expose a single entry point:
 
 ```kotlin id="m3s2"
 interface Module {
@@ -138,7 +138,7 @@ class BeamModule : Module {
 
 Modules must NOT:
 
-* Access other module internals
+* Access other runtimeModule internals
 * Depend on concrete engine implementations
 * Depend on UI frameworks
 * Perform direct database access
@@ -193,7 +193,7 @@ Rules:
 Modules may depend only on:
 
 * Core Contracts
-* Other module contracts (via interface only)
+* Other runtimeModule contracts (via interface only)
 
 Modules must NOT depend on:
 
@@ -205,7 +205,7 @@ Modules must NOT depend on:
 
 # 11. Tool Exposure
 
-All module capabilities must be exposed through Tool interfaces.
+All runtimeModule capabilities must be exposed through Tool interfaces.
 
 ```kotlin id="m7s6"
 interface Tool {

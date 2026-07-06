@@ -26,7 +26,7 @@ docs/ → Documentation only
 ## 2. Structural & Dependency Rules
 
 ### 2.1 Strict Layer Boundaries
--Every feature module (`:feature:beam`, `:feature:column`, etc.) MUST strictly segregate code into three independent packages. No cross-layer imports are allowed:
+-Every feature runtimeModule (`:feature:beam`, `:feature:column`, etc.) MUST strictly segregate code into three independent packages. No cross-layer imports are allowed:
 - **UI** → **Domain** → **Data** (dependencies point inward)
 - No layer may depend on an outer layer (e.g., Domain cannot depend on UI)
 - Data layer implements interfaces defined in Domain
@@ -39,17 +39,17 @@ docs/ → Documentation only
 | `core/ui` | `core/domain`, `core/model` | `core/data`, `feature/*`, `app` |
 | `core/domain` | `core/model`, `shared/*` | Android SDK (except java/util), `core/data`, `feature/*` |
 | `core/data` | `core/domain`, `core/model`, `shared/*` | `feature/*`, `core/ui` |
-| `core/model` | Nothing (pure Kotlin) | Any Android or other module |
+| `core/model` | Nothing (pure Kotlin) | Any Android or other runtimeModule |
 | `core/solver` | `core/model`, `shared/*` | Android, `core/domain` (may use interfaces) |
-| `shared/*` | `core/model` | Any other module |
+| `shared/*` | `core/model` | Any other runtimeModule |
 
 ### 2.3 Package Naming Conventions
 - Base package: `com.lz`
-- Module-specific subpackages follow the module path
+- Module-specific subpackages follow the runtimeModule path
     - `com.lz.feature.beam`
     - `com.lz.core.domain`
     - `com.lz.core.data.persistence.room`
-- Inside each module, use standard Clean Architecture subpackages:
+- Inside each runtimeModule, use standard Clean Architecture subpackages:
     - `di` – Dependency injection modules
     - `domain` – Use cases, repository interfaces, business models
     - `data` – Repository implementations, mappers, data sources
@@ -76,12 +76,12 @@ When Continue generates code, it MUST adhere to these rules:
         private val dao: BeamCalculationDao
     ) : BeamCalculationRepository
     ## Dependency Injection Rules
-    - All dependencies must be scoped and provided via Hilt/Koin modules located inside a localized `di` package inside each respective module.
+    - All dependencies must be scoped and provided via Hilt/Koin modules located inside a localized `di` package inside each respective runtimeModule.
     
     ## Agent Code Generation and Refactoring Constraints
-    - BEFORE writing or updating any file, explicitly state which module (`:app`, `:feature:beam`, etc.) and layer (`data`, `domain`, `ui`) the target file belongs to.
-    - If creating a calculation engine for concrete or steel, it MUST be placed inside the `domain/model/` or `domain/usecase/` path of the respective feature module.
-    - Reject any user requests or autocomplete suggestions that attempt to add a feature-specific UI component into the core `:app` module.
+    - BEFORE writing or updating any file, explicitly state which runtimeModule (`:app`, `:feature:beam`, etc.) and layer (`data`, `domain`, `ui`) the target file belongs to.
+    - If creating a calculation engine for concrete or steel, it MUST be placed inside the `domain/model/` or `domain/usecase/` path of the respective feature runtimeModule.
+    - Reject any user requests or autocomplete suggestions that attempt to add a feature-specific UI component into the core `:app` runtimeModule.
 
 ### 4.2 Use Cases / Interactors
   - Encapsulate business logic in use case classes (optional but recommended)
@@ -89,12 +89,12 @@ When Continue generates code, it MUST adhere to these rules:
   - Live in core/domain or feature/.../domain
 
 ### 4.3 ViewModels
-  - Live in presentation package of feature module or core/ui for shared UI
+  - Live in presentation package of feature runtimeModule or core/ui for shared UI
   - Do not directly reference Android framework classes (avoid Context, Activity). Use AndroidViewModel only when absolutely necessary.
   - Expose StateFlow or Compose State
 
 ### 4.4 Dependency Injection
-  - Use Dagger Hilt modules in each module's di package
+  - Use Dagger Hilt modules in each runtimeModule's di package
   - Module names: NetworkModule, DatabaseModule, RepositoryModule
   - Use @Module, @InstallIn with appropriate components
 
@@ -124,7 +124,7 @@ When Continue generates code, it MUST adhere to these rules:
    Entity (Room)	                XyzEntity	                            BeamCalculationEntity
    DTO (network)	                XyzDto	                                AiscSectionDto
    Mapper	                        XyzMapper (object)	                    BeamMapper
-   DI module	                    XyzModule	                            DatabaseModule
+   DI runtimeModule	                    XyzModule	                            DatabaseModule
 
 ## 6. Prohibited Patterns
     ❌ Direct Room DAO access from ViewModel (use Repository)
@@ -136,9 +136,9 @@ When Continue generates code, it MUST adhere to these rules:
 
 ## 7. Continue-Specific Workflow Rules
     When Continue is asked to:
-        - Refactor a file: Always check if the file belongs in app and suggest moving it to the correct module first.
-        - Generate a new feature: Create a new module under feature/ with proper build.gradle.kts dependencies (see template below).
-        - Fix a compilation error: Verify module dependencies before suggesting code changes.
+        - Refactor a file: Always check if the file belongs in app and suggest moving it to the correct runtimeModule first.
+        - Generate a new feature: Create a new runtimeModule under feature/ with proper build.gradle.kts dependencies (see template below).
+        - Fix a compilation error: Verify runtimeModule dependencies before suggesting code changes.
         - Add a repository: Create interface in core/domain and implementation in core/data.
         - Add a database table: Create entity in core/data/persistence/room/entity, DAO in core/data/persistence/room/dao, and update AppDatabase and migrations.
 
@@ -165,4 +165,4 @@ When Continue generates code, it MUST adhere to these rules:
     - This rule file is located at '.continue/rules/'. Continue should read this file on every session and apply its contents as system instructions for code generation and refactoring tasks.
     - This file shall be used in conjunction with @ARCHITECTURE_CONTEXT.md.  
     - If there are any conflicts between these two files, the conflict should be flagged for updating.
-    - If there are any conflicts between these two files, this file 'multi-module-rules.md' shall govern.
+    - If there are any conflicts between these two files, this file 'multi-runtimeModule-rules.md' shall govern.

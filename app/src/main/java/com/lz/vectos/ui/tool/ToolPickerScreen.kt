@@ -21,8 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.lz.domain.calculation.CalculationContext
-import com.lz.domain.plugin.ModuleAction
-import com.lz.domain.plugin.ToolPickerItem
+import com.lz.domain.module.ModuleAction
+import com.lz.domain.module.ToolPickerItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

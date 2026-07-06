@@ -1,6 +1,6 @@
 package com.lz.vectos.ui.tool
 
-import com.lz.domain.plugin.ToolPickerItem
+import com.lz.domain.module.ToolPickerItem
 
 fun buildStatusText(
     item: ToolPickerItem

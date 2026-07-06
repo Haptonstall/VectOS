@@ -1,8 +1,7 @@
 package com.lz.vectos.plugin
 
-import com.lz.domain.plugin.ModuleLauncher
-import com.lz.domain.plugin.PluginProvider
-import com.lz.domain.plugin.RegisteredModuleRepository
+import com.lz.domain.module.ModuleLauncher
+import com.lz.domain.module.RegisteredModuleRepository
 
 class ProductionModuleLauncher(
     private val repository:

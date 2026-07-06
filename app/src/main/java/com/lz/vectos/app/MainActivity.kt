@@ -11,14 +11,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.lz.vectos.presentation.BeamViewModel
 import com.lz.vectos.presentation.CalculationContext
 import com.lz.vectos.presentation.ProjectViewModel
 import com.lz.vectos.presentation.SettingsViewModel
 import com.lz.vectos.ui.HomeScreen
 import com.lz.vectos.ui.SettingsScreen
-import com.lz.vectos.ui.beam.BeamCalculatorScreen
-import com.lz.vectos.ui.calculator.CalculatorRoute
 import com.lz.vectos.ui.navigation.Screen
 import com.lz.vectos.ui.project.NewProjectScreen
 import com.lz.vectos.ui.project.ProjectLibraryScreen
@@ -50,13 +47,11 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             VectOSTheme(darkTheme = false) {
-                // ViewModels are provided by Hilt — no manual factory construction needed.
-                // Hilt resolves all constructor dependencies declared in DatabaseModule.
                 val projectViewModel: ProjectViewModel = hiltViewModel()
-                val beamViewModel: BeamViewModel       = hiltViewModel()
                 val settingsViewModel: SettingsViewModel = hiltViewModel()
 
                 val navController = rememberNavController()
+                val navigationRegistry: NavigationRegistry = hiltViewModel<MainViewModel>().navigationRegistry
 
                 NavHost(
                     navController    = navController,

@@ -92,8 +92,8 @@ The following are accepted states of the current development:
 ## 10. Forward Step Anchors
 *   **32:** Project settings, methodology refinement, and global units logic.
 *   **33:** Implementation of the Continuous Beam Solver.
-*   **34:** Column design module.
-*   **35:** Frame analysis module.
+*   **34:** Column design runtimeModule.
+*   **35:** Frame analysis runtimeModule.
 
 ## 11. Edit Protocol
 *   New implementation steps should be appended to the history.
@@ -141,7 +141,7 @@ Responsibilities:
 * Global dependency injection wiring
 * Theme initialization
 
-The `:app` module must not contain engineering calculation logic.
+The `:app` runtimeModule must not contain engineering calculation logic.
 
 ---
 
@@ -212,7 +212,7 @@ Responsibilities:
 
 ### `:core:licensing`
 
-Licensing, subscriptions, entitlement verification, and module access control.
+Licensing, subscriptions, entitlement verification, and runtimeModule access control.
 
 Responsibilities:
 
@@ -225,7 +225,7 @@ Responsibilities:
 
 ### `:core:modules`
 
-Dynamic module registry and feature discovery system.
+Dynamic runtimeModule registry and feature discovery system.
 
 Responsibilities:
 
@@ -299,7 +299,7 @@ Feature modules must depend only on shared/core abstractions and must not direct
 
 ### `:feature:beam`
 
-Beam analysis and design module.
+Beam analysis and design runtimeModule.
 
 Responsibilities:
 
@@ -315,7 +315,7 @@ Responsibilities:
 
 ### `:feature:column`
 
-Column analysis and design module.
+Column analysis and design runtimeModule.
 
 Responsibilities:
 
@@ -329,7 +329,7 @@ Responsibilities:
 
 ### `:feature:pole`
 
-Pole analysis and design module.
+Pole analysis and design runtimeModule.
 
 Responsibilities:
 
@@ -344,7 +344,7 @@ Responsibilities:
 
 ### `:feature:foundation`
 
-Foundation analysis and design module.
+Foundation analysis and design runtimeModule.
 
 Responsibilities:
 
@@ -387,7 +387,7 @@ Engineering modules may be:
 
 Licensing state must remain separate from installation state.
 
-The UI/navigation system must dynamically discover installed modules through the module registry rather than hardcoded navigation entries.
+The UI/navigation system must dynamically discover installed modules through the runtimeModule registry rather than hardcoded navigation entries.
 
 Unavailable modules should not appear in normal workflow navigation unless explicitly surfaced through a marketplace or upgrade interface.
 
@@ -433,7 +433,7 @@ To preserve the baseline architecture and prevent regression:
 - `MainActivity` should remain orchestration-only: app theme, navigation host, dependency wiring, and startup sequences.
 - Input domain models may live under `domain` or `ui.input` depending on intent; avoid a generic `input` package if it mixes domain and UI concerns.
 - Feature names should guide directories: `ui.project`, `ui.beam`, `ui.tool`, not broad directories like `ui/widgets` unless truly shared.
-- Any new top-level package outside `app/src/main/java/com/lz/vectos/` must be intentionally added as a Gradle module and referenced in `settings.gradle.kts`.
+- Any new top-level package outside `app/src/main/java/com/lz/vectos/` must be intentionally added as a Gradle runtimeModule and referenced in `settings.gradle.kts`.
 - Before deleting or moving files, compare duplicate content carefully and preserve the more complete version.
 
 ## 15. Duplicate-path caution
@@ -442,13 +442,13 @@ There are currently files outside the canonical app source tree, notably:
 - `application/repository/SettingsRepository.kt`
 - `domain/structural/ServiceabilityInterpretationService.kt`
 
-These are legacy files outside the module structure. They must be merged into `:core:data` and `:shared:structural` respectively, then deleted from the root.
+These are legacy files outside the runtimeModule structure. They must be merged into `:core:data` and `:shared:structural` respectively, then deleted from the root.
 
-- `application/repository/SettingsRepository.kt` currently has a larger interface surface than the app module copy.
-- `domain/structural/ServiceabilityInterpretationService.kt` is identical to the app module copy.
+- `application/repository/SettingsRepository.kt` currently has a larger interface surface than the app runtimeModule copy.
+- `domain/structural/ServiceabilityInterpretationService.kt` is identical to the app runtimeModule copy.
 - `persistence/room/entity` and `ui/beam` at the repository root are empty directories.
 
-Do not remove these files automatically. Confirm whether the root-level files are intended to be migrated into the app module, kept as in-progress work, or discarded after a deliberate merge.
+Do not remove these files automatically. Confirm whether the root-level files are intended to be migrated into the app runtimeModule, kept as in-progress work, or discarded after a deliberate merge.
 
 ## 16. Numerical Solver Governance
 

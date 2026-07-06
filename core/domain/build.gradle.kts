@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.lz.domain"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24
@@ -15,16 +15,13 @@ android {
         consumerProguardFiles("consumer-rules.pro")
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_19
+        targetCompatibility = JavaVersion.VERSION_19
     }
-    kotlinOptions {
-        jvmTarget = "11"
-    }
-
 }
 
 dependencies {
+    implementation(libs.androidx.navigation.common.ktx)
     implementation(libs.kotlinx.serialization.json)
     implementation(project(":core:model"))
     api(libs.kotlinx.coroutines.core)

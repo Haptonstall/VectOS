@@ -1,6 +1,6 @@
 package com.lz.vectos.plugin
 
-import com.lz.domain.plugin.*
+import com.lz.domain.module.*
 
 class LocalRegisteredModuleRepository :
     RegisteredModuleRepository {

@@ -1,9 +1,9 @@
 package com.lz.beam.plugin
 
-import com.lz.domain.plugin.CalculatorDestination
-import com.lz.domain.plugin.PluginEntryPoint
+import com.lz.domain.module.CalculatorDestination
+import com.lz.domain.module.ModuleEntryPoint
 
-class BeamEntryPoint : PluginEntryPoint {
+class BeamEntryPoint : ModuleEntryPoint {
 
     override val destination =
         CalculatorDestination(

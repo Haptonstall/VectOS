@@ -1,6 +1,6 @@
 package com.lz.vectos.plugin
 
-import com.lz.domain.plugin.SubscriptionRepository
+import com.lz.domain.module.SubscriptionRepository
 
 class LocalSubscriptionRepository :
     SubscriptionRepository {

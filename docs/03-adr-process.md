@@ -23,7 +23,7 @@ ADRs ensure future developers understand:
 /docs/architecture/adrs/
 
 ADR-001-platform-language.md
-ADR-002-module-sdk.md
+ADR-002-runtimeModule-sdk.md
 ADR-003-service-registry.md
 ADR-004-tool-contracts.md
 ADR-005-cpp-engine-strategy.md
@@ -38,7 +38,7 @@ An ADR shall be created when introducing:
 * New architectural patterns
 * New persistence strategies
 * New communication mechanisms
-* New module systems
+* New runtimeModule systems
 * New engine integrations
 * Major dependency changes
 * Exceptions to the Dependency Rule Charter

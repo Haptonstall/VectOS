@@ -1,9 +1,9 @@
 package com.lz.vectos.plugin
 
-import com.lz.domain.plugin.ModuleDescriptor
-import com.lz.domain.plugin.ModuleRegistry
-import com.lz.domain.plugin.RegisteredModule
-import com.lz.domain.plugin.RegisteredModuleRepository
+import com.lz.domain.module.ModuleDescriptor
+import com.lz.domain.module.ModuleRegistry
+import com.lz.domain.module.RegisteredModule
+import com.lz.domain.module.RegisteredModuleRepository
 import kotlinx.coroutines.runBlocking
 
 class DefaultModuleRegistry(

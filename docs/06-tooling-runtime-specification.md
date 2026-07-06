@@ -8,7 +8,7 @@
 
 # 1. Purpose
 
-This document defines the runtime system responsible for executing tools in VectOS.
+This document defines the runtimeEnvironment system responsible for executing tools in VectOS.
 
 It standardizes how:
 
@@ -33,7 +33,7 @@ A Tool is:
 * A named capability
 * With a defined input schema
 * Producing a defined output schema
-* Executed through a runtime system
+* Executed through a runtimeEnvironment system
 
 ---
 
@@ -369,7 +369,7 @@ Composition must occur at the Tool Layer, NOT inside engines.
 
 # 23. Runtime Extensibility
 
-The runtime must support:
+The runtimeEnvironment must support:
 
 * Plugin tools
 * External tool registration

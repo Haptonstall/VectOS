@@ -77,7 +77,7 @@ Modules define compatibility ranges:
 
 ```json id="v3b2"
 {
-  "module": "beam",
+  "runtimeModule": "beam",
   "compatibleContracts": ">=1.0 <2.0"
 }
 ```

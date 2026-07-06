@@ -1,8 +1,8 @@
 package com.lz.vectos.plugin
 
-import com.lz.domain.plugin.InstallResult
-import com.lz.domain.plugin.ModuleInstaller
-import com.lz.domain.plugin.RegisteredModuleRepository
+import com.lz.domain.module.InstallResult
+import com.lz.domain.module.ModuleInstaller
+import com.lz.domain.module.RegisteredModuleRepository
 
 class DynamicFeatureModuleInstaller(
     private val registeredModules:

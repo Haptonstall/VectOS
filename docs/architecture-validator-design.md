@@ -55,7 +55,7 @@ CI / IDE Feedback
 
 The Architecture Validator must:
 
-* Parse module dependencies
+* Parse runtimeModule dependencies
 * Build a directed dependency graph
 * Apply rule set from architecture definition
 * Detect violations
@@ -229,7 +229,7 @@ Move logic into BeamAnalysisEngine contract layer
 
 # 14. Module Classification System
 
-Each module must be classified:
+Each runtimeModule must be classified:
 
 ```kotlin id="av13"
 enum class ModuleType {
@@ -295,7 +295,7 @@ Future extensions:
 
 * distributed graph validation
 * cloud-based architecture enforcement
-* marketplace module validation
+* marketplace runtimeModule validation
 * AI-assisted rule generation
 
 ---

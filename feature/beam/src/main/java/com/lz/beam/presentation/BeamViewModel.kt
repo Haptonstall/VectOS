@@ -6,8 +6,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.compose.runtime.MutableState
-import com.lz.beam.model.Assumptions
 import com.lz.beam.model.BeamCalculation
 import com.lz.beam.model.BeamCalculationResults
 import com.lz.data.repository.IStructuralCodeRepository
@@ -19,11 +17,9 @@ import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.LoadCombinationSet
 import com.lz.model.regulatory.codes.BuildingCode
 import com.lz.model.structural.BracingInput
-import com.lz.model.structural.BracingMode
 import com.lz.model.structural.BracingResolver
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.DiscreteBracePoint
-import com.lz.model.structural.Flange
 import com.lz.model.structural.Load
 import com.lz.model.structural.LoadCase
 import com.lz.model.structural.LoadDirection
@@ -40,15 +36,10 @@ import com.lz.model.structural.StrengthDesignResult
 import com.lz.model.structural.StructuralMember
 import com.lz.model.structural.StructuralNode
 import com.lz.model.structural.NodeBoundaryCondition
-import com.lz.model.units.ElasticModulus
 import com.lz.model.units.ForcePerLength
 import com.lz.model.units.Length
 import com.lz.model.units.MomentOfInertia
 import com.lz.model.units.UnitSystem
-import com.lz.model.units.inInches
-import com.lz.model.units.inLbIn
-import com.lz.model.units.inPoundsForce
-import com.lz.model.units.inPsi
 import com.lz.model.units.inches
 import com.lz.model.units.psiModulus
 import com.lz.solver.capacity.CapacityCalculator
@@ -65,11 +56,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
-import java.util.Locale
 import java.util.UUID
 import kotlin.collections.plus
-import kotlin.math.abs
-import kotlin.math.max
 
 /**
  * Modernized ViewModel for Beam Analysis & Design.

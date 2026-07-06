@@ -1,12 +1,12 @@
 package com.lz.vectos.di
 
-import com.lz.domain.plugin.ModuleCatalogRepository
-import com.lz.domain.plugin.ModuleInstaller
-import com.lz.domain.plugin.ModuleLauncher
-import com.lz.domain.plugin.ModuleRegistry
-import com.lz.domain.plugin.PurchaseManager
-import com.lz.domain.plugin.RegisteredModuleRepository
-import com.lz.domain.plugin.SubscriptionRepository
+import com.lz.domain.module.ModuleCatalogRepository
+import com.lz.domain.module.ModuleInstaller
+import com.lz.domain.module.ModuleLauncher
+import com.lz.domain.module.ModuleRegistry
+import com.lz.domain.module.PurchaseManager
+import com.lz.domain.module.RegisteredModuleRepository
+import com.lz.domain.module.SubscriptionRepository
 import com.lz.vectos.plugin.DefaultModuleRegistry
 import com.lz.vectos.plugin.DynamicFeatureModuleInstaller
 import com.lz.vectos.plugin.GooglePlayPurchaseManager

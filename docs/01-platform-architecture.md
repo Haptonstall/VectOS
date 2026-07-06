@@ -643,11 +643,11 @@ Results returned through standardized contracts.
 
 # 15. Marketplace Architecture
 
-Every module shall publish:
+Every runtimeModule shall publish:
 
 ```json
 {
-  "id": "beam-module",
+  "id": "beam-runtimeModule",
   "version": "1.0.0",
   "tools": [
     "beam-analysis",
@@ -766,7 +766,7 @@ Contracts
 Best Available Engine
 ```
 
-No module changes required.
+No runtimeModule changes required.
 
 No UI changes required.
 

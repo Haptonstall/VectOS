@@ -18,7 +18,7 @@ Every calculation produced by VectOS is designed to be fully traceable. Each res
 
 ## 2. Subscription Module Model
 
-The application separates **core infrastructure** from **calculation features** at the module boundary level. This separation is intentional and structural — it is enforced by the Gradle module graph, not just by convention.
+The application separates **core infrastructure** from **calculation features** at the runtimeModule boundary level. This separation is intentional and structural — it is enforced by the Gradle runtimeModule graph, not just by convention.
 
 ### Core (always installed)
 
@@ -34,11 +34,11 @@ The core application provides:
 - Calculation history and project record management
 - Report export infrastructure
 
-A user without any paid module can use all of these features. They can configure a project fully but cannot perform structural member capacity calculations.
+A user without any paid runtimeModule can use all of these features. They can configure a project fully but cannot perform structural member capacity calculations.
 
 ### Calculation Modules (subscription gated)
 
-Each calculation module is a self-contained Android library module under `feature/`. A module provides:
+Each calculation runtimeModule is a self-contained Android library runtimeModule under `feature/`. A runtimeModule provides:
 
 - Its own Room database for calculation payload storage
 - Its own ViewModel and UI screens
@@ -57,7 +57,7 @@ Additional modules (connection design, wall design, foundation design) follow th
 
 ### The Subscription Boundary
 
-The subscription check occurs at the UI navigation layer in the `app` module. When a user taps a tool in the Tool Picker, the app checks whether the corresponding module is licensed before navigating to it. The feature modules themselves contain no licensing logic — they assume they are authorized to run if they are invoked. This keeps the feature modules clean and testable in isolation.
+The subscription check occurs at the UI navigation layer in the `app` runtimeModule. When a user taps a tool in the Tool Picker, the app checks whether the corresponding runtimeModule is licensed before navigating to it. The feature modules themselves contain no licensing logic — they assume they are authorized to run if they are invoked. This keeps the feature modules clean and testable in isolation.
 
 ---
 
@@ -67,22 +67,22 @@ The subscription check occurs at the UI navigation layer in the `app` module. Wh
 
 ```
 VectOS/
-├── app/                    Android application module — entry point, navigation, DI wiring
+├── app/                    Android application runtimeModule — entry point, navigation, DI wiring
 ├── core/ui/                Shared Compose design system — theme, reusable components
 ├── core/domain/            Shared domain contracts — repository interfaces, core entities
 ├── core/model/             Pure data models — no Android deps, no logic, no DB
 ├── core/solver/            Calculation engines — pure Kotlin, no Android deps
 ├── core/data/              Room persistence — DAOs, entities, seeders, mappers, repositories
-├── feature/beam/           Beam calculation module — self-contained feature
-├── feature/column/         Column calculation module — planned
-└── feature/pole/           Pole calculation module — planned
+├── feature/beam/           Beam calculation runtimeModule — self-contained feature
+├── feature/column/         Column calculation runtimeModule — planned
+└── feature/pole/           Pole calculation runtimeModule — planned
 ```
 
-> Note: Gradle module paths use colon notation — `:core:model`, `:core:data`, `:feature:beam`, etc.
+> Note: Gradle runtimeModule paths use colon notation — `:core:model`, `:core:data`, `:feature:beam`, etc.
 
 ### Dependency Graph
 
-Dependencies flow strictly inward. No module may depend on a module further out than itself.
+Dependencies flow strictly inward. No runtimeModule may depend on a runtimeModule further out than itself.
 
 ```
 app
@@ -117,12 +117,12 @@ core:model
 
 **Absolute rules enforced by this graph:**
 
-- `core:model` has zero dependencies on any other project module
+- `core:model` has zero dependencies on any other project runtimeModule
 - `core:solver` has zero Android dependencies — it is pure Kotlin
 - `core:domain` has zero Android dependencies — it is pure Kotlin
-- No feature module depends on another feature module
-- No feature module depends on `app`
-- `core:data` does not depend on any feature module
+- No feature runtimeModule depends on another feature runtimeModule
+- No feature runtimeModule depends on `app`
+- `core:data` does not depend on any feature runtimeModule
 
 ---
 
@@ -290,7 +290,7 @@ core/solver/src/main/java/com/lz/solver/
 
 **Package root:** `com.lz.data`
 
-Owns `AppDatabase`, all shared Room entities, DAOs, seeders, mappers, and repository implementations. Must not depend on any feature module.
+Owns `AppDatabase`, all shared Room entities, DAOs, seeders, mappers, and repository implementations. Must not depend on any feature runtimeModule.
 
 ```
 core/data/src/main/java/com/lz/data/
@@ -560,7 +560,7 @@ Every calculation result carries a complete provenance record:
 
 ## 8. Pending Work
 
-### Immediate (before next feature module)
+### Immediate (before next feature runtimeModule)
 
 | Item | Action |
 |---|---|

@@ -15,8 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.lz.domain.plugin.ModuleAction
-import com.lz.domain.plugin.ToolPickerItem
+import com.lz.domain.module.ModuleAction
+import com.lz.domain.module.ToolPickerItem
 
 @Composable
 fun ToolCard(

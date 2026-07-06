@@ -8,7 +8,7 @@
 
 # 1. Purpose
 
-This document defines the runtime system for installing, executing, and managing third-party modules in VectOS.
+This document defines the runtimeEnvironment system for installing, executing, and managing third-party modules in VectOS.
 
 The marketplace enables:
 
@@ -23,7 +23,7 @@ The marketplace enables:
 
 Modules are dynamically installable packages.
 
-Each module provides:
+Each runtimeModule provides:
 
 * Tools
 * Services
@@ -43,12 +43,12 @@ Marketplace → Module Registry → Runtime → Tool System
 # 4. Module Installation Flow
 
 ```text id="m2b1"
-1. Download module package
+1. Download runtimeModule package
 2. Verify signature
 3. Validate manifest
 4. Register tools
 5. Register services
-6. Activate module
+6. Activate runtimeModule
 ```
 
 ---
@@ -58,7 +58,7 @@ Marketplace → Module Registry → Runtime → Tool System
 ```kotlin id="m3b2"
 interface ModuleRegistry {
 
-    fun install(module: ModulePackage)
+    fun install(runtimeModule: ModulePackage)
 
     fun uninstall(moduleId: String)
 
@@ -72,7 +72,7 @@ interface ModuleRegistry {
 
 ```json id="m4b3"
 {
-  "id": "beam-module",
+  "id": "beam-runtimeModule",
   "version": "1.0.0",
   "signature": "base64-signature",
   "tools": [
@@ -94,7 +94,7 @@ All modules must be:
 
 * Digitally signed
 * Verified before execution
-* Sandboxed at runtime
+* Sandboxed at runtimeEnvironment
 
 ---
 
@@ -124,8 +124,8 @@ Marketplace may support:
 Modules MUST NOT:
 
 * Modify platform core
-* Access other module internals
-* Bypass tool runtime
+* Access other runtimeModule internals
+* Bypass tool runtimeEnvironment
 * Access engines directly
 
 ---
@@ -134,7 +134,7 @@ Modules MUST NOT:
 
 Runtime must support:
 
-* Multiple module versions
+* Multiple runtimeModule versions
 * Backward compatibility
 * Graceful deprecation
 

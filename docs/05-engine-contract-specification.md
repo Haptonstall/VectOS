@@ -41,7 +41,7 @@ Contract Interface
 Engine Implementation
 ```
 
-Engine selection is resolved at runtime via registry.
+Engine selection is resolved at runtimeEnvironment via registry.
 
 ---
 
