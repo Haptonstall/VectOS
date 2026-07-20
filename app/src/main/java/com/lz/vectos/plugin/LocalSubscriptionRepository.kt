@@ -23,7 +23,7 @@ class LocalSubscriptionRepository :
         return licensedModules
     }
 
-    suspend fun grantLicense(
+    override suspend fun grantLicense(
         moduleId: String
     ) {
 

@@ -19,4 +19,6 @@ interface BeamCalculationRepository {
      * Serializes and writes a complete beam configuration back to persistent storage.
      */
     suspend fun saveBeamCalculation(calculation: BeamCalculation)
+
+    suspend fun deleteBeamCalculation(id: UUID)
 }

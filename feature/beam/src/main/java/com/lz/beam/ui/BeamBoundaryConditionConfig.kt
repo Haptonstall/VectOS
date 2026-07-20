@@ -1,10 +1,14 @@
 package com.lz.beam.ui
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChangeHistory
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Square
 import com.lz.ui.boundary.BoundaryConditionPickerConfig
 import com.lz.domain.structural.BoundaryConditionPreset
-import com.lz.domain.structural.ConstraintType
-import com.lz.domain.structural.DegreeOfFreedom
+import com.lz.model.structural.ConstraintType
+import com.lz.model.structural.DegreeOfFreedom
 import com.lz.ui.boundary.BoundaryPresetOption
 import com.lz.ui.boundary.DofEditorConfig
 

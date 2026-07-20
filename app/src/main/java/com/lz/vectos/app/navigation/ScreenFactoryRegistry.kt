@@ -1,6 +1,6 @@
 package com.lz.vectos.app.navigation
 
-import com.lz.runtime.api.NavigationDestination
+import com.lz.runtime.compose.navigation.NavigationDestination
 import java.util.concurrent.ConcurrentHashMap
 
 object ScreenFactoryRegistry {

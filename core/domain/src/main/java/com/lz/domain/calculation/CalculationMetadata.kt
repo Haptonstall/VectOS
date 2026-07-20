@@ -8,6 +8,7 @@ import java.util.UUID
  */
 data class CalculationMetadata(
     val id: UUID,
+    val toolId: String,
     val name: String,
     val createdAt: LocalDateTime
 )

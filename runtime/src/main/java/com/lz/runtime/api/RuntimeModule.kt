@@ -1,7 +1,6 @@
 package com.lz.runtime.api
 
 import com.lz.runtime.api.capabilities.ModuleCapability
-import com.lz.runtime.screen.api.ScreenProvider
 
 /**
  * Base contract implemented by every engineering module.
@@ -35,8 +34,4 @@ interface RuntimeModule {
      */
     fun capabilities(): List<ModuleCapability>
 
-    /**
-     * Screen providers contributed by this RuntimeModule.
-     */
-    fun screenProviders(): List<ScreenProvider>
 }

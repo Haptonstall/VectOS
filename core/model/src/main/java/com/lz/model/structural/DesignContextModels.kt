@@ -29,7 +29,7 @@ enum class IssueSeverity {
 data class ProjectDesignContext(
     // Material standard overrides. If a material key is missing,
     // the engine automatically infers the legally mandated default via the BuildingCode.
-    val steelOverride: AiscEdition? = null,
+    val steelOverride: AiscEdition? = null
     // val concreteOverride: Aci318Edition? = null,
     // val woodOverride: NdsEdition? = null
 ) {

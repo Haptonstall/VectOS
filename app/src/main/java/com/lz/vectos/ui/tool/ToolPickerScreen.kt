@@ -27,7 +27,6 @@ import com.lz.domain.module.ToolPickerItem
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ToolPickerScreen(
-    context: CalculationContext,
     tools: List<ToolPickerItem>,
     onModuleAction: (ModuleAction) -> Unit,
     onBack: () -> Unit
@@ -58,21 +57,6 @@ fun ToolPickerScreen(
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
-
-            val contextLabel = when (context) {
-                is CalculationContext.ProjectContext ->
-                    "Project: ${context.project.name}"
-
-                is CalculationContext.QuickCalcContext ->
-                    "Quick Calculation Mode"
-            }
-
-            Text(
-                text = contextLabel,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(16.dp)
-            )
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(1),

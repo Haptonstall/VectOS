@@ -2,7 +2,7 @@ package com.lz.ui.boundary
 
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import com.lz.domain.structural.NodeBoundaryCondition
+import com.lz.model.structural.NodeBoundaryCondition
 
 @Composable
 fun BoundaryConditionVisualizer(

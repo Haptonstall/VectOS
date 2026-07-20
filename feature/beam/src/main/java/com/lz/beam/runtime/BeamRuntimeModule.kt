@@ -1,10 +1,14 @@
 package com.lz.beam.runtime
 
-import com.lz.runtime.api.*
+import com.lz.runtime.api.RuntimeEnvironment
+import com.lz.runtime.api.RuntimeModule
 import com.lz.runtime.api.capabilities.ModuleCapability
-import com.lz.runtime.screen.api.ScreenProvider
+import com.lz.runtime.compose.api.ComposeRuntimeModule
+import com.lz.runtime.compose.screen.api.ScreenProvider
 
-class BeamRuntimeModule : RuntimeModule {
+class BeamRuntimeModule :
+    RuntimeModule,
+    ComposeRuntimeModule {
 
     override val descriptor =
         BeamDescriptor
@@ -14,9 +18,8 @@ class BeamRuntimeModule : RuntimeModule {
             BeamCalculatorCapability()
         )
 
-    private val screenProviders =
-        listOf(
-            BeamScreenProvider()
+    private val screenProviders = listOf<ScreenProvider>(
+        BeamScreenProvider()
     )
 
     override fun initialize(
@@ -35,9 +38,7 @@ class BeamRuntimeModule : RuntimeModule {
     override fun capabilities(): List<ModuleCapability> =
         capabilities
 
-    override fun screenProviders(): List<ScreenProvider> {
-        return listOf(
-            BeamScreenProvider()
-        )
-    }
+    override fun screenProviders(): List<ScreenProvider> =
+            screenProviders
+
 }

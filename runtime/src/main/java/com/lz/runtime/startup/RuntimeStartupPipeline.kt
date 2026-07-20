@@ -1,47 +1,30 @@
 package com.lz.runtime.startup
 
 import com.lz.runtime.api.RuntimeContext
-import com.lz.runtime.api.RuntimeModuleLoader
+import com.lz.runtime.api.RuntimeModuleLoadFailedEvent
+import com.lz.runtime.api.RuntimeModuleProvider
 import com.lz.runtime.loader.RuntimeModuleInstaller
 
 /**
- * Executes complete Runtime startup.
+ * Coordinates Runtime startup and shutdown.
+ *
+ * Discovery and installation are delegated entirely to RuntimeModuleInstaller
  */
 class RuntimeStartupPipeline(
 
     private val context: RuntimeContext,
-
-    private val loader: RuntimeModuleLoader,
 
     private val installer: RuntimeModuleInstaller
 
 ) {
 
     fun start() {
-
-        loader.initialize(context)
-
-        loader
-            .loadModules()
-            .forEach {
-
-                installer.install(it)
-
-            }
+        installer.initialize(context)
+        installer.installAll()
     }
 
     fun stop() {
-
-        context
-            .runtimeModuleRegistry
-            .modules()
-            .reversed()
-            .forEach {
-
-                installer.uninstall(it)
-
-            }
-
-        loader.shutdown(context)
+        installer.uninstallAll()
+        installer.shutdown(context)
     }
 }

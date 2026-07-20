@@ -599,7 +599,8 @@ fun GeometryTab(viewModel: BeamViewModel) {
         unitSystem = viewModel.unitSystem,
         activeSpanId = viewModel.activeSpanId,
         onSelectSpan = { viewModel.activeSpanId = it },
-        onEditBracing = { viewModel.editingBracingSpanId = it }
+        onEditBracing = { viewModel.editingBracingSpanId = it },
+        spanBracing = viewModel.spanBracingInputs
     )
 
     if (isWoodPickerVisible) {
@@ -778,13 +779,15 @@ fun GeometryConfiguration(
     unitSystem: UnitSystem,
     activeSpanId: UUID?,
     onSelectSpan: (UUID) -> Unit,
-    onEditBracing: (UUID) -> Unit
+    onEditBracing: (UUID) -> Unit,
+    spanBracing: Map<UUID, BracingInput> = emptyMap()
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
         // 1. Span Management
         SpanEditor(
             spans = member.spans,
             activeSpanId = activeSpanId,
+            spanBracing = spanBracing,
             onAddSpan = onAddSpan,
             onRemoveSpan = onRemoveSpan,
             onUpdateSpanLength = onUpdateSpanLength,

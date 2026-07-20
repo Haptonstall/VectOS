@@ -1,8 +1,8 @@
 package com.lz.vectos.app.runtime
 
 import android.content.Context
+import com.lz.common.Version
 import com.lz.runtime.api.RuntimeConfiguration
-import com.lz.runtime.api.model.Version
 
 /**
  * Creates the Runtime configuration used during startup.

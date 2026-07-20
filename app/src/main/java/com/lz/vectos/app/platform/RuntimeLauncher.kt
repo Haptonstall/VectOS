@@ -1,7 +1,7 @@
 package com.lz.vectos.app.platform
 
 import androidx.navigation.NavHostController
-import com.lz.runtime.api.NavigationDestination
+import com.lz.runtime.compose.navigation.NavigationDestination
 
 /**
  * Converts Runtime destinations into

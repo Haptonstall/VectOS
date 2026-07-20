@@ -10,8 +10,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.dp
-import com.lz.beam.ui.drawStructuralJoint
-import com.lz.beam.ui.drawStructuralSupport
 import com.lz.model.structural.Load
 import com.lz.model.structural.StructuralMember
 import com.lz.model.units.inInches
@@ -22,6 +20,7 @@ fun BeamDiagram(
     loads: List<Load>,
     modifier: Modifier = Modifier
 ) {
+
     val beamColor = MaterialTheme.colorScheme.primary
     val supportColor = MaterialTheme.colorScheme.secondary
     val loadColor = MaterialTheme.colorScheme.error
@@ -32,28 +31,69 @@ fun BeamDiagram(
             .height(120.dp)
             .padding(horizontal = 32.dp, vertical = 16.dp)
     ) {
+
         val width = size.width
         val height = size.height
         val midY = height / 2f + 20f
-        val totalLengthInches = member.spans.sumOf { it.length.inInches }
-        if (totalLengthInches <= 0) return@Canvas
+
+        val totalLengthInches =
+            member.spans.sumOf { it.length.inInches }
+
+        if (totalLengthInches <= 0.0) return@Canvas
 
         val supportSize = 30f
 
-        // 1. Draw Beam Line and Supports
         var currentXInches = 0.0
 
-        // Initial joint
-        drawStructuralJoint(0f, midY, null, supportColor, false)
-        member.spans.firstOrNull()?.let { firstSpan ->
-            drawStructuralSupport(firstSpan.startSupport, 0f, midY, supportSize, supportColor)
-        }
+        member.spans.forEachIndexed { index, span ->
 
-        member.spans.forEach { span ->
-            val startX = (currentXInches / totalLengthInches).toFloat() * width
+            val startNode =
+                member.nodes.firstOrNull {
+                    it.id == span.startNodeId
+                }
+
+            val endNode =
+                member.nodes.firstOrNull {
+                    it.id == span.endNodeId
+                }
+
+            val startX =
+                (currentXInches / totalLengthInches).toFloat() * width
+
             currentXInches += span.length.inInches
-            val endX = (currentXInches / totalLengthInches).toFloat() * width
 
+            val endX =
+                (currentXInches / totalLengthInches).toFloat() * width
+
+            //
+            // Start node
+            //
+            if (index == 0) {
+
+                drawStructuralJoint(
+                    x = startX,
+                    y = midY,
+                    label = null,
+                    color = supportColor,
+                    isVisible = false
+                )
+
+                startNode?.let {
+
+                    drawStructuralSupport(
+                        condition = it.boundaryCondition,
+                        x = startX,
+                        y = midY,
+                        size = supportSize,
+                        color = supportColor
+                    )
+
+                }
+            }
+
+            //
+            // Beam span
+            //
             drawLine(
                 color = beamColor,
                 start = Offset(startX, midY),
@@ -61,77 +101,155 @@ fun BeamDiagram(
                 strokeWidth = 8f
             )
 
-            drawStructuralJoint(endX, midY, null, supportColor, false)
-            drawStructuralSupport(span.endSupport, endX, midY, supportSize, supportColor)
+            //
+            // End node
+            //
+            drawStructuralJoint(
+                x = endX,
+                y = midY,
+                label = null,
+                color = supportColor,
+                isVisible = false
+            )
+
+            endNode?.let {
+
+                drawStructuralSupport(
+                    condition = it.boundaryCondition,
+                    x = endX,
+                    y = midY,
+                    size = supportSize,
+                    color = supportColor
+                )
+
+            }
         }
 
-        // 2. Draw Loads
+        //
+        // Draw loads
+        //
         loads.forEach { load ->
-            val span = member.spans.find { it.id == load.spanId } ?: return@forEach
-            val spanIdx = member.spans.indexOf(span)
-            val accumulatedInches = member.spans.take(spanIdx).sumOf { it.length.inInches }
 
-            val spanStartX = (accumulatedInches / totalLengthInches).toFloat() * width
-            val spanW = (span.length.inInches / totalLengthInches).toFloat() * width
+            val span =
+                member.spans.find { it.id == load.spanId }
+                    ?: return@forEach
+
+            val spanIndex =
+                member.spans.indexOf(span)
+
+            val accumulatedInches =
+                member.spans
+                    .take(spanIndex)
+                    .sumOf { it.length.inInches }
+
+            val spanStartX =
+                (accumulatedInches / totalLengthInches)
+                    .toFloat() * width
+
+            val spanWidth =
+                (span.length.inInches / totalLengthInches)
+                    .toFloat() * width
 
             when (load) {
+
                 is Load.PointLoad -> {
+
                     val x =
-                        spanStartX + (load.locationStart.inInches / span.length.inInches).toFloat() * spanW
-                    val arrowLen = 50f
+                        spanStartX +
+                                (load.locationStart.inInches /
+                                        span.length.inInches).toFloat() *
+                                spanWidth
+
+                    val arrowLength = 50f
                     val headSize = 15f
 
                     drawLine(
                         color = loadColor,
-                        start = Offset(x, midY - arrowLen),
+                        start = Offset(x, midY - arrowLength),
                         end = Offset(x, midY - 4f),
                         strokeWidth = 6f
                     )
-                    val headPath = Path().apply {
-                        moveTo(x, midY - 4f)
-                        lineTo(x - headSize / 2, midY - headSize - 4f)
-                        lineTo(x + headSize / 2, midY - headSize - 4f)
-                        close()
-                    }
-                    drawPath(path = headPath, color = loadColor)
+
+                    drawPath(
+
+                        path = Path().apply {
+
+                            moveTo(x, midY - 4f)
+                            lineTo(x - headSize / 2, midY - headSize - 4f)
+                            lineTo(x + headSize / 2, midY - headSize - 4f)
+                            close()
+
+                        },
+
+                        color = loadColor
+
+                    )
                 }
 
                 is Load.UniformDistributedLoad -> {
+
                     val x1 =
-                        spanStartX + (load.locationStart.inInches / span.length.inInches).toFloat() * spanW
+                        spanStartX +
+                                (load.locationStart.inInches /
+                                        span.length.inInches).toFloat() *
+                                spanWidth
+
                     val x2 =
-                        spanStartX + (load.locationEnd.inInches / span.length.inInches).toFloat() * spanW
-                    val arrowLen = 30f
+                        spanStartX +
+                                (load.locationEnd.inInches /
+                                        span.length.inInches).toFloat() *
+                                spanWidth
+
+                    val arrowLength = 30f
                     val headSize = 8f
-                    val arrowCount = ((x2 - x1) / 20f).toInt().coerceIn(2, 10)
-                    val spacing = if (arrowCount > 1) (x2 - x1) / (arrowCount - 1) else 0f
+
+                    val arrowCount =
+                        ((x2 - x1) / 20f)
+                            .toInt()
+                            .coerceIn(2, 10)
+
+                    val spacing =
+                        if (arrowCount > 1)
+                            (x2 - x1) / (arrowCount - 1)
+                        else
+                            0f
 
                     drawLine(
                         color = loadColor,
-                        start = Offset(x1, midY - arrowLen),
-                        end = Offset(x2, midY - arrowLen),
+                        start = Offset(x1, midY - arrowLength),
+                        end = Offset(x2, midY - arrowLength),
                         strokeWidth = 2f
                     )
 
-                    for (i in 0 until arrowCount) {
+                    repeat(arrowCount) { i ->
+
                         val x = x1 + i * spacing
+
                         drawLine(
                             color = loadColor,
-                            start = Offset(x, midY - arrowLen),
+                            start = Offset(x, midY - arrowLength),
                             end = Offset(x, midY - 2f),
                             strokeWidth = 3f
                         )
-                        val headPath = Path().apply {
-                            moveTo(x, midY - 2f)
-                            lineTo(x - headSize / 2, midY - headSize - 2f)
-                            lineTo(x + headSize / 2, midY - headSize - 2f)
-                            close()
-                        }
-                        drawPath(path = headPath, color = loadColor)
+
+                        drawPath(
+
+                            path = Path().apply {
+
+                                moveTo(x, midY - 2f)
+                                lineTo(x - headSize / 2, midY - headSize - 2f)
+                                lineTo(x + headSize / 2, midY - headSize - 2f)
+                                close()
+
+                            },
+
+                            color = loadColor
+
+                        )
                     }
                 }
 
-                else -> {}
+                else -> Unit
             }
         }
     }

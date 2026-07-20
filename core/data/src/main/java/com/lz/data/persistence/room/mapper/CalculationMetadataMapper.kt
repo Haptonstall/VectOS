@@ -8,6 +8,7 @@ import java.time.ZoneOffset
 
 fun CalculationRoomEntity.toMetadataDomain(): CalculationMetadata = CalculationMetadata(
     id = id,
+    toolId = toolId,
     name = name,
     createdAt = LocalDateTime.ofInstant(
         Instant.ofEpochSecond(createdAtEpoch),

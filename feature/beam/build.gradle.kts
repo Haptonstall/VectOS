@@ -27,6 +27,12 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_19)
+    }
+}
+
 dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.compose.foundation.layout)
@@ -42,7 +48,9 @@ dependencies {
     implementation(project(":core:solver"))
     implementation(project(":core:data"))
     implementation(project(":core:ui"))
+    implementation(project(":core:common"))
     implementation(project(":runtime"))
+    implementation(project(":runtime-compose"))
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

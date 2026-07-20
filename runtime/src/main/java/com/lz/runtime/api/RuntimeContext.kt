@@ -1,7 +1,5 @@
 package com.lz.runtime.api
 
-import com.lz.runtime.screen.api.ScreenRegistry
-
 /**
  * Shared context available to every RuntimeEnvironment service.
  *
@@ -42,18 +40,8 @@ interface RuntimeContext {
     val capabilityRegistry: CapabilityRegistry
 
     /**
-     * Navigation registry.
-     */
-    val navigationRegistry: NavigationRegistry
-
-    /**
      * RuntimeEnvironment event bus.
      */
     val eventBus: EventBus
-
-    /**
-     * Screen registry.
-     */
-    val screenRegistry: ScreenRegistry
 
 }

@@ -20,6 +20,12 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_19)
+    }
+}
+
 dependencies {
     implementation(project(":core:model"))
     implementation(libs.kotlinx.serialization.json)

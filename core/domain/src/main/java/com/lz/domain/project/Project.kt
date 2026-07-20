@@ -1,9 +1,7 @@
 package com.lz.domain.project
 
-import com.lz.model.regulatory.AiscEdition
 import com.lz.model.regulatory.PrimaryBuildingCode
 import com.lz.model.regulatory.asce7.RiskCategory
-import com.lz.model.regulatory.codes.Standard
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.ProjectDesignContext
 import com.lz.model.units.UnitSystem
@@ -24,8 +22,7 @@ data class ProjectSettings(
     val unitSystem: UnitSystem = UnitSystem.IMPERIAL,
     val riskCategory: RiskCategory = RiskCategory.II,
     val isWindDesignEnabled: Boolean = true,
-    val isSeismicDesignEnabled: Boolean = true,
-    val steelStandardOverride: AiscEdition? = AiscEdition.AISC_360_22
+    val isSeismicDesignEnabled: Boolean = true
 )
 
 /**

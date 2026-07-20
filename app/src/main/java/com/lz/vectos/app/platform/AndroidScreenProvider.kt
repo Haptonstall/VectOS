@@ -1,8 +1,8 @@
 package com.lz.vectos.app.platform
 
 import androidx.compose.runtime.Composable
-import com.lz.runtime.api.NavigationDestination
-import com.lz.runtime.screen.api.ScreenProvider
+import com.lz.runtime.compose.navigation.NavigationDestination
+import com.lz.runtime.compose.screen.api.ScreenProvider
 
 /**
  * Android implementation of a Runtime ScreenProvider.
@@ -17,7 +17,7 @@ interface AndroidScreenProvider :
      * the requested destination.
      */
     @Composable
-    fun Content(
+    override fun Content(
 
         destination: NavigationDestination
 

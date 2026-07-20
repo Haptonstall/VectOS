@@ -1,5 +1,7 @@
 package com.lz.runtime.api
 
+import com.lz.runtime.api.capabilities.ModuleCapability
+
 /**
  * Registry of capabilities contributed by all loaded modules.
  */

@@ -21,6 +21,12 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_19)
+    }
+}
+
 dependencies {
     implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)

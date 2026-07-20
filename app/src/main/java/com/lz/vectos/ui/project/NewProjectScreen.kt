@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,7 +35,7 @@ fun NewProjectScreen(
     onProjectCreated: () -> Unit,
     onCancel: () -> Unit
 ) {
-    val buildingCodes by viewModel.buildingCodes.collectAsState()
+    val buildingCodes by viewModel.buildingCodes.collectAsState(initial = emptyList())
     
     var name by remember { mutableStateOf(projectToEdit?.name ?: "") }
     var projectNumber by remember { mutableStateOf(projectToEdit?.projectNumber ?: "") }
@@ -60,7 +61,7 @@ fun NewProjectScreen(
             selectedCode = if (projectToEdit != null) {
                 buildingCodes.find { it.id == projectToEdit.settings.buildingCode.name }
             } else {
-                buildingCodes.find { it.id == "IBC_2021" } ?: buildingCodes.first()
+                buildingCodes.find { it.id == "IBC_2021" } ?: buildingCodes.firstOrNull()
             }
         }
     }

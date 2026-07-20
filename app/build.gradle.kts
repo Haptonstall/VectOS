@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.lz.vectos"
-        minSdk = 26
+        minSdk = 28
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
@@ -44,6 +44,12 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_19)
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
@@ -65,6 +71,8 @@ dependencies {
     implementation(project(":core:solver"))
     implementation(project(":core:ui"))
     implementation(project(":runtime"))
+    implementation(project(":runtime-compose"))
+    implementation(project(":core:common"))
 
     // Room
     implementation(libs.androidx.room.runtime)

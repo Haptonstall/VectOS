@@ -3,24 +3,16 @@ package com.lz.runtime.core
 import com.lz.runtime.api.CapabilityRegistry
 import com.lz.runtime.api.EventBus
 import com.lz.runtime.api.RuntimeModuleRegistry
-import com.lz.runtime.api.NavigationRegistry
 import com.lz.runtime.api.RuntimeEnvironment
 import com.lz.runtime.api.RuntimeConfiguration
 import com.lz.runtime.api.RuntimeContext
-import com.lz.runtime.api.RuntimeModuleLoader
 import com.lz.runtime.api.RuntimeState
-import com.lz.runtime.discovery.PlatformModuleDiscovery
 import com.lz.runtime.events.DefaultEventBus
-import com.lz.runtime.loader.DefaultRuntimeModuleLoader
 import com.lz.runtime.loader.RuntimeModuleInstaller
 import com.lz.runtime.registry.DefaultCapabilityRegistry
 import com.lz.runtime.registry.DefaultRuntimeModuleRegistry
-import com.lz.runtime.registry.DefaultNavigationRegistry
-import com.lz.runtime.screen.api.ScreenRegistry
-import com.lz.runtime.screen.internal.DefaultScreenRegistry
 import com.lz.runtime.services.DefaultServiceRegistry
 import com.lz.runtime.startup.RuntimeStartupPipeline
-import kotlin.getValue
 
 class DefaultRuntimeEnvironment(
 
@@ -39,28 +31,9 @@ class DefaultRuntimeEnvironment(
 
     private val capabilityRegistry = DefaultCapabilityRegistry()
 
-    private val navigationRegistry = DefaultNavigationRegistry()
-
-    private val screenRegistry = DefaultScreenRegistry()
-
     private val eventBus = DefaultEventBus()
 
-    private val moduleDiscovery: PlatformModuleDiscovery by lazy {
-        DefaultPlatformModuleDiscovery()
-    }
-
-    private val moduleInstaller by lazy {
-        RuntimeModuleInstaller(context)
-    }
-
-    private val moduleLoader: RuntimeModuleLoader by lazy {
-        DefaultRuntimeModuleLoader(
-            context,
-            moduleInstaller
-        )
-    }
-
-    private lateinit var startupPipeline: RuntimeStartupPipeline
+    private var startupPipeline: RuntimeStartupPipeline? = null
 
     override val context: RuntimeContext =
         DefaultRuntimeContext(
@@ -69,8 +42,6 @@ class DefaultRuntimeEnvironment(
             services = serviceRegistry,
             runtimeModuleRegistry = moduleRegistry,
             capabilityRegistry = capabilityRegistry,
-            navigationRegistry = navigationRegistry,
-            screenRegistry = screenRegistry,
             eventBus = eventBus
         )
 
@@ -85,7 +56,11 @@ class DefaultRuntimeEnvironment(
 
         initializeServices()
 
-        startupPipeline.start()
+        val pipeline =
+            startupPipeline
+                ?: error("RuntimeStartupPipeline has not been attached")
+
+        pipeline.start()
 
         runtimeState = RuntimeState.RUNNING
     }
@@ -94,7 +69,7 @@ class DefaultRuntimeEnvironment(
 
         runtimeState = RuntimeState.STOPPING
 
-        startupPipeline.stop()
+        startupPipeline?.stop()
 
         serviceRegistry
             .all()
@@ -118,11 +93,6 @@ class DefaultRuntimeEnvironment(
         serviceRegistry.register(
             CapabilityRegistry::class,
             capabilityRegistry
-        )
-
-        serviceRegistry.register(
-            NavigationRegistry::class,
-            navigationRegistry
         )
 
         serviceRegistry.register(
@@ -151,4 +121,5 @@ class DefaultRuntimeEnvironment(
         startupPipeline = pipeline
 
     }
+
 }

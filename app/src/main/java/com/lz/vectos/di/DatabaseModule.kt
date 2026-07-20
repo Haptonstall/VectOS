@@ -3,10 +3,14 @@ package com.lz.vectos.di
 import android.content.Context
 import dagger.hilt.components.SingletonComponent
 import com.lz.data.persistence.room.AppDatabase
+import com.lz.data.project.DefaultActiveProjectProvider
 import com.lz.data.repository.DataStoreSettingsRepository
 import com.lz.data.repository.IStructuralCodeRepository
+import com.lz.data.repository.RoomCalculationRepository
 import com.lz.data.repository.RoomProjectRepository
 import com.lz.data.repository.StructuralCodeRepositoryImpl
+import com.lz.domain.project.ActiveProjectProvider
+import com.lz.domain.repository.CalculationRepository
 import com.lz.domain.repository.ProjectRepository
 import com.lz.domain.repository.SettingsRepository
 import com.lz.vectos.domain.calculation.ProjectCalculationRegistry
@@ -29,6 +33,16 @@ object DatabaseModule {
     @Singleton
     fun provideProjectRepository(db: AppDatabase): ProjectRepository =
         RoomProjectRepository(db.projectDao())
+
+    @Provides
+    @Singleton
+    fun provideCalculationRepository(db: AppDatabase): CalculationRepository =
+        RoomCalculationRepository(db.calculationDao())
+
+    @Provides
+    @Singleton
+    fun provideActiveProjectProvider(): ActiveProjectProvider =
+        DefaultActiveProjectProvider()
 
     @Provides
     @Singleton

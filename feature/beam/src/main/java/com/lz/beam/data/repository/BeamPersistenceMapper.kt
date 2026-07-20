@@ -27,6 +27,7 @@ class BeamPersistenceMapper(private val json: Json) {
         return CalculationRoomEntity(
             id = metadata.id,
             projectId = projectId,
+            toolId = metadata.toolId,
             name = metadata.name,
             calculationType = elementType,
             createdAtEpoch = metadata.createdAt.toEpochSecond(ZoneOffset.UTC),

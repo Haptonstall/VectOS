@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.lz.model.structural.BracingInput
 import com.lz.model.structural.SpanGeometry
 import com.lz.model.units.Length
 import com.lz.model.units.feet
@@ -51,6 +52,7 @@ import java.util.UUID
 fun SpanEditor(
     spans: List<SpanGeometry>,
     activeSpanId: UUID?,
+    spanBracing: Map<UUID, BracingInput> = emptyMap(),
     onAddSpan: () -> Unit,
     onRemoveSpan: (UUID) -> Unit,
     onUpdateSpanLength: (UUID, Length) -> Unit,
@@ -88,6 +90,7 @@ fun SpanEditor(
             SpanItem(
                 index = index,
                 span = span,
+                bracing = spanBracing[span.id],
                 isActive = span.id == activeSpanId,
                 canRemove = spans.size > 1,
                 onRemove = { spanToRemove = span.id },
@@ -127,6 +130,7 @@ fun SpanEditor(
 fun SpanItem(
     index: Int,
     span: SpanGeometry,
+    bracing: BracingInput?,
     isActive: Boolean,
     canRemove: Boolean,
     onRemove: () -> Unit,
@@ -222,7 +226,7 @@ fun SpanItem(
                                 color = Color(0xFF7D5248).copy(alpha = 0.6f)
                             )
                             Text(
-                                "${span.bracing.topType.label} / ${span.bracing.bottomType.label}",
+                                if (bracing != null) "${bracing.topType.label} / ${bracing.bottomType.label}" else "Ends Only",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF7D5248)

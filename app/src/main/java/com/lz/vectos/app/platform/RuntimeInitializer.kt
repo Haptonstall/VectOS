@@ -3,21 +3,15 @@ package com.lz.vectos.app.platform
 import android.content.Context
 import com.lz.runtime.api.RuntimeEnvironment
 import com.lz.runtime.boot.RuntimeBootstrapper
+import com.lz.runtime.loader.RuntimeModuleInstaller
+import com.lz.vectos.app.runtime.DefaultInstalledModuleRepository
+import com.lz.vectos.app.runtime.AndroidRuntimeModuleProviderResolver
 
-/**
- * Creates and owns the application's RuntimeEnvironment.
- *
- * This is the only class responsible for bootstrapping the
- * RuntimeEnvironment.
- */
 object RuntimeInitializer {
 
     @Volatile
     private var runtime: RuntimeEnvironment? = null
 
-    /**
-     * Creates (if necessary) and starts the RuntimeEnvironment.
-     */
     fun initialize(
         context: Context
     ): RuntimeEnvironment {
@@ -31,34 +25,45 @@ object RuntimeInitializer {
             val configuration =
                 RuntimeConfigurationFactory.create(context)
 
-            val environment =
-                RuntimeBootstrapper.create(configuration)
+            val repository =
+                DefaultInstalledModuleRepository()
 
-            environment.start()
+            val providerResolver =
+                AndroidRuntimeModuleProviderResolver()
 
-            runtime = environment
+            val installer =
+                RuntimeModuleInstaller(
+                    repository,
+                    providerResolver
+                )
 
-            return environment
+            val runtimeEnvironment =
+                RuntimeBootstrapper.create(
+                    configuration,
+                    installer
+                )
+
+            runtimeEnvironment.start()
+
+            runtime = runtimeEnvironment
+
+            return runtimeEnvironment
+
         }
+
     }
 
-    /**
-     * Returns the initialized RuntimeEnvironment.
-     */
-    fun runtime(): RuntimeEnvironment {
-
-        return checkNotNull(runtime) {
+    fun runtime(): RuntimeEnvironment =
+        checkNotNull(runtime) {
             "RuntimeEnvironment has not been initialized."
         }
-    }
 
-    /**
-     * Stops the RuntimeEnvironment.
-     */
     fun shutdown() {
 
         runtime?.stop()
 
         runtime = null
+
     }
+
 }

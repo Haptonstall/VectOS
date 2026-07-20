@@ -3,15 +3,14 @@ package com.lz.beam.presentation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lz.beam.domain.BeamCalculationRepository
 import com.lz.beam.model.BeamCalculation
 import com.lz.beam.model.BeamCalculationResults
 import com.lz.data.repository.IStructuralCodeRepository
 import com.lz.domain.calculation.CalculationMetadata
 import com.lz.domain.material.MaterialRepository
-import com.lz.domain.repository.CalculationRepository
 import com.lz.model.regulatory.LoadCategory
 import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.LoadCombinationSet
@@ -42,43 +41,46 @@ import com.lz.model.units.MomentOfInertia
 import com.lz.model.units.UnitSystem
 import com.lz.model.units.inches
 import com.lz.model.units.psiModulus
-import com.lz.solver.capacity.CapacityCalculator
 import com.lz.solver.material.AiscSteelCapacityCalculator
 import com.lz.solver.material.NdsWoodCapacityCalculator
 import com.lz.solver.envelope.ServiceabilityEvaluationService
 import com.lz.beam.solver.BeamAnalysisSolver
 import com.lz.beam.solver.BeamAnalysisConfig
+import com.lz.domain.project.ActiveProjectProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.util.UUID
+import javax.inject.Inject
 import kotlin.collections.plus
 
 /**
  * Modernized ViewModel for Beam Analysis & Design.
  * Orchestrates multi-span geometry, load combinations, and station-by-station validation.
  */
-class BeamViewModel(
-    private val projectViewModel: ProjectViewModel,
-    private val calculationRepository: CalculationRepository,
+class BeamViewModel @Inject constructor(
+    private val activeProjectProvider: ActiveProjectProvider,
+    private val beamRepository: BeamCalculationRepository,
     private val structuralRepository: IStructuralCodeRepository,
     private val sectionRepository: SectionRepository,
     private val materialRepository: MaterialRepository
 ) : ViewModel() {
 
+    init {
+        loadInitialGeometryData()
+        loadDefaultBuildingCode()
+    }
+
     // --- State: Geometry & Properties ---
     var structuralMember by mutableStateOf(
         StructuralMember.createSimple(length = Length(120.0))
     )
-    var activeSpanId by mutableStateOf<UUID?>(structuralMember.spans.firstOrNull()?.id)
+    var activeSpanId by mutableStateOf(structuralMember.spans.firstOrNull()?.id)
 
     // --- State: Selections ---
-    var selectedMaterial by mutableStateOf<MaterialType>(MaterialType.STEEL)
+    var selectedMaterial by mutableStateOf(MaterialType.STEEL)
     var activeMaterialGrade by mutableStateOf<MaterialGrade?>(null)
     var selectedSection by mutableStateOf<SectionProfile?>(null)
     var selectedCombinationSet by mutableStateOf<LoadCombinationSet?>(null)
@@ -181,7 +183,7 @@ class BeamViewModel(
                 .flatMap { it.stationDemands }
                 .find { it.x == governingPoint.x } ?: return null
 
-            val calculator: CapacityCalculator? = when (val mat = activeMaterialGrade) {
+            val calculator = when (val mat = activeMaterialGrade) {
                 is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat)
                 is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(section, mat)
                 else                   -> null
@@ -189,61 +191,6 @@ class BeamViewModel(
 
             return calculator.evaluateDetailed(governingDemand, methodology)
         }
-
-    private val _calculationHistory = MutableStateFlow<List<CalculationMetadata>>(emptyList())
-    val calculationHistory: StateFlow<List<CalculationMetadata>> = _calculationHistory.asStateFlow()
-
-    init {
-        loadDefaultBuildingCode()
-        loadInitialGeometryData()
-        onMaterialSelected(MaterialType.STEEL)
-
-        // Default: Enable all combinations (wait for building code to load)
-        viewModelScope.launch {
-            snapshotFlow { selectedCombinationSet }.collect { set ->
-                if (set != null && enabledCombinations.isEmpty()) {
-                    enabledCombinations = set.combinations.map { it.name }.toSet()
-                }
-            }
-        }
-
-        // Sync with Project Settings
-        viewModelScope.launch {
-            projectViewModel.activeProject.collect { project ->
-                methodology = project.designContext.methodology
-                unitSystem = project.designContext.units
-                activeBuildingCode = project.designContext.buildingCode
-
-                // Refresh combinations for new context
-                val bc = project.designContext.buildingCode
-                val setId = if (methodology == DesignMethodology.LRFD) bc.defaultLrfdSetId else bc.defaultAsdSetId
-                selectedCombinationSet = setId?.let { bc.getCombinationSet(it) }
-                    ?: bc.stateSpecificCombinations.firstOrNull { it.methodology == methodology }
-                    ?: bc.stateSpecificCombinations.firstOrNull()
-
-                enabledCombinations = selectedCombinationSet?.combinations?.map { it.name }?.toSet() ?: emptySet()
-            }
-        }
-
-        // Automatic calculation when inputs change
-        viewModelScope.launch {
-            snapshotFlow {
-                listOf(
-                    structuralMember,
-                    selectedSection,
-                    loadCases,
-                    includeSelfWeight,
-                    activeMaterialGrade,
-                    selectedCombinationSet,
-                    methodology,
-                    activeBuildingCode,
-                    isStrongAxis
-                )
-            }.collect {
-                calculate()
-            }
-        }
-    }
 
     private fun loadInitialGeometryData() {
         viewModelScope.launch {
@@ -309,7 +256,7 @@ class BeamViewModel(
      * Orchestrates the full analysis and design pipeline.
      */
     fun calculate() {
-        val project = projectViewModel.activeProject.value
+        val project = activeProjectProvider.activeProject.value
         val code = activeBuildingCode ?: return
         val combinationSet = selectedCombinationSet ?: return
 
@@ -322,6 +269,7 @@ class BeamViewModel(
 
                 val metadata = CalculationMetadata(
                     id = currentCalculationId!!,
+                    toolId = "BEAM",
                     name = "Beam Analysis",
                     createdAt = LocalDateTime.now()
                 )
@@ -360,7 +308,18 @@ class BeamViewModel(
 
                 val results = BeamCalculationResults(
                     analysisResult = analysisResult,
-                    strengthDesignResults = analysisResult.spanResults.flatMap { it.utilizationDiagram },
+                    strengthDesignResults = analysisResult.spanResults.flatMap { span ->
+                        span.utilizationDiagram.map { pt ->
+                            PointCapacityResult(
+                                demand = span.stationDemands.find { it.x == pt.x }
+                                    ?: span.stationDemands.firstOrNull()
+                                    ?: return@flatMap emptyList<PointCapacityResult>(),
+                                utilizationRatio = pt.ratio,
+                                designCapacity = pt.capacity,
+                                governingLimitState = "See Report"
+                            )
+                        }
+                    },
                     serviceabilityResults = serviceResults
                 )
 
@@ -387,16 +346,19 @@ class BeamViewModel(
     /**
      * Explicitly saves the current calculation state to the repository.
      */
-    fun saveCalculation(onSuccess: () -> Unit = {}) {
-        val result = calculationResult ?: return
+    fun saveCalculation(
+        onSaved: (BeamCalculation) -> Unit
+    ) {
+
+        val calculation = calculationResult ?: return
+
         viewModelScope.launch {
-            calculationRepository.saveBeamCalculation(result)
-            projectViewModel.addCalculationToRegistry(result)
-            loadHistory()
-            onSuccess()
+
+            beamRepository.saveBeamCalculation(calculation)
+
+            onSaved(calculation)
         }
     }
-
     // --- UI Event Handlers ---
 
     fun addSpan() {
@@ -417,8 +379,8 @@ class BeamViewModel(
     fun removeSpan(id: UUID) {
         val spanToRemove = structuralMember.spans.find { it.id == id } ?: return
         val nodesToRemove = mutableSetOf<UUID>()
-        
-        // If it's the last span, we might want to keep the start node if it's the only one left, 
+
+        // If it's the last span, we might want to keep the start node if it's the only one left,
         // but typically we just remove the end node of the removed span if it's not shared.
         // In a simple chain, removing a span removes its end node.
         nodesToRemove.add(spanToRemove.endNodeId)
@@ -511,16 +473,9 @@ class BeamViewModel(
         }
     }
 
-    fun loadHistory() {
-        val projectId = projectViewModel.activeProject.value.id
-        viewModelScope.launch {
-            _calculationHistory.value = calculationRepository.getCalculationsForProject(projectId)
-        }
-    }
-
     fun loadCalculation(id: UUID) {
         viewModelScope.launch {
-            val result = calculationRepository.getBeamCalculation(id)
+            val result = beamRepository.getBeamCalculation(id)
             if (result != null) {
                 currentCalculationId = id
                 calculationResult = result
@@ -553,7 +508,7 @@ class BeamViewModel(
             val endNode = structuralMember.nodes.find { it.id == span.endNodeId }
 
             if (startNode?.boundaryCondition?.isConstrained() == true) {
-                globalBraces.add(NormalizedBraceState(currentX.inches, true, true))
+                globalBraces.add(NormalizedBraceState(x = currentX.inches, isTopBraced = true, isBotBraced = true))
             }
 
             // Extract discrete points from BracingInput if available
@@ -573,7 +528,7 @@ class BeamViewModel(
             }
 
             if (endNode?.boundaryCondition?.isConstrained() == true) {
-                globalBraces.add(NormalizedBraceState((currentX + spanLen).inches, true, true))
+                globalBraces.add(NormalizedBraceState(x = (currentX + spanLen).inches, isTopBraced = true, isBotBraced = true))
             }
 
             currentX += spanLen

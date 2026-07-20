@@ -1,8 +1,11 @@
 package com.lz.model.units
 
+import kotlinx.serialization.Serializable
+
 /**
  * High-level categorization of units.
  */
+@Serializable
 enum class UnitSystem {
     METRIC,
     IMPERIAL

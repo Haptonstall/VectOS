@@ -43,7 +43,7 @@ fun Project.toRoomEntity(): ProjectRoomEntity = ProjectRoomEntity(
     seismicDesignCategory = seismicData.seismicDesignCategory,
     isSeismicAuthoritativeOverride = seismicData.isAuthoritativeOverride,
 
-    steelStandardOverride = settings.steelStandardOverride
+    steelStandardOverride = designContext.steelOverride
 )
 
 fun ProjectRoomEntity.toDomain(): Project = Project(
@@ -62,8 +62,7 @@ fun ProjectRoomEntity.toDomain(): Project = Project(
         unitSystem = unitSystem,
         riskCategory = riskCategory,
         isWindDesignEnabled = isWindDesignEnabled,
-        isSeismicDesignEnabled = isSeismicDesignEnabled,
-        steelStandardOverride = steelStandardOverride
+        isSeismicDesignEnabled = isSeismicDesignEnabled
     ),
 
     coordinates = GeographicCoordinates(
@@ -84,5 +83,9 @@ fun ProjectRoomEntity.toDomain(): Project = Project(
         sd1 = seismicSd1,
         seismicDesignCategory = seismicDesignCategory,
         isAuthoritativeOverride = isSeismicAuthoritativeOverride
+    ),
+
+    designContext = com.lz.model.structural.ProjectDesignContext(
+        steelOverride = steelStandardOverride
     )
 )

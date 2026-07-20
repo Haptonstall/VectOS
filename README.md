@@ -57,7 +57,7 @@ VectOS
 │  │  │  │           │  └─ VectosApplication.kt
 │  │  │  │           ├─ di
 │  │  │  │           │  ├─ DatabaseModule.kt
-│  │  │  │           │  └─ PluginModule.kt
+│  │  │  │           │  └─ ModuleBindings.kt
 │  │  │  │           ├─ domain
 │  │  │  │           │  ├─ calculation
 │  │  │  │           │  │  ├─ CalculationLifecycleService.kt
@@ -75,7 +75,7 @@ VectOS
 │  │  │  │           │  ├─ DefaultRuntimeModuleRegistry.kt
 │  │  │  │           │  ├─ DefaultModuleBootstrapper.kt
 │  │  │  │           │  ├─ DefaultModuleProvider.kt
-│  │  │  │           │  ├─ DynamicFeatureModuleInstaller.kt
+│  │  │  │           │  ├─ RuntimeModuleInstaller.kt
 │  │  │  │           │  ├─ GooglePlayPurchaseManager.kt
 │  │  │  │           │  ├─ LocalModuleCatalogRepository.kt
 │  │  │  │           │  ├─ LocalRegisteredModuleRepository.kt
@@ -632,7 +632,7 @@ VectOS
 │  │  │  │           │  └─ VectosApplication.kt
 │  │  │  │           ├─ di
 │  │  │  │           │  ├─ DatabaseModule.kt
-│  │  │  │           │  └─ PluginModule.kt
+│  │  │  │           │  └─ ModuleBindings.kt
 │  │  │  │           ├─ domain
 │  │  │  │           │  ├─ calculation
 │  │  │  │           │  │  ├─ CalculationLifecycleService.kt
@@ -650,7 +650,7 @@ VectOS
 │  │  │  │           │  ├─ DefaultModuleBootstrapper.kt
 │  │  │  │           │  ├─ DefaultModuleProvider.kt
 │  │  │  │           │  ├─ DefaultModuleRegistry.kt
-│  │  │  │           │  ├─ DynamicFeatureModuleInstaller.kt
+│  │  │  │           │  ├─ RuntimeModuleInstaller.kt
 │  │  │  │           │  ├─ GooglePlayPurchaseManager.kt
 │  │  │  │           │  ├─ LocalModuleCatalogRepository.kt
 │  │  │  │           │  ├─ LocalRegisteredModuleRepository.kt

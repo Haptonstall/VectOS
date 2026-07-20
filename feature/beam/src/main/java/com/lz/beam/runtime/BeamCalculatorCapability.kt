@@ -14,13 +14,16 @@ class BeamCalculatorCapability : CalculatorCapability {
     override val displayName =
         "Beam Calculator"
 
-    val description =
+    override val description =
         "Analyze and design beams."
 
     override val capabilityType =
         CapabilityType.CALCULATOR
 
-    override val supportsQuickCalc =
+    override val supportsProjectMode =
+        true
+
+    override val supportsQuickCalcMode =
         true
 
     override val destination =

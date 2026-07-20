@@ -1,7 +1,7 @@
 package com.lz.beam.runtime
 
 import com.lz.runtime.api.*
-import com.lz.runtime.api.model.Version
+import com.lz.common.Version
 
 val BeamDescriptor = RuntimeModuleDescriptor(
 

@@ -84,13 +84,13 @@ class ToolPickerViewModel @Inject constructor(
         viewModelScope.launch {
             when (installer.install(moduleId)) {
                 InstallResult.Success -> {
-                    _events.emit(ToolPickerEvent.ShowMessage("Module installed."))
+                    _events.emit(ToolPickerEvent.Snackbar("Module installed."))
                     refreshTools()
                 }
                 InstallResult.Cancelled ->
-                    _events.emit(ToolPickerEvent.ShowMessage("Installation cancelled."))
+                    _events.emit(ToolPickerEvent.Snackbar("Installation cancelled."))
                 is InstallResult.Error ->
-                    _events.emit(ToolPickerEvent.ShowMessage("Installation failed."))
+                    _events.emit(ToolPickerEvent.Snackbar("Installation failed."))
             }
         }
     }
@@ -99,13 +99,13 @@ class ToolPickerViewModel @Inject constructor(
         viewModelScope.launch {
             when (purchaseManager.purchase(moduleId)) {
                 PurchaseResult.Success -> {
-                    _events.emit(ToolPickerEvent.ShowMessage("Purchase successful."))
+                    _events.emit(ToolPickerEvent.Snackbar("Purchase successful."))
                     refreshTools()  // was: loadTools() with missing arg
                 }
                 PurchaseResult.Cancelled ->
-                    _events.emit(ToolPickerEvent.ShowMessage("Purchase cancelled."))
+                    _events.emit(ToolPickerEvent.Snackbar("Purchase cancelled."))
                 is PurchaseResult.Error ->
-                    _events.emit(ToolPickerEvent.ShowMessage("Purchase failed."))
+                    _events.emit(ToolPickerEvent.Snackbar("Purchase failed."))
             }
         }
     }

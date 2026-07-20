@@ -21,6 +21,7 @@ class DefaultMarketplaceManager :
         moduleId: String
     ): Boolean {
 
-        return installed[moduleId]?.installed == true
+        return installed[moduleId]?.installState ==
+            InstallState.INSTALLED
     }
 }

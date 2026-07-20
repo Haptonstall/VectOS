@@ -15,7 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.lz.vectos.domain.calculation.EngineeringCalculation
+import com.lz.domain.calculation.CalculationMetadata
 import com.lz.domain.project.Project
 import com.lz.vectos.presentation.ProjectViewModel
 import java.util.UUID
@@ -24,16 +24,15 @@ import java.util.UUID
 @Composable
 fun ProjectLibraryScreen(
     viewModel: ProjectViewModel,
-    onOpenCalculation: (EngineeringCalculation) -> Unit,
-    onDeleteCalculation: (UUID) -> Unit,
+    onOpenCalculation: (CalculationMetadata) -> Unit,
+    onDeleteCalculation: (CalculationMetadata) -> Unit,
     onAddCalculation: () -> Unit,
     onProjectSettings: () -> Unit,
     onEditProject: () -> Unit,
     onBack: () -> Unit,
 ) {
     val project by viewModel.activeProject.collectAsState()
-    val calculationsMap by viewModel.calculations.collectAsState()
-    val calculations = calculationsMap.values.toList().distinctBy { it.id }
+    val calculations by viewModel.calculations.collectAsState()
 
     Scaffold(
         topBar = {
@@ -126,7 +125,7 @@ fun ProjectLibraryScreen(
                         CalculationLibraryItem(
                             calculation = calculation,
                             onClick = { onOpenCalculation(calculation) },
-                            onDelete = { onDeleteCalculation(calculation.id) }
+                            onDelete = { onDeleteCalculation(calculation) }
                         )
                     }
                 }
@@ -228,7 +227,7 @@ fun TagItem(text: String) {
 
 @Composable
 fun CalculationLibraryItem(
-    calculation: EngineeringCalculation,
+    calculation: CalculationMetadata,
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -260,26 +259,8 @@ fun CalculationLibraryItem(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    Text(
-                        "V${calculation.latestVersion.versionNumber}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    Text(
-                        calculation.latestVersion.provenance.sectionDesignation,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                    Text(
-                        calculation.latestVersion.provenance.buildingCode,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
                 Text(
-                    "Modified: ${calculation.updatedAt.toLocalDate()}",
+                    "Created: ${calculation.createdAt.toLocalDate()}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.padding(top = 2.dp)

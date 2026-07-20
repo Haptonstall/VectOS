@@ -1,19 +1,16 @@
 package com.lz.runtime.api.capabilities
 
-import com.lz.runtime.api.NavigationDestination
-
 /**
  * Capability contributed by a calculator module.
  */
 interface CalculatorCapability : ModuleCapability {
 
-    /**
-     * Supports Quick Calc mode.
-     */
-    val supportsQuickCalc: Boolean
+    val description: String
 
-    /**
-     * Logical destination.
-     */
-    val destination: NavigationDestination
+    val destination: String
+
+    val supportsProjectMode: Boolean
+
+    val supportsQuickCalcMode: Boolean
+
 }

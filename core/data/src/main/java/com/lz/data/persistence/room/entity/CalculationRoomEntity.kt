@@ -8,6 +8,7 @@ import java.util.UUID
 data class CalculationRoomEntity(
     @PrimaryKey val id: UUID,
     val projectId: UUID,
+    val toolId: String,
     val name: String,
     val calculationType: String,
     val createdAtEpoch: Long,

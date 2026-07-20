@@ -1,6 +1,5 @@
 package com.lz.vectos.app.platform
 
-import com.lz.runtime.screen.api.ScreenProvider
 import java.util.concurrent.ConcurrentHashMap
 
 object AndroidScreenRegistry {

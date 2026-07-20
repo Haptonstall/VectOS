@@ -1,6 +1,6 @@
 package com.lz.runtime.repository
 
-import com.lz.runtime.model.InstalledModuleManifest
+import com.lz.runtime.api.marketplace.InstalledModule
 
 /**
  * Repository describing installed Runtime modules.
@@ -18,6 +18,6 @@ import com.lz.runtime.model.InstalledModuleManifest
  */
 interface InstalledModuleRepository {
 
-    fun installedModules(): List<InstalledModuleManifest>
+    fun installedModules(): List<InstalledModule>
 
 }

@@ -2,32 +2,45 @@ package com.lz.vectos.plugin
 
 import com.lz.domain.module.ModuleDescriptor
 import com.lz.domain.module.ModuleRegistry
-import com.lz.domain.module.RegisteredModule
-import com.lz.domain.module.RegisteredModuleRepository
-import kotlinx.coroutines.runBlocking
+import com.lz.runtime.api.CapabilityType
+import com.lz.runtime.api.RuntimeEnvironment
+import com.lz.runtime.api.capabilities.CalculatorCapability
+import com.lz.vectos.app.runtime.toModuleDescriptor
 
 class DefaultModuleRegistry(
-    private val repository: RegisteredModuleRepository
+    private val runtime: RuntimeEnvironment
 ) : ModuleRegistry {
 
     override fun register(descriptor: ModuleDescriptor) {
-        runBlocking {
-            repository.register(
-                RegisteredModule(
-                    descriptor = descriptor,
-                    route = "${descriptor.moduleType.name.lowercase()}/home"
-                )
-            )
-        }
+        // Runtime owns registration
     }
 
     override fun unregister(moduleId: String) {
-        runBlocking { repository.unregister(moduleId) }
+        // Runtime owns unregistration
     }
 
-    override fun getModule(moduleId: String): ModuleDescriptor? =
-        runBlocking { repository.getModule(moduleId)?.descriptor }
+    override fun getModule(moduleId: String): ModuleDescriptor? {
+        return getModules()
+            .firstOrNull {
+                it.id == moduleId
+            }
+    }
 
-    override fun getModules(): List<ModuleDescriptor> =
-        runBlocking { repository.getModules().map { it.descriptor } }
+    override fun getModules(): List<ModuleDescriptor> {
+
+        return runtime.context
+            .capabilityRegistry
+            .capabilities(CapabilityType.CALCULATOR)
+            .filterIsInstance<CalculatorCapability>()
+            .mapNotNull { capability ->
+
+                runtime.context
+                    .runtimeModuleRegistry
+                    .get(capability.runtimeModuleId)
+                    ?.descriptor
+                    ?.toModuleDescriptor(capability)
+
+            }
+
+    }
 }

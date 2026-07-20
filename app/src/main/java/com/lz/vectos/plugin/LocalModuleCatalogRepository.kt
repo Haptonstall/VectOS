@@ -1,6 +1,9 @@
 package com.lz.vectos.plugin
 
-import com.lz.domain.module.*
+import com.lz.common.ModuleType
+import com.lz.common.Version
+import com.lz.domain.module.ModuleCatalogRepository
+import com.lz.domain.module.ModuleDescriptor
 
 class LocalModuleCatalogRepository :
     ModuleCatalogRepository {
@@ -13,8 +16,8 @@ class LocalModuleCatalogRepository :
                 id = "beam",
                 displayName = "Beam Design",
                 description = "Steel and wood beam design",
-                version = "1.0.0",
-                moduleType = ModuleType.BEAM,
+                version = Version(1, 0, 0),
+                moduleType = ModuleType.CALCULATION,
                 dynamicFeatureName = "beam",
                 supportsProjectMode = true,
                 supportsQuickCalcMode = true
@@ -23,8 +26,8 @@ class LocalModuleCatalogRepository :
                 id = "column",
                 displayName = "Column Design",
                 description = "Column design module",
-                version = "1.0.0",
-                moduleType = ModuleType.COLUMN,
+                version = Version(1,0,0),
+                moduleType = ModuleType.CALCULATION,
                 dynamicFeatureName = "column",
                 supportsProjectMode = true,
                 supportsQuickCalcMode = false

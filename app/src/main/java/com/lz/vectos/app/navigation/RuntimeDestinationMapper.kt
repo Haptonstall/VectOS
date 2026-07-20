@@ -1,6 +1,7 @@
 package com.lz.vectos.app.navigation
 
-import com.lz.runtime.api.NavigationDestination
+import com.lz.runtime.compose.navigation.NavigationDestination
+
 
 /**
  * Converts Runtime destinations into navigation routes.

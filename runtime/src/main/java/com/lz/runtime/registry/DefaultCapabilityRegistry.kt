@@ -2,18 +2,18 @@ package com.lz.runtime.registry
 
 import com.lz.runtime.api.CapabilityRegistry
 import com.lz.runtime.api.CapabilityType
-import com.lz.runtime.api.ModuleCapability
+import com.lz.runtime.api.capabilities.ModuleCapability
 import com.lz.runtime.core.AbstractRuntimeService
 import java.util.concurrent.ConcurrentHashMap
 
 class DefaultCapabilityRegistry :
     AbstractRuntimeService(
-        "runtimeEnvironment.capabilityRegistry"
+        "runtime.capability.registry"
     ),
     CapabilityRegistry {
 
     private val capabilities =
-        ConcurrentHashMap<String, ModuleCapability>()
+        mutableMapOf<String, ModuleCapability>()
 
     override fun onShutdown() {
 

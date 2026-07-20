@@ -1,22 +1,13 @@
 package com.lz.vectos.app.runtime
 
-import com.lz.runtime.api.NavigationDestination
 import com.lz.runtime.api.RuntimeEnvironment
+import com.lz.runtime.api.RuntimeModule
 
 /**
- * Convenience helpers.
+ * Convenience helpers used by the application layer.
  */
-fun RuntimeEnvironment.destinations():
 
-        List<NavigationDestination> {
-
-    return context
-        .navigationRegistry
-        .destinations()
-
-}
-
-fun RuntimeEnvironment.modules() =
+fun RuntimeEnvironment.modules(): List<RuntimeModule> =
 
     context
         .runtimeModuleRegistry

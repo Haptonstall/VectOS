@@ -1,19 +1,24 @@
 package com.lz.beam.runtime
 
-import com.lz.runtime.api.NavigationDestination
+import com.lz.runtime.compose.navigation.NavigationDestination
 
-object BeamNavigationDestination :
-    NavigationDestination {
+/**
+ * Logical navigation destination exposed by the Beam module.
+ *
+ * This contains no Compose implementation details.
+ */
+object BeamNavigationDestination : NavigationDestination {
 
-    override val id =
+    override val id: String =
         "beam.calculator"
 
-    override val title =
+    override val title: String =
         "Beam Calculator"
 
-    override val description =
-        "Beam calculations"
+    override val description: String? =
+        "Beam analysis and design"
 
-    override val moduleId =
+    override val runtimeModuleId: String =
         BeamDescriptor.id
+
 }

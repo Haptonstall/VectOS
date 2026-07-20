@@ -30,7 +30,7 @@ fun HomeScreen(
     val projects by viewModel.projects.collectAsState()
 
     LaunchedEffect(Unit) {
-        viewModel.loadProjects()
+        viewModel.refreshProjects()
     }
 
     Scaffold(

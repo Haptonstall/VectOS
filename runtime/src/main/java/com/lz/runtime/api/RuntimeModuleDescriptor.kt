@@ -1,6 +1,6 @@
 package com.lz.runtime.api
 
-import com.lz.runtime.api.model.Version
+import com.lz.common.Version
 
 /**
  * Immutable description of an installed VectOS RuntimeModule.
