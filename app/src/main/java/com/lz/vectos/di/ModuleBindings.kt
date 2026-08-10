@@ -9,6 +9,7 @@ import com.lz.domain.module.PurchaseManager
 import com.lz.domain.module.RegisteredModuleRepository
 import com.lz.domain.module.SubscriptionRepository
 import com.lz.runtime.api.RuntimeEnvironment
+import com.lz.runtime.compose.api.RuntimeComposeEnvironment
 import com.lz.vectos.app.platform.RuntimeInitializer
 import com.lz.vectos.app.runtime.RuntimeModuleInstaller
 import com.lz.vectos.app.runtime.RuntimeModuleLauncher
@@ -78,4 +79,18 @@ object ModuleBindings {
     fun providePurchaseManager(
         subscriptions: SubscriptionRepository
     ): PurchaseManager = GooglePlayPurchaseManager(subscriptions)
+
+    @Provides
+    @Singleton
+    fun provideRuntimeComposeEnvironment(
+        runtime: RuntimeEnvironment
+    ): RuntimeComposeEnvironment {
+
+        return RuntimeComposeEnvironment(runtime).apply {
+
+            start()
+
+        }
+
+    }
 }

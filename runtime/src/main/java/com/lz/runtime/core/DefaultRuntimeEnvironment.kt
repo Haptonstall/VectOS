@@ -7,6 +7,7 @@ import com.lz.runtime.api.RuntimeEnvironment
 import com.lz.runtime.api.RuntimeConfiguration
 import com.lz.runtime.api.RuntimeContext
 import com.lz.runtime.api.RuntimeState
+import com.lz.runtime.diagnostics.DefaultRuntimeDiagnostics
 import com.lz.runtime.events.DefaultEventBus
 import com.lz.runtime.loader.RuntimeModuleInstaller
 import com.lz.runtime.registry.DefaultCapabilityRegistry
@@ -45,6 +46,8 @@ class DefaultRuntimeEnvironment(
             eventBus = eventBus
         )
 
+    private val diagnostics = DefaultRuntimeDiagnostics(context)
+
     override fun start() {
 
         if (runtimeState != RuntimeState.CREATED)
@@ -61,6 +64,8 @@ class DefaultRuntimeEnvironment(
                 ?: error("RuntimeStartupPipeline has not been attached")
 
         pipeline.start()
+
+        diagnostics.dump()
 
         runtimeState = RuntimeState.RUNNING
     }

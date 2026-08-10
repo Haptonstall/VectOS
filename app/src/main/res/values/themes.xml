@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.VectOS" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.VectOS" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/vectos_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.VectOS.Main</item>
+    </style>
+
+    <style name="Theme.VectOS.Main" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/vectos_background</item>
-        <item name="android:windowSplashScreenBackground">@color/vectos_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">@color/vectos_background</item>
+        <item name="android:statusBarColor">@color/vectos_primary</item>
     </style>
 </resources>

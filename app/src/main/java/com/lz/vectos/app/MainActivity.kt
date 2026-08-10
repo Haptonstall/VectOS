@@ -9,7 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import com.lz.runtime.api.RuntimeEnvironment
 import com.lz.vectos.app.navigation.AppNavGraph
 import com.lz.vectos.app.platform.RuntimeInitializer
-import com.lz.vectos.ui.theme.VectOSTheme
+import com.lz.ui.theme.VectOSTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 import javax.inject.Inject

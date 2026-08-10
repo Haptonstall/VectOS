@@ -1,5 +1,6 @@
 package com.lz.runtime.compose.api
 
+import com.lz.runtime.api.RuntimeModule
 import com.lz.runtime.compose.screen.api.ScreenProvider
 
 /**
@@ -8,7 +9,8 @@ import com.lz.runtime.compose.screen.api.ScreenProvider
  *
  * Runtime itself never depends on this interface.
  */
-interface ComposeRuntimeModule {
+interface ComposeRuntimeModule :
+    RuntimeModule {
 
     /**
      * Returns every ScreenProvider contributed by this module.

@@ -211,10 +211,10 @@ private fun DrawScope.drawSupport(x: Float, y: Float, isPinned: Boolean) {
         lineTo(x + size / 2, y + size + 4.dp.toPx())
         close()
     }
-    drawPath(path, color = Color(0xFF7D5248))
+    drawPath(path, color = Color.Gray)
     if (!isPinned) {
         // Draw a small circle below for roller
-        drawCircle(color = Color(0xFF7D5248), radius = 3f, center = Offset(
+        drawCircle(color = Color.Gray, radius = 3f, center = Offset(
             x,
             y + size + 8.dp.toPx()
         )

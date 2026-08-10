@@ -10,8 +10,13 @@ class AndroidRuntimeModuleProviderResolver :
     override fun resolve(
         module: InstalledModule
     ): RuntimeModuleProvider {
-        val clazz = Class
-                .forName(module.entryPoint.value)
+
+        println("Loading provider ${module.entryPoint.value}")
+
+        val clazz =
+            Class.forName(module.entryPoint.value)
+
+        println("Loaded ${clazz.name}")
 
         return clazz
             .getDeclaredConstructor()

@@ -53,6 +53,8 @@ class ToolPickerViewModel @Inject constructor(
 
     private suspend fun refreshTools() {
         val context = _context.value ?: return
+        val modules = registry.getModules()
+        println("ToolPicker found ${modules.size} modules")
         _tools.value = createToolList(context)
     }
 

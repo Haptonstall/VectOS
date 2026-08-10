@@ -3,6 +3,7 @@ package com.lz.vectos.app.platform
 import android.content.Context
 import com.lz.runtime.api.RuntimeEnvironment
 import com.lz.runtime.boot.RuntimeBootstrapper
+import com.lz.runtime.loader.DefaultRuntimeModuleLoader
 import com.lz.runtime.loader.RuntimeModuleInstaller
 import com.lz.vectos.app.runtime.DefaultInstalledModuleRepository
 import com.lz.vectos.app.runtime.AndroidRuntimeModuleProviderResolver
@@ -28,13 +29,15 @@ object RuntimeInitializer {
             val repository =
                 DefaultInstalledModuleRepository()
 
-            val providerResolver =
-                AndroidRuntimeModuleProviderResolver()
+            val moduleLoader =
+                DefaultRuntimeModuleLoader(
+                    AndroidRuntimeModuleProviderResolver()
+                )
 
             val installer =
                 RuntimeModuleInstaller(
                     repository,
-                    providerResolver
+                    moduleLoader
                 )
 
             val runtimeEnvironment =

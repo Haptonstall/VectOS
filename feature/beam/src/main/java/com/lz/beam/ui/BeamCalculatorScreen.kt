@@ -166,7 +166,7 @@ fun BeamCalculatorScreen(
                             // Status Dot and FAIL/PASS
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Surface(
-                                    color = if (isPassing) Color(0xFF4CAF50) else Color(0xFFF44336),
+                                    color = if (isPassing) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
                                     shape = CircleShape,
                                     modifier = Modifier.size(8.dp)
                                 ) {}
@@ -428,7 +428,7 @@ fun BeamSideView(
 
             // 3. Draw Loads if enabled (Item 6)
             if (showLoads) {
-                val loadColor = Color(0xFFD32F2F)
+                val loadColor = MaterialTheme.colorScheme.error
                 loads.forEach { load ->
                     // Resilient span mapping
                     val span = member.spans.find { it.id == load.spanId }
@@ -1123,7 +1123,7 @@ fun AnalysisSummary(
                             title = "Shear Force ($shearUnitLabel)",
                             points = shearPoints,
                             unitLabel = shearUnitLabel,
-                            lineColor = Color(0xFF00ACC1), // Elegant Teal
+                            lineColor = MaterialTheme.colorScheme.secondary, // Theme-aware secondary
                             modifier = Modifier.fillMaxWidth(),
                             invertY = false
                         )
@@ -1138,7 +1138,7 @@ fun AnalysisSummary(
                             title = "Bending Moment ($momentUnitLabel)",
                             points = momentPoints,
                             unitLabel = momentUnitLabel,
-                            lineColor = Color(0xFF8E24AA), // Elegant Purple
+                            lineColor = MaterialTheme.colorScheme.primary, // Theme-aware primary
                             modifier = Modifier.fillMaxWidth(),
                             invertY = true // Standard convention (tension side down)
                         )

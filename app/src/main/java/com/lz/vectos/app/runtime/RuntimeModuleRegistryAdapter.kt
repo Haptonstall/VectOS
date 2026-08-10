@@ -41,6 +41,16 @@ class RuntimeModuleRegistryAdapter @Inject constructor(
     }
 
     override fun getModules(): List<ModuleDescriptor> {
+        println(
+            "Capabilities = ${
+                runtime.context.capabilityRegistry.capabilities().size
+            }"
+        )
+        println(
+            "Modules = ${
+                runtime.context.runtimeModuleRegistry.modules().size
+            }"
+        )
 
         return runtime.context
             .capabilityRegistry

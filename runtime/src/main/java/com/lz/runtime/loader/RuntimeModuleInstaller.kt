@@ -2,8 +2,7 @@ package com.lz.runtime.loader
 
 import com.lz.runtime.api.RuntimeContext
 import com.lz.runtime.api.RuntimeModule
-import com.lz.runtime.api.RuntimeModuleLoadFailedEvent
-import com.lz.runtime.api.RuntimeModuleProviderResolver
+import com.lz.runtime.api.RuntimeModuleLoader
 import com.lz.runtime.api.RuntimeService
 import com.lz.runtime.api.marketplace.InstallState
 import com.lz.runtime.repository.InstalledModuleRepository
@@ -12,7 +11,7 @@ class RuntimeModuleInstaller(
 
     private val repository: InstalledModuleRepository,
 
-    private val providerResolver: RuntimeModuleProviderResolver
+    private val moduleLoader: RuntimeModuleLoader
 
 ) : RuntimeService {
 
@@ -48,23 +47,15 @@ class RuntimeModuleInstaller(
                 try {
 
                     val runtimeModule =
-                        providerResolver
-                            .resolve(module)
-                            .createModule()
+                        moduleLoader.load(module)
 
                     install(runtimeModule)
                     println("Provider resolved")
                 } catch (error: Throwable) {
 
-                    context.eventBus.publish(
-                        RuntimeModuleLoadFailedEvent(
-                            providerName = module.entryPoint.value,
-                            message = error.message
-                        )
-                    )
+                    throw error
 
                 }
-
             }
 
     }
@@ -88,9 +79,13 @@ class RuntimeModuleInstaller(
         module: RuntimeModule
     ) {
 
+        println("Initializing ${module.descriptor.id}")
+
         module.initialize(
             context.runtimeEnvironment
         )
+
+        println("Registring module ${module.descriptor.id}")
 
         context.runtimeModuleRegistry.register(
             module
@@ -99,10 +94,18 @@ class RuntimeModuleInstaller(
         module
             .capabilities()
             .forEach { capability ->
+                println("Register capability ${capability.id}")
                 context
                     .capabilityRegistry
                     .register(capability)
+                println("Registered capability: ${capability.id}")
             }
+
+        println(
+            "Capability count = ${
+                context.capabilityRegistry.capabilities().size
+            }"
+        )
     }
 
     fun uninstall(

@@ -8,6 +8,75 @@ This document defines the target Runtime architecture for VectOS. It serves as t
 
 ---
 
+# Runtime 1.0 Status
+
+## Architecture Status
+
+Runtime 1.0 architecture is now considered **frozen**.
+
+Core Runtime responsibilities, boundaries, lifecycle, discovery pipeline,
+capability registration, and module isolation are no longer under active
+architectural design.
+
+Remaining work is implementation of the approved architecture rather than
+further redesign.
+
+Only implementation details or bug fixes should modify Runtime 1.0 going
+forward.
+
+---
+
+## Current Implementation Progress
+
+Completed:
+
+✓ Runtime bootstrapper
+
+✓ RuntimeEnvironment
+
+✓ RuntimeContext
+
+✓ RuntimeStartupPipeline
+
+✓ RuntimeModuleInstaller
+
+✓ RuntimeModuleRegistry
+
+✓ CapabilityRegistry
+
+✓ EventBus
+
+✓ RuntimeModuleProviderResolver
+
+✓ RuntimeModuleProvider
+
+✓ RuntimeModule
+
+✓ InstalledModule model
+
+✓ InstalledModuleRepository abstraction
+
+✓ Runtime-driven capability registration
+
+✓ RuntimeModuleRegistryAdapter
+
+✓ ToolPicker reading Runtime registry
+
+✓ Runtime no longer owns installation
+
+✓ Marketplace / Runtime separation established
+
+✓ Beam RuntimeModule implementation
+
+✓ Beam capability implementation
+
+✓ Reflection isolated behind RuntimeModuleProviderResolver
+
+Remaining implementation is focused on Marketplace integration,
+Dynamic Feature loading, and Runtime validation.
+
+No additional Runtime architectural redesign is expected.
+
 # Guiding Principles
 
 The VectOS application is **not** an engineering application.
@@ -415,12 +484,25 @@ Runtime 1.0 Phase 1 review fixes completed:
 
 ## Phase 3 – Marketplace Integration
 
-* [ ] Define Marketplace architecture
-* [ ] Expand InstalledModuleRepository
-* [ ] Add enable/disable support
-* [ ] Add installation state
-* [ ] Prepare for licensing
-* [ ] Stub installer implementation
+Status: IN PROGRESS
+
+[x] Marketplace / Runtime responsibility separation
+[x] InstalledModuleRepository abstraction
+[x] InstalledModule model
+[x] InstallState model
+[x] ModuleSource model
+[x] ModuleEntryPoint model
+[x] Runtime consumes repository
+[x] Repository replaceable by Marketplace
+
+[ ] Marketplace Room implementation
+[ ] Google Play Billing implementation
+[ ] Licensing implementation
+[ ] Download manager
+[ ] Update manager
+[ ] Remove hardcoded bootstrap repository
+
+---
 
 ### Phase 3 Review Notes
 
@@ -436,40 +518,83 @@ Marketplace integration should proceed against the Phase 2 `InstalledModule` mod
 
 ## Phase 4 – Runtime Startup
 
-* [ ] Enumerate installed modules
-* [ ] Load enabled modules
-* [ ] Register capabilities
-* [ ] Continue startup on module failure
-* [ ] Publish Runtime Ready event
+Status: IN PROGRESS
+
+[x] Enumerate installed modules
+[x] Resolve RuntimeModuleProvider
+[x] Create RuntimeModule
+[x] Register RuntimeModule
+[x] Register capabilities
+[x] Continue startup on module failure
+
+[ ] Publish RuntimeReady event
+[ ] Startup diagnostics
 
 ---
 
 ## Phase 5 – Tool System
 
-* [ ] Generate Tool Picker from Runtime
-* [ ] Remove remaining Beam references
-* [ ] Remove remaining static tool registration
-* [ ] Verify capability discovery
+Status: IN PROGRESS
+
+[x] ToolPicker backed by Runtime
+[x] RuntimeModuleRegistryAdapter
+[x] CapabilityRegistry adapter
+[x] Tool filtering by Project/QuickCalc
+
+[ ] Resolve current capability discovery failure
+[ ] Remove remaining legacy module registry
+[ ] Navigation from capability
+[ ] Tool ordering
+[ ] Tool grouping
 
 ---
 
 ## Phase 6 – Engineering Module Cleanup
 
-* [ ] Update Beam to Runtime 1.0 contracts
-* [ ] Remove obsolete providers
-* [ ] Remove obsolete adapters
-* [ ] Verify module isolation
-* [ ] Verify no App dependencies remain
+Status: IN PROGRESS
+
+[x] Beam RuntimeModule
+[x] Beam RuntimeModuleProvider
+[x] Beam Capability
+[x] Beam ScreenProvider
+
+[ ] Remove legacy Beam registration
+[ ] Dynamic Feature entry point
+[ ] Module metadata manifest
+[ ] Runtime validation tests
 
 ---
 
-## Phase 7 – Marketplace Readiness
+## Phase 7 – Deployment Targets
 
-* [ ] Validate Runtime without Beam installed
-* [ ] Validate Runtime with Beam installed
-* [ ] Validate multiple installed modules
-* [ ] Validate enable/disable behavior
-* [ ] Validate future Dynamic Feature compatibility
+Bootstrap (bundled)
+Google Play Dynamic Feature
+Enterprise Package
+Developer Modules
+Local Testing
+
+[ ] Bundled bootstrap validated
+[ ] Dynamic Feature validated
+[ ] Enterprise package validated
+[ ] Local package validated
+[ ] Multiple installed modules
+[ ] Disabled module
+[ ] Version mismatch
+[ ] Runtime recovery after failure
+
+---
+
+## Phase 8 – Runtime Validation Suite
+
+[ ] Runtime startup diagnostics
+[ ] Module loading diagnostics
+[ ] Capability diagnostics
+[ ] EventBus diagnostics
+[ ] Registry diagnostics
+[ ] Marketplace diagnostics
+[ ] Dynamic Feature diagnostics
+[ ] Automated integration tests
+[ ] Runtime acceptance tests
 
 ---
 

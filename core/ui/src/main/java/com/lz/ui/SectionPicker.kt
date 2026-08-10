@@ -62,7 +62,7 @@ fun SectionPicker(
         onClick = { showDialog = true },
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.outlinedCardColors(containerColor = Color.White),
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     ) {
         Row(
@@ -76,12 +76,12 @@ fun SectionPicker(
                 text = selectedSection?.designation ?: "Select Section",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
-                color = if (selectedSection != null) Color(0xFF4A342F) else MaterialTheme.colorScheme.outline
+                color = if (selectedSection != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
             )
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
                 contentDescription = null,
-                tint = Color(0xFF7D5248)
+                tint = MaterialTheme.colorScheme.primary
             )
         }
     }

@@ -60,30 +60,6 @@ import com.lz.model.units.inFeet
 import com.lz.ui.formatting.EngineeringUnitFormatter
 import java.util.Locale
 
-/**
- * Material-aware bracing configuration dialog.
- *
- * Renders the appropriate bracing controls based on [materialType]:
- *
- *   STEEL / COLD_FORMED_STEEL → BracingInput.Steel
- *     Modes: CONTINUOUS, DISCRETE, UNBRACED
- *     AISC 360 Appendix 6 — top and bottom flange restraint
- *
- *   ALUMINUM → BracingInput.Aluminum
- *     Modes: CONTINUOUS, DISCRETE, UNBRACED
- *     ADM Part I Section F — same flange concepts as steel, different solver
- *
- *   WOOD → BracingInput.Wood
- *     Modes: CONTINUOUS, REPETITIVE_SPACING (o.c. bridging/blocking), DISCRETE, UNBRACED
- *     NDS Section 4.4 — top (compression) and bottom flange restraint
- *
- *   MASONRY → BracingInput.Masonry
- *     Modes: CONTINUOUS, DISCRETE, UNBRACED
- *     TMS 402 Sections 8.3 / 9.3 — compression face and tension face restraint
- *     Includes reinforced/unreinforced toggle (different TMS 402 chapter provisions)
- *
- *   CONCRETE / other → Not applicable panel (construction phase note shown)
- */
 @Composable
 fun BracingPickerDialog(
     currentBracing: BracingInput,
@@ -92,18 +68,13 @@ fun BracingPickerDialog(
     onDismiss: () -> Unit,
     onConfirmed: (BracingInput) -> Unit
 ) {
-    val bgColor      = Color(0xFFFDF2F0)
-    val textColor    = Color(0xFF4A342F)
-    val subTextColor = Color(0xFF7D5248).copy(alpha = 0.8f)
-    val actionColor  = Color(0xFF7D5248)
-
     val formatter = remember(unitSystem) { EngineeringUnitFormatter(unitSystem) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = bgColor)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier.padding(24.dp).fillMaxWidth(),
@@ -112,24 +83,21 @@ fun BracingPickerDialog(
                 Text(
                     "Bracing Definition",
                     style = MaterialTheme.typography.headlineSmall,
-                    color = textColor,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     bracingSubtitle(materialType),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = subTextColor
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                HorizontalDivider(color = actionColor.copy(alpha = 0.1f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 when (materialType) {
                     MaterialType.STEEL,
                     MaterialType.COLDFORM -> SteelBracingContent(
                         currentBracing = currentBracing as? BracingInput.Steel
                             ?: BracingInput.Steel(),
-                        textColor = textColor,
-                        subTextColor = subTextColor,
-                        actionColor = actionColor,
                         formatter = formatter,
                         onConfirmed = onConfirmed,
                         onDismiss = onDismiss
@@ -138,9 +106,6 @@ fun BracingPickerDialog(
                     MaterialType.ALUMINUM -> AluminumBracingContent(
                         currentBracing = currentBracing as? BracingInput.Aluminum
                             ?: BracingInput.Aluminum(),
-                        textColor = textColor,
-                        subTextColor = subTextColor,
-                        actionColor = actionColor,
                         formatter = formatter,
                         onConfirmed = onConfirmed,
                         onDismiss = onDismiss
@@ -149,9 +114,6 @@ fun BracingPickerDialog(
                     MaterialType.WOOD -> WoodBracingContent(
                         currentBracing = currentBracing as? BracingInput.Wood
                             ?: BracingInput.Wood(),
-                        textColor = textColor,
-                        subTextColor = subTextColor,
-                        actionColor = actionColor,
                         formatter = formatter,
                         onConfirmed = onConfirmed,
                         onDismiss = onDismiss
@@ -160,9 +122,6 @@ fun BracingPickerDialog(
                     MaterialType.MASONRY -> MasonryBracingContent(
                         currentBracing = currentBracing as? BracingInput.Masonry
                             ?: BracingInput.Masonry(),
-                        textColor = textColor,
-                        subTextColor = subTextColor,
-                        actionColor = actionColor,
                         formatter = formatter,
                         onConfirmed = onConfirmed,
                         onDismiss = onDismiss
@@ -170,8 +129,6 @@ fun BracingPickerDialog(
 
                     else -> NotApplicableContent(
                         materialType = materialType,
-                        subTextColor = subTextColor,
-                        actionColor = actionColor,
                         onDismiss = onDismiss
                     )
                 }
@@ -183,9 +140,6 @@ fun BracingPickerDialog(
 @Composable
 private fun SteelBracingContent(
     currentBracing: BracingInput.Steel,
-    textColor: Color,
-    subTextColor: Color,
-    actionColor: Color,
     formatter: com.lz.ui.formatting.UnitFormatter,
     onConfirmed: (BracingInput) -> Unit,
     onDismiss: () -> Unit
@@ -201,15 +155,12 @@ private fun SteelBracingContent(
     BracingSection("Bottom Flange", bottomMode, steelModes) { bottomMode = it }
 
     if (topMode == BracingMode.DISCRETE || bottomMode == BracingMode.DISCRETE) {
-        HorizontalDivider(color = actionColor.copy(alpha = 0.1f))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         DiscretePointsTable(
             discreteTable        = discreteTable,
             newLocationText      = newLocationText,
             topLabel             = "Top",
             bottomLabel          = "Bot",
-            textColor            = textColor,
-            subTextColor         = subTextColor,
-            actionColor          = actionColor,
             formatter            = formatter,
             onLocationTextChange = { newLocationText = it },
             onAddPoint = { loc ->
@@ -230,7 +181,7 @@ private fun SteelBracingContent(
         )
     }
 
-    DialogActions(actionColor, onDismiss) {
+    DialogActions(onDismiss) {
         onConfirmed(
             BracingInput.Steel(
                 topMode       = topMode,
@@ -244,9 +195,6 @@ private fun SteelBracingContent(
 @Composable
 private fun AluminumBracingContent(
     currentBracing: BracingInput.Aluminum,
-    textColor: Color,
-    subTextColor: Color,
-    actionColor: Color,
     formatter: com.lz.ui.formatting.UnitFormatter,
     onConfirmed: (BracingInput) -> Unit,
     onDismiss: () -> Unit
@@ -261,24 +209,20 @@ private fun AluminumBracingContent(
     BracingSection("Top Flange",    topMode,    aluminumModes) { topMode    = it }
     BracingSection("Bottom Flange", bottomMode, aluminumModes) { bottomMode = it }
 
-    // Alloy note — ADM slenderness limits vary by alloy series
     Text(
         "Note: Aluminum solver applies ADM alloy-specific slenderness limits. " +
                 "Ensure the correct alloy is selected in material properties.",
         style = MaterialTheme.typography.bodySmall,
-        color = subTextColor
+        color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 
     if (topMode == BracingMode.DISCRETE || bottomMode == BracingMode.DISCRETE) {
-        HorizontalDivider(color = actionColor.copy(alpha = 0.1f))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         DiscretePointsTable(
             discreteTable        = discreteTable,
             newLocationText      = newLocationText,
             topLabel             = "Top",
             bottomLabel          = "Bot",
-            textColor            = textColor,
-            subTextColor         = subTextColor,
-            actionColor          = actionColor,
             formatter            = formatter,
             onLocationTextChange = { newLocationText = it },
             onAddPoint = { loc ->
@@ -299,7 +243,7 @@ private fun AluminumBracingContent(
         )
     }
 
-    DialogActions(actionColor, onDismiss) {
+    DialogActions(onDismiss) {
         onConfirmed(
             BracingInput.Aluminum(
                 topMode       = topMode,
@@ -313,9 +257,6 @@ private fun AluminumBracingContent(
 @Composable
 private fun WoodBracingContent(
     currentBracing: BracingInput.Wood,
-    textColor: Color,
-    subTextColor: Color,
-    actionColor: Color,
     formatter: com.lz.ui.formatting.UnitFormatter,
     onConfirmed: (BracingInput) -> Unit,
     onDismiss: () -> Unit
@@ -344,28 +285,25 @@ private fun WoodBracingContent(
 
     BracingSection("Top (Compression) Flange", topMode,    woodModes) { topMode    = it }
     if (topMode == BracingMode.REPETITIVE_SPACING) {
-        SpacingInputField("Top Flange Spacing (ft)", luTopText, subTextColor, actionColor) {
+        SpacingInputField("Top Flange Spacing (ft)", luTopText) {
             luTopText = it
         }
     }
 
     BracingSection("Bottom Flange", bottomMode, woodModes) { bottomMode = it }
     if (bottomMode == BracingMode.REPETITIVE_SPACING) {
-        SpacingInputField("Bottom Flange Spacing (ft)", luBottomText, subTextColor, actionColor) {
+        SpacingInputField("Bottom Flange Spacing (ft)", luBottomText) {
             luBottomText = it
         }
     }
 
     if (topMode == BracingMode.DISCRETE || bottomMode == BracingMode.DISCRETE) {
-        HorizontalDivider(color = actionColor.copy(alpha = 0.1f))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         DiscretePointsTable(
             discreteTable        = discreteTable,
             newLocationText      = newLocationText,
             topLabel             = "Top",
             bottomLabel          = "Bot",
-            textColor            = textColor,
-            subTextColor         = subTextColor,
-            actionColor          = actionColor,
             formatter            = formatter,
             onLocationTextChange = { newLocationText = it },
             onAddPoint = { loc ->
@@ -386,7 +324,7 @@ private fun WoodBracingContent(
         )
     }
 
-    DialogActions(actionColor, onDismiss) {
+    DialogActions(onDismiss) {
         onConfirmed(
             BracingInput.Wood(
                 topMode         = topMode,
@@ -404,9 +342,6 @@ private fun WoodBracingContent(
 @Composable
 private fun MasonryBracingContent(
     currentBracing: BracingInput.Masonry,
-    textColor: Color,
-    subTextColor: Color,
-    actionColor: Color,
     formatter: com.lz.ui.formatting.UnitFormatter,
     onConfirmed: (BracingInput) -> Unit,
     onDismiss: () -> Unit
@@ -423,20 +358,18 @@ private fun MasonryBracingContent(
         BracingMode.UNBRACED   to "Unbraced\n(Ends Only)"
     )
 
-    // Reinforced / Unreinforced toggle
-    // This drives which TMS 402 chapter provisions the solver applies
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             "Member Type",
             style = MaterialTheme.typography.titleMedium,
-            color = textColor,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Bold
         )
         Text(
             "TMS 402 Chapter 8 (unreinforced) imposes stricter lateral bracing limits " +
                     "than Chapter 9 (reinforced). Select the governing condition for this member.",
             style = MaterialTheme.typography.bodySmall,
-            color = subTextColor
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Row(
             modifier              = Modifier.fillMaxWidth(),
@@ -453,7 +386,6 @@ private fun MasonryBracingContent(
         }
     }
 
-    // Masonry uses "face" terminology rather than "flange"
     BracingSection(
         label          = "Compression Face",
         selectedMode   = compressionFaceMode,
@@ -468,16 +400,12 @@ private fun MasonryBracingContent(
     )
 
     if (compressionFaceMode == BracingMode.DISCRETE || tensionFaceMode == BracingMode.DISCRETE) {
-        HorizontalDivider(color = actionColor.copy(alpha = 0.1f))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         DiscretePointsTable(
             discreteTable        = discreteTable,
             newLocationText      = newLocationText,
-            // Column headers reflect masonry terminology
             topLabel             = "Comp",
             bottomLabel          = "Tens",
-            textColor            = textColor,
-            subTextColor         = subTextColor,
-            actionColor          = actionColor,
             formatter            = formatter,
             onLocationTextChange = { newLocationText = it },
             onAddPoint = { loc ->
@@ -498,7 +426,7 @@ private fun MasonryBracingContent(
         )
     }
 
-    DialogActions(actionColor, onDismiss) {
+    DialogActions(onDismiss) {
         onConfirmed(
             BracingInput.Masonry(
                 compressionFaceMode = compressionFaceMode,
@@ -513,8 +441,6 @@ private fun MasonryBracingContent(
 @Composable
 private fun NotApplicableContent(
     materialType: MaterialType,
-    subTextColor: Color,
-    actionColor: Color,
     onDismiss: () -> Unit
 ) {
     val materialName = materialType.name
@@ -534,7 +460,7 @@ private fun NotApplicableContent(
                 "Lateral bracing is not applicable for $materialName members in the " +
                         "final design state.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = subTextColor,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
             if (materialType == MaterialType.CONCRETE) {
@@ -542,7 +468,7 @@ private fun NotApplicableContent(
                     "Note: Temporary lateral bracing during construction (pre-composite) " +
                             "is a contractor responsibility and is not evaluated here.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = subTextColor,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
             }
@@ -552,7 +478,7 @@ private fun NotApplicableContent(
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         TextButton(
             onClick = onDismiss,
-            colors = ButtonDefaults.textButtonColors(contentColor = actionColor)
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
         ) {
             Text("Close", fontWeight = FontWeight.Bold)
         }
@@ -570,7 +496,7 @@ private fun BracingSection(
         Text(
             label,
             style = MaterialTheme.typography.titleMedium,
-            color = Color(0xFF4A342F),
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Bold
         )
         Row(
@@ -593,20 +519,17 @@ private fun BracingSection(
 private fun SpacingInputField(
     label: String,
     spacingText: String,
-    subTextColor: Color,
-    actionColor: Color,
     onValueChange: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = subTextColor)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(
             value = spacingText,
             onValueChange = onValueChange,
             label = { Text("Spacing (ft)") },
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = actionColor)
+            shape = RoundedCornerShape(12.dp)
         )
     }
 }
@@ -617,9 +540,6 @@ private fun DiscretePointsTable(
     newLocationText: String,
     topLabel: String,
     bottomLabel: String,
-    textColor: Color,
-    subTextColor: Color,
-    actionColor: Color,
     formatter: com.lz.ui.formatting.UnitFormatter,
     onLocationTextChange: (String) -> Unit,
     onAddPoint: (Double) -> Unit,
@@ -629,7 +549,7 @@ private fun DiscretePointsTable(
     Text(
         "Bracing Locations",
         style = MaterialTheme.typography.titleMedium,
-        color = textColor,
+        color = MaterialTheme.colorScheme.onSurface,
         fontWeight = FontWeight.Bold
     )
 
@@ -648,8 +568,8 @@ private fun DiscretePointsTable(
         )
         FloatingActionButton(
             onClick = { newLocationText.toDoubleOrNull()?.let { onAddPoint(it) } },
-            containerColor = actionColor,
-            contentColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
             shape = CircleShape,
             modifier = Modifier.size(56.dp)
         ) {
@@ -664,20 +584,20 @@ private fun DiscretePointsTable(
         Text(
             "Location",
             style = MaterialTheme.typography.labelMedium,
-            color = subTextColor,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f)
         )
         Text(
             topLabel,
             style = MaterialTheme.typography.labelMedium,
-            color = subTextColor,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(48.dp),
             textAlign = TextAlign.Center
         )
         Text(
             bottomLabel,
             style = MaterialTheme.typography.labelMedium,
-            color = subTextColor,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(48.dp),
             textAlign = TextAlign.Center
         )
@@ -690,14 +610,14 @@ private fun DiscretePointsTable(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                         .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = formatter.length(point.x.inches),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = textColor,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
                     Checkbox(
@@ -717,7 +637,7 @@ private fun DiscretePointsTable(
                         Icon(
                             Icons.Default.Delete,
                             contentDescription = "Delete",
-                            tint = Color.Red.copy(alpha = 0.6f),
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -729,7 +649,6 @@ private fun DiscretePointsTable(
 
 @Composable
 private fun DialogActions(
-    actionColor: Color,
     onDismiss: () -> Unit,
     onConfirmed: () -> Unit
 ) {
@@ -741,13 +660,13 @@ private fun DialogActions(
     ) {
         TextButton(
             onClick = onDismiss,
-            colors = ButtonDefaults.textButtonColors(contentColor = actionColor)
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
         ) {
             Text("Cancel", fontWeight = FontWeight.Bold)
         }
         Button(
             onClick = onConfirmed,
-            colors = ButtonDefaults.buttonColors(containerColor = actionColor),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             shape = RoundedCornerShape(28.dp),
             modifier = Modifier.height(56.dp).padding(horizontal = 8.dp)
         ) {
@@ -767,17 +686,17 @@ private fun BracingOptionButton(
         onClick = onClick,
         modifier = modifier.height(64.dp),
         shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) Color(0xFFFFCCBC) else Color.Transparent,
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
         border = BorderStroke(
             1.dp,
-            if (isSelected) Color(0xFF7D5248) else Color(0xFF7D5248).copy(alpha = 0.4f)
+            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
         )
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(4.dp)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFF4A342F),
+                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                 lineHeight = 14.sp
@@ -786,28 +705,22 @@ private fun BracingOptionButton(
     }
 }
 
-/** Mode list shared by steel and aluminum — REPETITIVE_SPACING excluded. */
 private fun steelAluminumModes() = listOf(
     BracingMode.CONTINUOUS to "Continuous",
     BracingMode.DISCRETE   to "Discrete\nPoints",
     BracingMode.UNBRACED   to "Unbraced\n(Ends Only)"
 )
 
-/** Subtitle text describing bracing concepts for the active material. */
 private fun bracingSubtitle(materialType: MaterialType): String = when (materialType) {
     MaterialType.STEEL,
     MaterialType.COLDFORM ->
-        "Define top and bottom flange restraints. " +
-                "Reference: AISC 360 Appendix 6."
+        "Define top and bottom flange restraints. Reference: AISC 360 Appendix 6."
     MaterialType.ALUMINUM ->
-        "Define top and bottom flange restraints. " +
-                "Reference: ADM Part I Section F."
+        "Define top and bottom flange restraints. Reference: ADM Part I Section F."
     MaterialType.WOOD ->
-        "Define lateral support for top (compression) and bottom flanges. " +
-                "Reference: NDS Section 4.4."
+        "Define lateral support for top (compression) and bottom flanges. Reference: NDS Section 4.4."
     MaterialType.MASONRY ->
-        "Define lateral restraints for compression and tension faces. " +
-                "Reference: TMS 402 Sections 8.3 / 9.3."
+        "Define lateral restraints for compression and tension faces. Reference: TMS 402 Sections 8.3 / 9.3."
     else ->
         "Lateral bracing is not applicable for this material in the final design state."
 }

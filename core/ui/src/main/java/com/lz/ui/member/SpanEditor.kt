@@ -144,7 +144,7 @@ fun SpanItem(
         onClick = onSelect,
         colors = CardDefaults.cardColors(
             containerColor = if (isActive)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f)
             else
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
         ),
@@ -187,7 +187,7 @@ fun SpanItem(
                                 "ft",
                                 style = MaterialTheme.typography.bodySmall
                             )
-                        }, // Changed to ft as per image
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         textStyle = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier
@@ -196,10 +196,8 @@ fun SpanItem(
                                 if (!focusState.isFocused) {
                                     lengthText.toDoubleOrNull()?.let { m ->
                                         onUpdateLength(m.feet)
-                                        // Format it back nicely after validation
                                         lengthText = String.format(Locale.US, "%.2f", m)
                                     } ?: run {
-                                        // Reset to original value if invalid
                                         lengthText =
                                             String.format(Locale.US, "%.2f", span.length.inFeet)
                                     }
@@ -212,7 +210,7 @@ fun SpanItem(
                     // Bracing Button
                     Surface(
                         onClick = onEditBracing,
-                        color = Color(0xFFFFEBEE), // Light Pink/Red
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f).height(56.dp)
                     ) {
@@ -223,21 +221,21 @@ fun SpanItem(
                             Text(
                                 "Bracing",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF7D5248).copy(alpha = 0.6f)
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
                             )
                             Text(
                                 if (bracing != null) "${bracing.topType.label} / ${bracing.bottomType.label}" else "Ends Only",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF7D5248)
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                         }
                     }
 
-                    // Deflection Button (Placeholder for now)
+                    // Deflection Button
                     Surface(
                         onClick = { /* TODO: Deflection Dialog */ },
-                        color = Color(0xFFFFF9C4), // Light Yellow
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f).height(56.dp)
                     ) {
@@ -248,13 +246,13 @@ fun SpanItem(
                             Text(
                                 "Deflect",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF7D5248).copy(alpha = 0.6f)
+                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
                             )
                             Text(
                                 "floor",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF7D5248)
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                         }
                     }
@@ -266,7 +264,7 @@ fun SpanItem(
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = "Remove",
-                        tint = Color(0xFFD32F2F),
+                        tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(28.dp)
                     )
                 }

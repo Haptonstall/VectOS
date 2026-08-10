@@ -1,6 +1,5 @@
-package com.lz.vectos.ui.theme
+package com.lz.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -23,13 +22,13 @@ private val DarkColorScheme = darkColorScheme(
     onSecondaryContainer = VectosOnSecondaryContainer,
     tertiary = VectosTertiary,
     onTertiary = VectosOnTertiary,
-    background = Color(0xFF1C1B1F),
+    background = Color(0xFF09090B),
     onBackground = Color.White,
-    surface = Color(0xFF1C1B1F),
+    surface = Color(0xFF09090B),
     onSurface = Color.White,
-    surfaceVariant = Color(0xFF2E2B2E),
-    onSurfaceVariant = Color(0xFFB8A49D),
-    outline = Color(0xFF8F7A73),
+    surfaceVariant = Color(0xFF27272A),
+    onSurfaceVariant = Color(0xFFD4D4D8),
+    outline = Color(0xFF52525B),
     error = VectosError,
     onError = VectosOnError,
     errorContainer = VectosErrorContainer,
@@ -62,7 +61,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun VectOSTheme(
-    darkTheme: Boolean = false,
+    darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
