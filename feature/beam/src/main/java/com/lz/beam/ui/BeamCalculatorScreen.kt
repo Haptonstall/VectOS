@@ -369,6 +369,7 @@ fun BeamSideView(
         MaterialType.WOOD -> Color(0xFF8D6E63) // Brown for wood
         else -> Color.DarkGray
     }
+    val loadColor = MaterialTheme.colorScheme.error
 
     Box(modifier = modifier.padding(horizontal = 32.dp, vertical = 24.dp)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -428,7 +429,6 @@ fun BeamSideView(
 
             // 3. Draw Loads if enabled (Item 6)
             if (showLoads) {
-                val loadColor = MaterialTheme.colorScheme.error
                 loads.forEach { load ->
                     // Resilient span mapping
                     val span = member.spans.find { it.id == load.spanId }

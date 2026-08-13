@@ -525,6 +525,18 @@ object MemberAnalysisSolver {
             result
         }
 
+        println("=== REACTION DEBUG ===")
+        nodeIndices.forEachIndexed { idx, nodeIdx ->
+            val rxn = structuralResult.reactions[nodeIdx] ?: emptyMap()
+            println(
+                "Node $idx: " +
+                        "UY=${rxn[DofType.UY]} " +
+                        "RZ=${rxn[DofType.RZ]} " +
+                        "UX=${rxn[DofType.UX]}"
+            )
+        }
+        println("=== END REACTION DEBUG ===")
+
         val reactions = nodeIndices.mapIndexed { idx, nodeIdx ->
             val rxn = structuralResult.reactions[nodeIdx] ?: emptyMap()
             ReactionResult(
@@ -839,6 +851,12 @@ object MemberAnalysisSolver {
     ): SpanAnalysisResult {
         val elForces = result.elementEndForces[ctx.index] ?: List(12) { 0.0 }
 
+        println("=== ELEMENT FORCE DEBUG span=${ctx.span.id} ===")
+        elForces.forEachIndexed { index, value ->
+            println("dof[$index] = $value")
+        }
+        println("=== END ELEMENT FORCE DEBUG ===")
+
         val v1 = result.displacements[ctx.startNode to DofType.UY] ?: 0.0
         val v2 = result.displacements[ctx.endNode to DofType.UY] ?: 0.0
         val theta1 = result.displacements[ctx.startNode to DofType.RZ] ?: 0.0
@@ -916,6 +934,12 @@ object MemberAnalysisSolver {
                 )
             )
         }
+
+        println("=== MOMENT DEBUG span=${ctx.span.id} ===")
+        momentPoints.forEach {
+            println("x=${it.x.inches}  M=${it.value}")
+        }
+        println("=== END MOMENT DEBUG ===")
 
         val maxMomentPoint =
             momentPoints.maxByOrNull { abs(it.value) }
@@ -1052,15 +1076,44 @@ object MemberAnalysisSolver {
                     is Load.PointLoad -> {
                         val pVal = load.value.inPoundsForce
                         val arm = x - start
+
                         when (load.direction) {
-                            LoadDirection.VERTICAL_DOWN -> { vy -= pVal; mz -= pVal * arm }
-                            LoadDirection.VERTICAL_UP -> { vy += pVal; mz += pVal * arm }
-                            LoadDirection.LATERAL_LEFT -> { vz -= pVal; my += pVal * arm }
-                            LoadDirection.LATERAL_RIGHT -> { vz += pVal; my -= pVal * arm }
-                            LoadDirection.AXIAL_COMPRESSION -> { fx -= pVal }
-                            LoadDirection.AXIAL_TENSION -> { fx += pVal }
-                            LoadDirection.TORSION_CLOCKWISE -> { tx -= pVal }
-                            LoadDirection.TORSION_COUNTER_CLOCKWISE -> { tx += pVal }
+                            LoadDirection.VERTICAL_DOWN -> {
+                                vy += pVal
+                                mz += pVal * arm
+                            }
+
+                            LoadDirection.VERTICAL_UP -> {
+                                vy -= pVal
+                                mz -= pVal * arm
+                            }
+
+                            LoadDirection.LATERAL_LEFT -> {
+                                vz += pVal
+                                my -= pVal * arm
+                            }
+
+                            LoadDirection.LATERAL_RIGHT -> {
+                                vz -= pVal
+                                my += pVal * arm
+                            }
+
+                            LoadDirection.AXIAL_COMPRESSION -> {
+                                fx += pVal
+                            }
+
+                            LoadDirection.AXIAL_TENSION -> {
+                                fx -= pVal
+                            }
+
+                            LoadDirection.TORSION_CLOCKWISE -> {
+                                tx += pVal
+                            }
+
+                            LoadDirection.TORSION_COUNTER_CLOCKWISE -> {
+                                tx -= pVal
+                            }
+
                             else -> {}
                         }
                     }

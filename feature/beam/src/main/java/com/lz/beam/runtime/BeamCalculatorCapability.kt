@@ -27,6 +27,6 @@ class BeamCalculatorCapability : CalculatorCapability {
         true
 
     override val destination =
-        BeamNavigationDestination
+        BeamNavigationDestination.id
 
 }
