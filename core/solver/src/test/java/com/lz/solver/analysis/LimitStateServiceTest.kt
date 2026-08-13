@@ -72,9 +72,9 @@ class LimitStateServiceTest {
         
         assertTrue("Should have strength results", results.containsKey(LimitState.STRENGTH))
         val strength = results[LimitState.STRENGTH]!!
-        
+
         // For a simple span with a point load at 40", max moment is AT 40"
-        assertEquals("Governing combination name should match", "test_combo", strength.maxMoment.combinationName)
+        assertEquals("Governing combination name should match", "1.0D", strength.maxMoment.combinationName)
         assertEquals("Moment peak location should be approx 40 inches", 40.0, strength.maxMoment.location, 0.5)
         
         // Shear peak is at supports (0 or 120)

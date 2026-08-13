@@ -1,5 +1,6 @@
 package com.lz.solver.analysis
 
+import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.codes.BuildingCode
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.GoverningEffect
@@ -11,7 +12,7 @@ import com.lz.model.units.Length
 import com.lz.model.units.Moment
 import com.lz.model.units.in4
 import com.lz.model.units.ksiModulus
-import com.lz.model.regulatory.LoadCombination
+import kotlin.math.abs
 
 /**
  * Result of evaluation for a specific limit state.
@@ -33,7 +34,8 @@ data class LimitStateEnvelope(
 object LimitStateService {
 
     /**
-     * Filters and resolves governing results specifically for Strength and Serviceability.
+     * Filters and resolves governing results specifically for Strength
+     * and Serviceability.
      */
     fun evaluate(
         member: StructuralMember,
@@ -44,13 +46,29 @@ object LimitStateService {
         ix: Double,
         iy: Double
     ): Map<LimitState, LimitStateEnvelope> {
-        val setId = if (methodology == DesignMethodology.LRFD) buildingCode.defaultLrfdSetId else buildingCode.defaultAsdSetId
-        val comboSet = setId?.let { buildingCode.getCombinationSet(it) }
+
+        val setId =
+            if (methodology == DesignMethodology.LRFD) {
+                buildingCode.defaultLrfdSetId
+            } else {
+                buildingCode.defaultAsdSetId
+            }
+
+        val comboSet = setId?.let {
+            buildingCode.getCombinationSet(it)
+        }
+
         val allCombos = comboSet?.combinations ?: emptyList()
-        
+
         return LimitState.entries.mapNotNull { state ->
-            val combosForState = allCombos.filter { mapToLimitState(it) == state }
-            if (combosForState.isEmpty()) return@mapNotNull null
+
+            val combosForState = allCombos.filter {
+                mapToLimitState(it) == state
+            }
+
+            if (combosForState.isEmpty()) {
+                return@mapNotNull null
+            }
 
             val envelope = LoadResolutionService.resolveEnvelope(
                 member = member,
@@ -60,64 +78,296 @@ object LimitStateService {
                 momentOfInertiaX = ix.in4,
                 momentOfInertiaY = iy.in4
             )
-            
+
             state to LimitStateEnvelope(
                 limitState = state,
-                maxMoment = resolveGoverningEffect(envelope, { it.maxMoment }) { it.momentDiagram },
-                maxMomentY = resolveGoverningEffect(envelope, { it.maxMomentY }) { it.momentYDiagram },
-                maxShear = resolveGoverningEffect(envelope, { it.maxShear }) { it.shearDiagram },
-                maxShearY = resolveGoverningEffect(envelope, { it.maxShearY }) { it.shearYDiagram },
-                maxAxial = resolveGoverningAxial(envelope),
-                maxTorsion = resolveGoverningEffect(envelope, { it.maxTorsion }) { it.torqueDiagram },
-                maxDeflection = resolveGoverningEffect(envelope, { it.maxDeflection }) { it.deflectionDiagram }
+
+                maxMoment = resolveMoment(
+                    envelope = envelope,
+                    selector = { it.maxMoment },
+                    diagramSelector = { it.momentDiagram }
+                ),
+
+                maxMomentY = resolveMoment(
+                    envelope = envelope,
+                    selector = { it.maxMomentY },
+                    diagramSelector = { it.momentYDiagram }
+                ),
+
+                maxShear = resolveForce(
+                    envelope = envelope,
+                    selector = { it.maxShear },
+                    diagramSelector = { it.shearDiagram }
+                ),
+
+                maxShearY = resolveForce(
+                    envelope = envelope,
+                    selector = { it.maxShearY },
+                    diagramSelector = { it.shearYDiagram }
+                ),
+
+                maxAxial = resolveAxial(envelope),
+
+                maxTorsion = resolveMoment(
+                    envelope = envelope,
+                    selector = { it.maxTorsion },
+                    diagramSelector = { it.torqueDiagram }
+                ),
+
+                maxDeflection = resolveDeflection(envelope)
             )
         }.toMap()
     }
 
-    private fun mapToLimitState(combo: LoadCombination): LimitState {
-        // Heuristic: LRFD -> STRENGTH, ASD -> SERVICEABILITY
-        return if (combo.methodology == DesignMethodology.LRFD) LimitState.STRENGTH else LimitState.SERVICEABILITY
+    private fun mapToLimitState(
+        combo: LoadCombination
+    ): LimitState {
+        return if (combo.methodology == DesignMethodology.LRFD) {
+            LimitState.STRENGTH
+        } else {
+            LimitState.SERVICEABILITY
+        }
     }
 
-    private fun <T : Comparable<T>> resolveGoverningEffect(
+    /**
+     * Resolves the governing moment by absolute magnitude from the
+     * actual combination result and locates that value on its diagram.
+     */
+    private fun resolveMoment(
         envelope: AnalysisResult,
-        maxValue: (AnalysisResult) -> T,
-        diagram: (SpanAnalysisResult) -> List<AnalysisPoint>
-    ): GoverningEffect<T> {
-        val targetValue = maxValue(envelope)
-        val governingName = envelope.governingCombinationName ?: "Governing"
+        selector: (AnalysisResult) -> Moment,
+        diagramSelector: (SpanAnalysisResult) -> List<AnalysisPoint>
+    ): GoverningEffect<Moment> {
 
-        // Search spans for the absolute location of this value
-        var globalOffset = 0.0
-        for (span in envelope.spanResults) {
-            val point = diagram(span).find { 
-                it.value == ((targetValue as? Moment)?.lbIn ?: (targetValue as? Force)?.pounds ?: (targetValue as? Length)?.inches)
+        var governingValue = 0.0
+        var governingMagnitude = Double.NEGATIVE_INFINITY
+        var governingLocation = 0.0
+        var governingCombination = "Governing"
+
+        for ((combinationName, result) in envelope.combinationResults) {
+
+            val value = selector(result).lbIn
+            val magnitude = abs(value)
+
+            if (magnitude > governingMagnitude) {
+
+                val location = findMaximumLocation(
+                    result = result,
+                    diagramSelector = diagramSelector
+                )
+
+                governingValue = value
+                governingMagnitude = magnitude
+                governingLocation = location
+                governingCombination = combinationName
             }
-            if (point != null) {
-                return GoverningEffect(targetValue, globalOffset + point.x.inches, governingName)
-            }
-            // Length of span is not directly in SpanAnalysisResult, but we can infer it from diagrams or SpanExtremePoints
-            val spanLength = diagram(span).maxOfOrNull { it.x.inches } ?: 0.0
-            globalOffset += spanLength
         }
 
-        return GoverningEffect(targetValue, 0.0, governingName)
+        if (envelope.combinationResults.isEmpty()) {
+            val value = selector(envelope)
+
+            return GoverningEffect(
+                value,
+                findMaximumLocation(
+                    result = envelope,
+                    diagramSelector = diagramSelector
+                ),
+                envelope.governingCombinationName ?: "Governing"
+            )
+        }
+
+        return GoverningEffect(
+            Moment(governingValue),
+            governingLocation,
+            governingCombination
+        )
     }
 
-    private fun resolveGoverningAxial(envelope: AnalysisResult): GoverningEffect<Force> {
-        val targetValue = envelope.maxAxial
-        val governingName = envelope.governingCombinationName ?: "Governing"
-        
-        var globalOffset = 0.0
-        for (span in envelope.spanResults) {
-            val demand = span.stationDemands.find { it.axial == targetValue }
-            if (demand != null) {
-                return GoverningEffect(targetValue, globalOffset + demand.x.inches, governingName)
+    /**
+     * Resolves the governing force by absolute magnitude from the
+     * actual combination result and locates that value on its diagram.
+     */
+    private fun resolveForce(
+        envelope: AnalysisResult,
+        selector: (AnalysisResult) -> Force,
+        diagramSelector: (SpanAnalysisResult) -> List<AnalysisPoint>
+    ): GoverningEffect<Force> {
+
+        var governingValue = 0.0
+        var governingMagnitude = Double.NEGATIVE_INFINITY
+        var governingLocation = 0.0
+        var governingCombination = "Governing"
+
+        for ((combinationName, result) in envelope.combinationResults) {
+
+            val value = selector(result).pounds
+            val magnitude = abs(value)
+
+            if (magnitude > governingMagnitude) {
+
+                val location = findMaximumLocation(
+                    result = result,
+                    diagramSelector = diagramSelector
+                )
+
+                governingValue = value
+                governingMagnitude = magnitude
+                governingLocation = location
+                governingCombination = combinationName
             }
-            val spanLength = span.stationDemands.maxOfOrNull { it.x.inches } ?: 0.0
-            globalOffset += spanLength
         }
-        
-        return GoverningEffect(targetValue, 0.0, governingName)
+
+        if (envelope.combinationResults.isEmpty()) {
+            val value = selector(envelope)
+
+            return GoverningEffect(
+                value,
+                findMaximumLocation(
+                    result = envelope,
+                    diagramSelector = diagramSelector
+                ),
+                envelope.governingCombinationName ?: "Governing"
+            )
+        }
+
+        return GoverningEffect(
+            Force(governingValue),
+            governingLocation,
+            governingCombination
+        )
+    }
+
+    /**
+     * Resolves the governing axial force using the actual station
+     * where the combination result reaches its maximum axial demand.
+     */
+    private fun resolveAxial(
+        envelope: AnalysisResult
+    ): GoverningEffect<Force> {
+
+        if (envelope.combinationResults.isEmpty()) {
+            val target = envelope.maxAxial.pounds
+
+            val point = envelope.spanResults
+                .flatMap { it.stationDemands }
+                .maxByOrNull { abs(it.axial.pounds) }
+
+            return GoverningEffect(
+                envelope.maxAxial,
+                point?.x?.inches ?: 0.0,
+                envelope.governingCombinationName ?: "Governing"
+            )
+        }
+
+        var governingValue = 0.0
+        var governingMagnitude = Double.NEGATIVE_INFINITY
+        var governingLocation = 0.0
+        var governingCombination = "Governing"
+
+        for ((combinationName, result) in envelope.combinationResults) {
+
+            val value = result.maxAxial.pounds
+            val magnitude = abs(value)
+
+            if (magnitude > governingMagnitude) {
+
+                val point = result.spanResults
+                    .flatMap { it.stationDemands }
+                    .maxByOrNull { abs(it.axial.pounds) }
+
+                governingValue = value
+                governingMagnitude = magnitude
+                governingLocation = point?.x?.inches ?: 0.0
+                governingCombination = combinationName
+            }
+        }
+
+        return GoverningEffect(
+            Force(governingValue),
+            governingLocation,
+            governingCombination
+        )
+    }
+
+    /**
+     * Resolves maximum absolute deflection and its actual location.
+     */
+    private fun resolveDeflection(
+        envelope: AnalysisResult
+    ): GoverningEffect<Length> {
+
+        if (envelope.combinationResults.isEmpty()) {
+            return resolveDeflectionFromResult(
+                envelope,
+                envelope.governingCombinationName ?: "Governing"
+            )
+        }
+
+        var governingValue = Double.NEGATIVE_INFINITY
+        var governingLocation = 0.0
+        var governingCombination = "Governing"
+
+        for ((combinationName, result) in envelope.combinationResults) {
+
+            val point = result.spanResults
+                .flatMap { it.deflectionDiagram }
+                .maxByOrNull { abs(it.value) }
+
+            if (point != null && abs(point.value) > governingValue) {
+                governingValue = abs(point.value)
+                governingLocation = point.x.inches
+                governingCombination = combinationName
+            }
+        }
+
+        return GoverningEffect(
+            Length(governingValue),
+            governingLocation,
+            governingCombination
+        )
+    }
+
+    private fun resolveDeflectionFromResult(
+        result: AnalysisResult,
+        combinationName: String
+    ): GoverningEffect<Length> {
+
+        val point = result.spanResults
+            .flatMap { it.deflectionDiagram }
+            .maxByOrNull { abs(it.value) }
+
+        return GoverningEffect(
+            Length(point?.let { abs(it.value) } ?: 0.0),
+            point?.x?.inches ?: 0.0,
+            combinationName
+        )
+    }
+
+    /**
+     * Finds the location of the maximum value in a diagram.
+     *
+     * AnalysisPoint.x is already a GLOBAL member coordinate in
+     * MemberAnalysisSolver.analyzeSpan().
+     */
+    /**
+     * Finds the location of the maximum absolute value in a diagram.
+     *
+     * AnalysisPoint.x is already a GLOBAL member coordinate in
+     * MemberAnalysisSolver.analyzeSpan().
+     *
+     * This must use absolute magnitude because AnalysisResult's
+     * maxMoment/maxShear/etc. are themselves resolved by absolute value.
+     */
+    private fun findMaximumLocation(
+        result: AnalysisResult,
+        diagramSelector: (SpanAnalysisResult) -> List<AnalysisPoint>
+    ): Double {
+
+        return result.spanResults
+            .flatMap { diagramSelector(it) }
+            .maxByOrNull { abs(it.value) }
+            ?.x
+            ?.inches
+            ?: 0.0
     }
 }

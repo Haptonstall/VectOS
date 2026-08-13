@@ -18,9 +18,9 @@ object DemandEnvelopeResolver {
     data class MemberEnvelopeResult(
         val strengthEnvelope: List<StationEnvelopeResult>,
         val serviceabilityEnvelope: List<StationEnvelopeResult>,
-        val governingMaxMoment: StationEnvelopeResult,
-        val governingMaxShear: StationEnvelopeResult,
-        val governingMaxDeflection: StationEnvelopeResult
+        val governingMaxMoment: StationEnvelopeResult?,
+        val governingMaxShear: StationEnvelopeResult?,
+        val governingMaxDeflection: StationEnvelopeResult?
     )
 
     data class StationEnvelopeResult(
@@ -80,9 +80,9 @@ object DemandEnvelopeResolver {
         }
 
         // 4. Extract global worst-case critical values across the entire member length
-        val governingMoment = strengthResults.maxBy { abs(it.combinedDemand.moment.lbIn) }
-        val governingShear = strengthResults.maxBy { abs(it.combinedDemand.shear.pounds) }
-        val governingDeflection = serviceResults.maxBy { abs(it.combinedDemand.deflection.inches) }
+        val governingMoment = strengthResults.maxByOrNull { abs(it.combinedDemand.moment.lbIn) }
+        val governingShear = strengthResults.maxByOrNull { abs(it.combinedDemand.shear.pounds) }
+        val governingDeflection = serviceResults.maxByOrNull { abs(it.combinedDemand.deflection.inches) }
 
         return MemberEnvelopeResult(
             strengthEnvelope = strengthResults,

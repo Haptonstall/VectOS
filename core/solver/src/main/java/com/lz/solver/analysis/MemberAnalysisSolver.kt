@@ -228,13 +228,39 @@ object MemberAnalysisSolver {
             }
         }
 
-        val governingSpanResults = buildSpanResults(config, governingDemands, "Governing Envelope")
-        val governingResult = createSummaryResult(governingSpanResults, governingReactions.values.toList())
+        val governingSpanResults =
+            buildSpanResults(config, governingDemands, "Governing Envelope")
+
+        val governingResult =
+            createSummaryResult(
+                governingSpanResults,
+                governingReactions.values.toList()
+            )
 
         return governingResult.copy(
             combinationResults = combinationResults,
-            governingCombinationName = "Multiple (See Spans)"
+            governingCombinationName =
+                determineGoverningCombinationName(combinationResults)
         )
+    }
+
+    private fun determineGoverningCombinationName(
+        combinationResults: Map<String, AnalysisResult>
+    ): String? {
+        if (combinationResults.isEmpty()) {
+            return null
+        }
+
+        return combinationResults.maxByOrNull { (_, result) ->
+            maxOf(
+                abs(result.maxMoment.lbIn),
+                abs(result.maxMomentY.lbIn),
+                abs(result.maxShear.pounds),
+                abs(result.maxShearY.pounds),
+                abs(result.maxAxial.pounds),
+                abs(result.maxTorsion.lbIn)
+            )
+        }?.key
     }
 
     private fun buildSpanResults(
@@ -253,12 +279,30 @@ object MemberAnalysisSolver {
             val torquePoints  = spanDemands.map { AnalysisPoint(it.x, it.torque.lbIn) }
             val deflPoints    = spanDemands.map { AnalysisPoint(it.x, it.deflection.inches) }
 
-            val maxMoment  = momentPoints.maxByOrNull { it.value }  ?: AnalysisPoint(0.0.inches, 0.0)
-            val minMoment  = momentPoints.minByOrNull { it.value }  ?: AnalysisPoint(0.0.inches, 0.0)
-            val maxShear   = shearPoints.maxByOrNull { it.value }   ?: AnalysisPoint(0.0.inches, 0.0)
-            val minShear   = shearPoints.minByOrNull { it.value }   ?: AnalysisPoint(0.0.inches, 0.0)
-            val maxAxial   = axialPoints.maxByOrNull { it.value }   ?: AnalysisPoint(0.0.inches, 0.0)
-            val minAxial   = axialPoints.minByOrNull { it.value }   ?: AnalysisPoint(0.0.inches, 0.0)
+            val maxMoment =
+                momentPoints.maxByOrNull { abs(it.value) }
+                    ?: AnalysisPoint(0.0.inches, 0.0)
+
+            val minMoment =
+                momentPoints.minByOrNull { it.value }
+                    ?: AnalysisPoint(0.0.inches, 0.0)
+
+            val maxShear =
+                shearPoints.maxByOrNull { abs(it.value) }
+                    ?: AnalysisPoint(0.0.inches, 0.0)
+
+            val minShear =
+                shearPoints.minByOrNull { it.value }
+                    ?: AnalysisPoint(0.0.inches, 0.0)
+
+            val maxAxial =
+                axialPoints.maxByOrNull { abs(it.value) }
+                    ?: AnalysisPoint(0.0.inches, 0.0)
+
+            val minAxial =
+                axialPoints.minByOrNull { it.value }
+                    ?: AnalysisPoint(0.0.inches, 0.0)
+
             val maxDefl    = deflPoints.maxByOrNull { abs(it.value) } ?: AnalysisPoint(0.0.inches, 0.0)
 
             SpanAnalysisResult(
@@ -504,18 +548,25 @@ object MemberAnalysisSolver {
         val allAxials = spanResults.flatMap { res -> res.stationDemands.map { d -> d.axial.inPoundsForce } }
 
         return AnalysisResult(
-            maxMoment = Moment(allMoments.maxByOrNull { it } ?: 0.0),
-            maxMomentY = Moment(spanResults.maxOfOrNull {
-                it.momentYDiagram.maxOfOrNull { p -> p.value } ?: 0.0
-            } ?: 0.0),
-            maxShear = Force(allShears.maxByOrNull { it } ?: 0.0),
-            maxShearY = Force(spanResults.maxOfOrNull {
-                it.shearYDiagram.maxOfOrNull { p -> p.value } ?: 0.0
-            } ?: 0.0),
-            maxTorsion = Moment(spanResults.maxOfOrNull {
-                it.torqueDiagram.maxOfOrNull { p -> p.value } ?: 0.0
-            } ?: 0.0),
-            maxAxial = Force(allAxials.maxByOrNull { it } ?: 0.0),
+            maxMoment = Moment(allMoments.maxByOrNull { abs(it) } ?: 0.0),
+            maxMomentY = Moment(
+                spanResults
+                    .flatMap { it.momentYDiagram }
+                    .maxOfOrNull { abs(it.value) }
+                    ?: 0.0
+            ),
+            maxShear = Force(allShears.maxByOrNull { abs(it) } ?: 0.0),
+            maxShearY = Force(
+                spanResults
+                    .flatMap { it.shearYDiagram }
+                    .maxOfOrNull { abs(it.value) } ?: 0.0
+            ),
+            maxTorsion = Moment(
+                spanResults
+                    .flatMap { it.torqueDiagram }
+                    .maxOfOrNull { abs(it.value) } ?: 0.0
+            ),
+            maxAxial = Force(allAxials.maxByOrNull { abs(it) } ?: 0.0),
             maxDeflection = Length(spanResults.maxOfOrNull { it.maxDeflection.inInches } ?: 0.0),
             minMoment = Moment(allMoments.minByOrNull { it } ?: 0.0),
             minMomentY = Moment(spanResults.minOfOrNull {
@@ -866,12 +917,30 @@ object MemberAnalysisSolver {
             )
         }
 
-        val maxMomentPoint = momentPoints.maxByOrNull { it.value } ?: AnalysisPoint(0.0.inches, 0.0)
-        val minMomentPoint = momentPoints.minByOrNull { it.value } ?: AnalysisPoint(0.0.inches, 0.0)
-        val maxShearPoint = shearPoints.maxByOrNull { it.value } ?: AnalysisPoint(0.0.inches, 0.0)
-        val minShearPoint = shearPoints.minByOrNull { it.value } ?: AnalysisPoint(0.0.inches, 0.0)
-        val maxAxialPoint = axialPoints.maxByOrNull { it.value } ?: AnalysisPoint(0.0.inches, 0.0)
-        val minAxialPoint = axialPoints.minByOrNull { it.value } ?: AnalysisPoint(0.0.inches, 0.0)
+        val maxMomentPoint =
+            momentPoints.maxByOrNull { abs(it.value) }
+                ?: AnalysisPoint(0.0.inches, 0.0)
+
+        val minMomentPoint =
+            momentPoints.minByOrNull { it.value }
+                ?: AnalysisPoint(0.0.inches, 0.0)
+
+        val maxShearPoint =
+            shearPoints.maxByOrNull { abs(it.value) }
+                ?: AnalysisPoint(0.0.inches, 0.0)
+
+        val minShearPoint =
+            shearPoints.minByOrNull { it.value }
+                ?: AnalysisPoint(0.0.inches, 0.0)
+
+        val maxAxialPoint =
+            axialPoints.maxByOrNull { abs(it.value) }
+                ?: AnalysisPoint(0.0.inches, 0.0)
+
+        val minAxialPoint =
+            axialPoints.minByOrNull { it.value }
+                ?: AnalysisPoint(0.0.inches, 0.0)
+
         val maxDeflectionPoint = deflectionPoints.maxByOrNull { abs(it.value) } ?: AnalysisPoint(0.0.inches, 0.0)
 
         return SpanAnalysisResult(
