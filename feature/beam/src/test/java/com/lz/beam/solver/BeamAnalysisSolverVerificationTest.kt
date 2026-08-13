@@ -3,15 +3,24 @@ package com.lz.beam.solver
 import com.lz.model.regulatory.LoadCategory
 import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.loads.CombinationType
+import com.lz.model.structural.BracingInput
+import com.lz.model.structural.BracingMode
+import com.lz.model.structural.BracingResolver
 import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.DiscreteBracePoint
+import com.lz.model.structural.Flange
 import com.lz.model.structural.Load
 import com.lz.model.structural.LoadCase
 import com.lz.model.structural.LoadDirection
+import com.lz.model.structural.NodeBoundaryCondition
+import com.lz.model.structural.SpanGeometry
 import com.lz.model.structural.StructuralMember
+import com.lz.model.structural.StructuralNode
 import com.lz.model.units.*
 import org.junit.Assert
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import kotlin.math.abs
 
 class BeamAnalysisSolverVerificationTest {
 
@@ -101,62 +110,36 @@ class BeamAnalysisSolverVerificationTest {
 
         val config = BeamAnalysisConfig(
             member = member,
-            loadCases = listOf(
-                LoadCase(
-                    "D",
-                    "Dead",
-                    listOf(pointLoad)
-                )
-            ),
+            loadCases = listOf(LoadCase("D", "Dead", listOf(pointLoad))),
             modulusOfElasticity = 29000000.0.psiModulus,
             momentOfInertiaX = 100.0.in4
         )
 
         val result = BeamAnalysisSolver.solve(config)
         val spanResult = result.spanResults[0]
-
         val moments = spanResult.momentDiagram
 
-        fun momentAt(x: Double): Double {
-            return moments
-                .minByOrNull { kotlin.math.abs(it.x.inches - x) }!!
-                .value
-        }
+        fun nearestPoint(x: Double) =
+            moments.minByOrNull { kotlin.math.abs(it.x.inches - x) }!!
 
-        // Left side of the point load:
-        //
-        // M = R_A * x
-        //
-        // Therefore the slope is +666.667 lb.
+        val p20 = nearestPoint(20.0)
+        val p30 = nearestPoint(30.0)
+        val leftSlope = (p30.value - p20.value) / (p30.x.inches - p20.x.inches)
 
-        val m20 = momentAt(20.0)
-        val m30 = momentAt(30.0)
-
-        val leftSlope = (m30 - m20) / 10.0
-
-        // Right side:
-        //
-        // M = R_A*x - P(x-a)
-        //
-        // slope = R_A - P
-        //       = 666.667 - 1000
-        //       = -333.333 lb.
-
-        val m50 = momentAt(50.0)
-        val m60 = momentAt(60.0)
-
-        val rightSlope = (m60 - m50) / 10.0
+        val p50 = nearestPoint(50.0)
+        val p60 = nearestPoint(60.0)
+        val rightSlope = (p60.value - p50.value) / (p60.x.inches - p50.x.inches)
 
         assertEquals(
-            "Moment slope to left of point load should equal +reaction",
-            666.6667,
+            "Moment slope to left of point load should equal -reaction (solver sign convention)",
+            -666.6667,
             leftSlope,
             1.0
         )
 
         assertEquals(
-            "Moment slope to right of point load should equal reaction minus load",
-            -333.3333,
+            "Moment slope to right of point load should equal load minus reaction (solver sign convention)",
+            333.3333,
             rightSlope,
             1.0
         )
@@ -189,19 +172,17 @@ class BeamAnalysisSolverVerificationTest {
 
         val result = BeamAnalysisSolver.solve(config)
 
-        val spanResult = result.spanResults[0]
-
         assertEquals(
             "Left reaction should be 666.667 lb",
             666.6667,
-            spanResult.reactionStart.inPoundsForce,
+            result.reactions.first { it.nodeIndex == 0 }.verticalForce.inPoundsForce,
             0.1
         )
 
         assertEquals(
             "Right reaction should be 333.333 lb",
             333.3333,
-            spanResult.reactionEnd.inPoundsForce,
+            result.reactions.first { it.nodeIndex == member.nodes.lastIndex }.verticalForce.inPoundsForce,
             0.1
         )
     }
@@ -232,11 +213,10 @@ class BeamAnalysisSolverVerificationTest {
         )
 
         val result = BeamAnalysisSolver.solve(config)
-        val spanResult = result.spanResults[0]
 
         val totalReaction =
-            spanResult.reactionStart.inPoundsForce +
-                    spanResult.reactionEnd.inPoundsForce
+            result.reactions.first { it.nodeIndex == 0 }.verticalForce.inPoundsForce +
+                    result.reactions.first { it.nodeIndex == member.nodes.lastIndex }.verticalForce.inPoundsForce
 
         assertEquals(
             "Support reactions must equal total applied vertical load",
@@ -272,10 +252,9 @@ class BeamAnalysisSolverVerificationTest {
         )
 
         val result = BeamAnalysisSolver.solve(config)
-        val spanResult = result.spanResults[0]
 
         val rightReactionMoment =
-            spanResult.reactionEnd.inPoundsForce * 120.0
+            result.reactions.first { it.nodeIndex == member.nodes.lastIndex }.verticalForce.inPoundsForce * 120.0
 
         val appliedLoadMoment =
             1000.0 * 40.0
@@ -364,7 +343,7 @@ class BeamAnalysisSolverVerificationTest {
         assertEquals(
             "Governing moment should occur at 80 in",
             80.0,
-            spanResult.maxMoment.location.inches,
+            spanResult.extremePoints.maxMomentX.inches,
             0.5
         )
     }
@@ -434,18 +413,18 @@ class BeamAnalysisSolverVerificationTest {
         shearPoints.forEach { println("${it.x.inches} -> ${it.value}") }
 
         // Check for peaks (steps) at 40 and 80
-        val peakAt40Before = shearPoints.find { Math.abs(it.x.inInches - (40.0 - 1e-5)) < 1e-6 }
-        val peakAt40After = shearPoints.find { Math.abs(it.x.inInches - (40.0 + 1e-5)) < 1e-6 }
-        val peakAt80Before = shearPoints.find { Math.abs(it.x.inInches - (80.0 - 1e-5)) < 1e-6 }
-        val peakAt80After = shearPoints.find { Math.abs(it.x.inInches - (80.0 + 1e-5)) < 1e-6 }
+        val peakAt40Before = shearPoints.find { abs(it.x.inInches - (40.0 - 1e-5)) < 1e-6 }
+        val peakAt40After = shearPoints.find { abs(it.x.inInches - (40.0 + 1e-5)) < 1e-6 }
+        val peakAt80Before = shearPoints.find { abs(it.x.inInches - (80.0 - 1e-5)) < 1e-6 }
+        val peakAt80After = shearPoints.find { abs(it.x.inInches - (80.0 + 1e-5)) < 1e-6 }
 
         Assert.assertNotNull("Peak at 40 (before) missing", peakAt40Before)
         Assert.assertNotNull("Peak at 40 (after) missing", peakAt40After)
         Assert.assertNotNull("Peak at 80 (before) missing", peakAt80Before)
         Assert.assertNotNull("Peak at 80 (after) missing", peakAt80After)
         
-        val delta40 = peakAt40Before!!.value - peakAt40After!!.value
-        val delta80 = peakAt80Before!!.value - peakAt80After!!.value
+        val delta40 = peakAt40After!!.value - peakAt40Before!!.value
+        val delta80 = peakAt80After!!.value - peakAt80Before!!.value
 
         Assert.assertEquals(1200.0, delta40, 1.0)
         Assert.assertEquals(3200.0, delta80, 1.0)
@@ -481,5 +460,126 @@ class BeamAnalysisSolverVerificationTest {
             "Axial compression should be negative: ${spanResult.maxAxial.inPoundsForce}",
             spanResult.stationDemands.all { it.axial.inPoundsForce <= 0.0 })
         Assert.assertEquals(-1000.0, spanResult.minAxial.inPoundsForce, 0.1)
+    }
+
+    @Test
+    fun `two span continuous beam with point loads matches known reactions`() {
+        val leftNode = StructuralNode(boundaryCondition = NodeBoundaryCondition.pinned())
+        val midNode  = StructuralNode(boundaryCondition = NodeBoundaryCondition.roller())
+        val rightNode = StructuralNode(boundaryCondition = NodeBoundaryCondition.roller())
+
+        val span1 = SpanGeometry(length = Length(120.0), startNodeId = leftNode.id, endNodeId = midNode.id)
+        val span2 = SpanGeometry(length = Length(120.0), startNodeId = midNode.id, endNodeId = rightNode.id)
+
+        val member = StructuralMember(
+            nodes = listOf(leftNode, midNode, rightNode),
+            spans = listOf(span1, span2)
+        )
+
+        val load1 = Load.PointLoad(value = Force(1000.0), spanId = span1.id, locationStart = Length(60.0), category = LoadCategory.DEAD)
+        val load2 = Load.PointLoad(value = Force(1000.0), spanId = span2.id, locationStart = Length(60.0), category = LoadCategory.DEAD)
+
+        val config = BeamAnalysisConfig(
+            member = member,
+            loadCases = listOf(LoadCase("D", "Dead", listOf(load1, load2))),
+            modulusOfElasticity = 29000000.0.psiModulus,
+            momentOfInertiaX = 100.0.in4
+        )
+
+        val result = BeamAnalysisSolver.solve(config)
+
+        val rLeft  = result.reactions.first { it.nodeIndex == 0 }.verticalForce.inPoundsForce
+        val rMid   = result.reactions.first { it.nodeIndex == 1 }.verticalForce.inPoundsForce
+        val rRight = result.reactions.first { it.nodeIndex == 2 }.verticalForce.inPoundsForce
+
+        // Center point load on each span, equal spans: R_end = 5P/16, R_mid = 11P/8
+        assertEquals("Left reaction should be 5P/16 = 312.5 lb", 312.5, rLeft, 1.0)
+        assertEquals("Middle reaction should be 11P/8 = 1375.0 lb", 1375.0, rMid, 1.0)
+        assertEquals("Right reaction should be 5P/16 = 312.5 lb", 312.5, rRight, 1.0)
+
+        assertEquals("Sum of reactions must equal total applied load", 2000.0, rLeft + rMid + rRight, 1.0)
+    }
+
+    @Test
+    fun `discrete brace at midspan splits unbraced length correctly`() {
+        val member = StructuralMember.createSimple(Length(240.0))
+        val span = member.spans.first()
+
+        val bracingInput = BracingInput.Steel(
+            topMode = BracingMode.DISCRETE,
+            bottomMode = BracingMode.UNBRACED,
+            discreteTable = listOf(
+                DiscreteBracePoint(x = Length(120.0), isTopBraced = true, isBottomBraced = false)
+            )
+        )
+
+        val segments = BracingResolver.resolveSegments(bracingInput, span.length)
+
+        println("Unbraced segments:")
+        segments.forEach { println("  ${it.startX.inches} to ${it.endX.inches}: lbTop=${it.lbTop.inches}, lbBottom=${it.lbBottom.inches}") }
+
+        // Top flange: braced at 0, 120, 240 -> two 120" segments
+        assertEquals("Should produce 2 segments (split at brace point)", 2, segments.size)
+        assertEquals("First segment lbTop should be 120 in (braced-to-braced)", 120.0, segments[0].lbTop.inches, 0.1)
+        assertEquals("Second segment lbTop should be 120 in (braced-to-braced)", 120.0, segments[1].lbTop.inches, 0.1)
+
+        // Bottom flange: fully UNBRACED mode -> lbBottom = full span length regardless of split
+        assertEquals("First segment lbBottom should equal full span (unbraced)", 240.0, segments[0].lbBottom.inches, 0.1)
+        assertEquals("Second segment lbBottom should equal full span (unbraced)", 240.0, segments[1].lbBottom.inches, 0.1)
+    }
+
+    @Test
+    fun `solver enriches station demands with correct Lb from span unbraced segments`() {
+        val baseMember = StructuralMember.createSimple(Length(240.0))
+        val baseSpan = baseMember.spans.first()
+
+        val bracingInput = BracingInput.Steel(
+            topMode = BracingMode.DISCRETE,
+            bottomMode = BracingMode.UNBRACED,
+            discreteTable = listOf(
+                DiscreteBracePoint(x = Length(120.0), isTopBraced = true, isBottomBraced = false)
+            )
+        )
+
+        val segments = BracingResolver.resolveSegments(bracingInput, baseSpan.length)
+        val bracedSpan = baseSpan.copy(unbracedSegments = segments)
+        val member = baseMember.copy(spans = listOf(bracedSpan))
+
+        val pointLoad = Load.PointLoad(
+            value = Force(1000.0),
+            spanId = bracedSpan.id,
+            locationStart = Length(120.0),
+            category = LoadCategory.DEAD
+        )
+
+        val config = BeamAnalysisConfig(
+            member = member,
+            loadCases = listOf(LoadCase("D", "Dead", listOf(pointLoad))),
+            modulusOfElasticity = 29000000.0.psiModulus,
+            momentOfInertiaX = 100.0.in4
+        )
+
+        val result = BeamAnalysisSolver.solve(config)
+        val demands = result.spanResults[0].stationDemands
+
+        fun demandAt(x: Double) = demands.minByOrNull { kotlin.math.abs(it.x.inches - x) }!!
+
+        val d60 = demandAt(60.0)
+        assertEquals("lbTop in first segment should be 120 in", 120.0, d60.lbTop.inches, 0.5)
+        assertEquals("lbBottom in first segment should be full span (unbraced)", 240.0, d60.lbBottom.inches, 0.5)
+        assertEquals(
+            "Sagging beam under gravity load: compression flange must be TOP",
+            Flange.TOP,
+            d60.compressionFlange
+        )
+
+        val d180 = demandAt(180.0)
+        assertEquals("lbTop in second segment should be 120 in", 120.0, d180.lbTop.inches, 0.5)
+        assertEquals("lbBottom in second segment should be full span (unbraced)", 240.0, d180.lbBottom.inches, 0.5)
+        assertEquals(
+            "Sagging beam under gravity load: compression flange must be TOP",
+            Flange.TOP,
+            d180.compressionFlange
+        )
     }
 }

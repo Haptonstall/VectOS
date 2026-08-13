@@ -53,8 +53,8 @@ object BracingLogic {
 
             // Compression flange: positive moment → top flange in compression
             val compressionFlange = when {
-                demand.moment.inLbIn > 1e-6  -> Flange.TOP
-                demand.moment.inLbIn < -1e-6 -> Flange.BOTTOM
+                demand.moment.inLbIn > -1e-6  -> Flange.TOP
+                demand.moment.inLbIn < 1e-6 -> Flange.BOTTOM
                 else                          -> Flange.NONE
             }
 
