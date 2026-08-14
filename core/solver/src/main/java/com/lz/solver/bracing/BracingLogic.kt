@@ -51,7 +51,7 @@ object BracingLogic {
         return sorted.map { demand ->
             val xInches = demand.x.inches
 
-            // Compression flange: positive moment → top flange in compression
+            // Compression flange: negative moment → top flange in compression
             val compressionFlange = when {
                 demand.moment.inLbIn < -1e-6  -> Flange.TOP
                 demand.moment.inLbIn > 1e-6 -> Flange.BOTTOM

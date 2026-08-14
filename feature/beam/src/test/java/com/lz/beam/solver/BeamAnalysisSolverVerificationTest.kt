@@ -582,4 +582,54 @@ class BeamAnalysisSolverVerificationTest {
             d180.compressionFlange
         )
     }
+
+    @Test
+    fun `cantilever moment diagram returns to zero at free tip`() {
+        val length = Length(100.0)
+        val fixedNode = StructuralNode(boundaryCondition = NodeBoundaryCondition.fixed())
+        val freeNode  = StructuralNode(boundaryCondition = NodeBoundaryCondition.free())
+
+        val span = SpanGeometry(length = length, startNodeId = fixedNode.id, endNodeId = freeNode.id)
+        val member = StructuralMember(nodes = listOf(fixedNode, freeNode), spans = listOf(span))
+
+        val tipLoad = Load.PointLoad(
+            value = Force(1000.0),
+            spanId = span.id,
+            locationStart = Length(100.0),
+            category = LoadCategory.DEAD
+        )
+
+        val config = BeamAnalysisConfig(
+            member = member,
+            loadCases = listOf(LoadCase("D", "Dead", listOf(tipLoad))),
+            modulusOfElasticity = 29000000.0.psiModulus,
+            momentOfInertiaX = 100.0.in4
+        )
+
+        val result = BeamAnalysisSolver.solve(config)
+        val moments = result.spanResults[0].momentDiagram
+
+        fun momentAt(x: Double) = moments.minByOrNull { kotlin.math.abs(it.x.inches - x) }!!.value
+
+        assertEquals(
+            "Moment at the free tip must be zero",
+            0.0,
+            momentAt(100.0),
+            1.0
+        )
+
+        assertEquals(
+            "Moment at fixed end should be +P*L = +100,000 (solver's negated-sagging convention)",
+            100000.0,
+            momentAt(0.0),
+            1.0
+        )
+
+        assertEquals(
+            "Moment at midspan should be +50,000 (halfway between +100,000 and 0)",
+            50000.0,
+            momentAt(50.0),
+            50.0
+        )
+    }
 }

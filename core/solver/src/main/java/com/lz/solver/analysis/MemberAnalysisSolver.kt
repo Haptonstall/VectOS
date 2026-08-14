@@ -864,7 +864,7 @@ object MemberAnalysisSolver {
 
         val forces = SpanForces(
             vyStart = -elForces[1],
-            mzStart = -elForces[5],
+            mzStart = elForces[5],
             vyEnd = elForces[7],
             mzEnd = elForces[11],
             axialStart = elForces[0],
