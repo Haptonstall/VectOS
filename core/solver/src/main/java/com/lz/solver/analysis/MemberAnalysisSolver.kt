@@ -841,6 +841,69 @@ object MemberAnalysisSolver {
     data class Fems(val mStart: Double, val mEnd: Double)
     data class Reactions(val vStart: Double, val vEnd: Double)
 
+    private fun computeParticularDeflection(ctx: SpanContext, x: Double): Double {
+        val l = ctx.lengthInches
+        val ei = ctx.propertyProvider.getE(x) * ctx.propertyProvider.getI(x)
+        if (ei <= 0.0) return 0.0
+
+        var vp = 0.0
+        ctx.loads.forEach { load ->
+            vp += when (load) {
+                is Load.PointLoad -> {
+                    if (load.direction == LoadDirection.VERTICAL_DOWN || load.direction == LoadDirection.VERTICAL_UP) {
+                        val p = load.value.inPoundsForce * (if (load.direction == LoadDirection.VERTICAL_DOWN) -1.0 else 1.0)
+                        val a = load.locationStart.inches
+                        val b = l - a
+                        if (x <= a) {
+                            (p * b * b * x * x) / (6 * l.pow(3) * ei) * (3 * a * l - x * (3 * a + b))
+                        } else {
+                            val xRev = l - x
+                            (p * a * a * xRev * xRev) / (6 * l.pow(3) * ei) * (3 * b * l - xRev * (3 * b + a))
+                        }
+                    } else 0.0
+                }
+                is Load.UniformDistributedLoad -> {
+                    if (load.direction == LoadDirection.VERTICAL_DOWN || load.direction == LoadDirection.VERTICAL_UP) {
+                        val w = load.value.pli * (if (load.direction == LoadDirection.VERTICAL_DOWN) -1.0 else 1.0)
+                        val a = load.locationStart.inches
+                        val b = load.locationEnd.inches
+                        if (a <= 0.01 && b >= l - 0.01) {
+                            (w * x * x * (l - x).pow(2)) / (24 * ei)
+                        } else {
+                            val steps = 10
+                            val dx = (b - a) / steps
+                            var sum = 0.0
+                            for (j in 0 until steps) {
+                                val loadPos = a + (j + 0.5) * dx
+                                val loadMag = w * dx
+                                val bLoad = l - loadPos
+                                sum += if (x <= loadPos) {
+                                    (loadMag * bLoad * bLoad * x * x) / (6 * l.pow(3) * ei) * (3 * loadPos * l - x * (3 * loadPos + bLoad))
+                                } else {
+                                    val xRev = l - x
+                                    val aLoad = loadPos
+                                    (loadMag * aLoad * aLoad * xRev * xRev) / (6 * l.pow(3) * ei) * (3 * bLoad * l - xRev * (3 * bLoad + aLoad))
+                                }
+                            }
+                            sum
+                        }
+                    } else 0.0
+                }
+                else -> 0.0
+            }
+        }
+        return vp
+    }
+
+    data class InternalForces(
+        val fx: Double,
+        val vy: Double,
+        val vz: Double,
+        val tx: Double,
+        val my: Double,
+        val mz: Double
+    )
+
     private fun analyzeSpan(
         ctx: SpanContext,
         result: StructuralResult,
@@ -996,69 +1059,6 @@ object MemberAnalysisSolver {
         )
     }
 
-    private fun computeParticularDeflection(ctx: SpanContext, x: Double): Double {
-        val l = ctx.lengthInches
-        val ei = ctx.propertyProvider.getE(x) * ctx.propertyProvider.getI(x)
-        if (ei <= 0.0) return 0.0
-
-        var vp = 0.0
-        ctx.loads.forEach { load ->
-            vp += when (load) {
-                is Load.PointLoad -> {
-                    if (load.direction == LoadDirection.VERTICAL_DOWN || load.direction == LoadDirection.VERTICAL_UP) {
-                        val p = load.value.inPoundsForce * (if (load.direction == LoadDirection.VERTICAL_DOWN) -1.0 else 1.0)
-                        val a = load.locationStart.inches
-                        val b = l - a
-                        if (x <= a) {
-                            (p * b * b * x * x) / (6 * l.pow(3) * ei) * (3 * a * l - x * (3 * a + b))
-                        } else {
-                            val xRev = l - x
-                            (p * a * a * xRev * xRev) / (6 * l.pow(3) * ei) * (3 * b * l - xRev * (3 * b + a))
-                        }
-                    } else 0.0
-                }
-                is Load.UniformDistributedLoad -> {
-                    if (load.direction == LoadDirection.VERTICAL_DOWN || load.direction == LoadDirection.VERTICAL_UP) {
-                        val w = load.value.pli * (if (load.direction == LoadDirection.VERTICAL_DOWN) -1.0 else 1.0)
-                        val a = load.locationStart.inches
-                        val b = load.locationEnd.inches
-                        if (a <= 0.01 && b >= l - 0.01) {
-                            (w * x * x * (l - x).pow(2)) / (24 * ei)
-                        } else {
-                            val steps = 10
-                            val dx = (b - a) / steps
-                            var sum = 0.0
-                            for (j in 0 until steps) {
-                                val loadPos = a + (j + 0.5) * dx
-                                val loadMag = w * dx
-                                val bLoad = l - loadPos
-                                sum += if (x <= loadPos) {
-                                    (loadMag * bLoad * bLoad * x * x) / (6 * l.pow(3) * ei) * (3 * loadPos * l - x * (3 * loadPos + bLoad))
-                                } else {
-                                    val xRev = l - x
-                                    val aLoad = loadPos
-                                    (loadMag * aLoad * aLoad * xRev * xRev) / (6 * l.pow(3) * ei) * (3 * bLoad * l - xRev * (3 * bLoad + aLoad))
-                                }
-                            }
-                            sum
-                        }
-                    } else 0.0
-                }
-                else -> 0.0
-            }
-        }
-        return vp
-    }
-
-    data class InternalForces(
-        val fx: Double,
-        val vy: Double,
-        val vz: Double,
-        val tx: Double,
-        val my: Double,
-        val mz: Double
-    )
-
     private fun computeInternalForces(ctx: SpanContext, endForces: SpanForces, x: Double): InternalForces {
         var fx = endForces.axialStart
         var vy = endForces.vyStart
@@ -1124,14 +1124,42 @@ object MemberAnalysisSolver {
                             val total = w * loadX
                             val arm = x - (start + loadX / 2.0)
                             when (load.direction) {
-                                LoadDirection.VERTICAL_DOWN -> { vy -= total; mz -= total * arm }
-                                LoadDirection.VERTICAL_UP -> { vy += total; mz += total * arm }
-                                LoadDirection.LATERAL_LEFT -> { vz -= total; my += total * arm }
-                                LoadDirection.LATERAL_RIGHT -> { vz += total; my -= total * arm }
-                                LoadDirection.AXIAL_COMPRESSION -> { fx -= total }
-                                LoadDirection.AXIAL_TENSION -> { fx += total }
-                                LoadDirection.TORSION_CLOCKWISE -> { tx += total }
-                                LoadDirection.TORSION_COUNTER_CLOCKWISE -> { tx -= total }
+                                LoadDirection.VERTICAL_DOWN -> {
+                                    vy += total
+                                    mz += total * arm
+                                }
+
+                                LoadDirection.VERTICAL_UP -> {
+                                    vy -= total
+                                    mz -= total * arm
+                                }
+
+                                LoadDirection.LATERAL_LEFT -> {
+                                    vz += total
+                                    my -= total * arm
+                                }
+
+                                LoadDirection.LATERAL_RIGHT -> {
+                                    vz -= total
+                                    my += total * arm
+                                }
+
+                                LoadDirection.AXIAL_COMPRESSION -> {
+                                    fx += total
+                                }
+
+                                LoadDirection.AXIAL_TENSION -> {
+                                    fx -= total
+                                }
+
+                                LoadDirection.TORSION_CLOCKWISE -> {
+                                    tx += total
+                                }
+
+                                LoadDirection.TORSION_COUNTER_CLOCKWISE -> {
+                                    tx -= total
+                                }
+
                                 else -> {}
                             }
                         }
@@ -1160,7 +1188,7 @@ object MemberAnalysisSolver {
                     }
                     is Load.PointMoment -> {
                         val mVal = load.value.inLbIn
-                        val sign = if (load.direction == LoadDirection.MOMENT_CLOCKWISE) -1.0 else 1.0
+                        val sign = if (load.direction == LoadDirection.MOMENT_CLOCKWISE) 1.0 else -1.0
                         mz += mVal * sign
                     }
                     is Load.PointTorque -> {

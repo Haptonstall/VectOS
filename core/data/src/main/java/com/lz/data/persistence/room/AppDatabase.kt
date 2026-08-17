@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.lz.data.BuildConfig
 
 // DAOs
 import com.lz.data.persistence.room.dao.catalog.AiscSectionDao
@@ -90,16 +91,23 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         fun create(context: Context): AppDatabase {
-            return Room.databaseBuilder(
+            val builder = Room.databaseBuilder(
                 context,
                 AppDatabase::class.java,
                 "vectos.db"
             )
             .addMigrations(*Migrations.getMigrations())
             .addCallback(CALLBACK)
-            // TODO: REMOVE before production release — will destroy user data on missing migration
-            .fallbackToDestructiveMigration()
-            .build()
+
+                // Only allow destructive fallback in debug builds, where schema churn
+                // is expected and there's no real user data to protect. Release builds
+                // must ship a real Migration for every version bump — if one is missing,
+                // Room will throw at startup instead of silently deleting user data.
+            if (BuildConfig.DEBUG) {
+                builder.fallbackToDestructiveMigration()
+            }
+
+            return builder.build()
         }
 
         val CALLBACK = object : Callback() {

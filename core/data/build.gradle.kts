@@ -10,6 +10,10 @@ android {
     namespace = "com.lz.data"
     compileSdk = 37
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         minSdk = 26
 
