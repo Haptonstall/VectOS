@@ -21,7 +21,12 @@ data class BuildingCodeWithDetails(
         parentColumn = "id",
         entityColumn = "source_id"
     )
-    val combinationSets: List<CombinationSetWithDetails>
+    val combinationSets: List<CombinationSetWithDetails>,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "buildingCodeId"
+    )
+    val defaultMaterialStandards: List<DefaultMaterialStandardEntity>
 )
 
 @Dao
@@ -35,6 +40,9 @@ interface CodeRegistryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBuildingCodeStandardCrossRef(crossRef: BuildingCodeStandardCrossRef)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDefaultMaterialStandard(entity: DefaultMaterialStandardEntity)
 
     @Transaction
     @Query("SELECT * FROM building_codes WHERE id = :codeId")

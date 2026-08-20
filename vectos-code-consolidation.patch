@@ -1,0 +1,1717 @@
+diff --git a/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt b/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt
+index d8066e0..3cbd241 100644
+--- a/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt
++++ b/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt
+@@ -170,7 +170,7 @@ class ProjectViewModel @Inject constructor(
+             settings = ProjectSettings(
+                 unitSystem = units,
+                 designMethodology = methodology,
+-                buildingCode = com.lz.model.regulatory.PrimaryBuildingCode.valueOf(buildingCode.id)
++                buildingCodeId = buildingCode.id
+             ),
+             coordinates = GeographicCoordinates(
+                 streetAddress = streetAddress,
+@@ -196,7 +196,7 @@ class ProjectViewModel @Inject constructor(
+             settings = currentProject.settings.copy(
+                 unitSystem = units,
+                 designMethodology = methodology,
+-                buildingCode = com.lz.model.regulatory.PrimaryBuildingCode.valueOf(buildingCode.id)
++                buildingCodeId = buildingCode.id
+             )
+         )
+         updateProject(updatedProject)
+diff --git a/app/src/main/java/com/lz/vectos/ui/project/NewProjectScreen.kt b/app/src/main/java/com/lz/vectos/ui/project/NewProjectScreen.kt
+index 5d800f8..f9f54fd 100644
+--- a/app/src/main/java/com/lz/vectos/ui/project/NewProjectScreen.kt
++++ b/app/src/main/java/com/lz/vectos/ui/project/NewProjectScreen.kt
+@@ -21,7 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.unit.dp
+ import androidx.compose.ui.unit.sp
+ import com.lz.domain.project.Project
+-import com.lz.model.regulatory.PrimaryBuildingCode
+ import com.lz.model.regulatory.codes.BuildingCode
+ import com.lz.model.structural.DesignMethodology
+ import com.lz.model.units.UnitSystem
+@@ -59,7 +58,7 @@ fun NewProjectScreen(
+     LaunchedEffect(buildingCodes, projectToEdit) {
+         if (selectedCode == null && buildingCodes.isNotEmpty()) {
+             selectedCode = if (projectToEdit != null) {
+-                buildingCodes.find { it.id == projectToEdit.settings.buildingCode.name }
++                buildingCodes.find { it.id == projectToEdit.settings.buildingCodeId }
+             } else {
+                 buildingCodes.find { it.id == "IBC_2021" } ?: buildingCodes.firstOrNull()
+             }
+@@ -107,7 +106,7 @@ fun NewProjectScreen(
+                                         settings = projectToEdit.settings.copy(
+                                             unitSystem = unitSystem,
+                                             designMethodology = methodology,
+-                                            buildingCode = PrimaryBuildingCode.valueOf(code.id)
++                                            buildingCodeId = code.id
+                                         ),
+                                         coordinates = projectToEdit.coordinates.copy(
+                                             streetAddress = streetAddress,
+diff --git a/app/src/main/java/com/lz/vectos/ui/project/ProjectLibraryScreen.kt b/app/src/main/java/com/lz/vectos/ui/project/ProjectLibraryScreen.kt
+index e458c4a..8c00b23 100644
+--- a/app/src/main/java/com/lz/vectos/ui/project/ProjectLibraryScreen.kt
++++ b/app/src/main/java/com/lz/vectos/ui/project/ProjectLibraryScreen.kt
+@@ -185,7 +185,7 @@ fun ProjectSummaryCard(
+                 Spacer(modifier = Modifier.height(4.dp))
+                 
+                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                    TagItem(text = project.settings.buildingCode.name)
++                    TagItem(text = project.settings.buildingCodeId)
+                     TagItem(text = project.settings.designMethodology.name)
+                 }
+             }
+diff --git a/app/src/main/java/com/lz/vectos/ui/project/ProjectSettingsScreen.kt b/app/src/main/java/com/lz/vectos/ui/project/ProjectSettingsScreen.kt
+index 4b3055d..c55d5c5 100644
+--- a/app/src/main/java/com/lz/vectos/ui/project/ProjectSettingsScreen.kt
++++ b/app/src/main/java/com/lz/vectos/ui/project/ProjectSettingsScreen.kt
+@@ -30,8 +30,7 @@ fun ProjectSettingsScreen(
+     projectState.let { activeProject ->
+         var units by remember { mutableStateOf(activeProject.settings.unitSystem) }
+         var methodology by remember { mutableStateOf(activeProject.settings.designMethodology) }
+-        // Note: activeProject.settings.buildingCode is an enum, we need to find the full object
+-        var selectedCodeId by remember { mutableStateOf(activeProject.settings.buildingCode.name) }
++        var selectedCodeId by remember { mutableStateOf(activeProject.settings.buildingCodeId) }
+         var buildingCode by remember { mutableStateOf<BuildingCode?>(null) }
+ 
+         LaunchedEffect(buildingCodes, selectedCodeId) {
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/AppDatabase.kt b/core/data/src/main/java/com/lz/data/persistence/room/AppDatabase.kt
+index 86401eb..15871e7 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/AppDatabase.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/AppDatabase.kt
+@@ -70,7 +70,7 @@ import com.lz.data.persistence.room.entity.DefaultLoadCaseRoomEntity
+         ServiceabilityCriterionRoomEntity::class,
+         DefaultLoadCaseRoomEntity::class
+     ],
+-    version = 1,
++    version = 2,
+     exportSchema = true
+ )
+ @TypeConverters(StandardTypeConverters::class)
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/Migrations.kt b/core/data/src/main/java/com/lz/data/persistence/room/Migrations.kt
+index b81b903..1524dc9 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/Migrations.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/Migrations.kt
+@@ -1,6 +1,7 @@
+ package com.lz.data.persistence.room
+ 
+ import androidx.room.migration.Migration
++import androidx.sqlite.db.SupportSQLiteDatabase
+ 
+ /**
+  * Registry for Room database migrations.
+@@ -14,5 +15,70 @@ import androidx.room.migration.Migration
+  *    schema matches the newly exported schema JSON.
+  */
+ object Migrations {
+-    fun getMigrations(): Array<Migration> = emptyArray()
++
++    /**
++     * v1 -> v2:
++     *  - standards: add material_type / edition_family / edition_key
++     *    (nullable, additive — see StandardEntity KDoc). Seeded standards
++     *    catalog is small and fully re-seeded on next app start, so no
++     *    backfill UPDATE is needed for these three.
++     *  - projects: buildingCode (PrimaryBuildingCode enum, stored as TEXT
++     *    via Room's native enum support — 3 possible values: IBC_2021,
++     *    IBC_2024, CBC_2025) is retired in favor of buildingCodeId (a real
++     *    com.lz.model.regulatory.codes.BuildingCode.id string, matching the
++     *    seeded catalog directly). CBC_2025 has no seeded DB equivalent —
++     *    the closest real code is CBC_2022 — so existing CBC_2025 projects
++     *    are remapped to that rather than left dangling on an id the
++     *    catalog can't resolve.
++     *
++     *    Rebuilds the table (create-copy-drop-rename) rather than using
++     *    `ALTER TABLE ... DROP COLUMN`/`RENAME COLUMN`: those require
++     *    SQLite 3.35+, which isn't guaranteed on the system SQLite bundled
++     *    with minSdk 28 (Android 9) devices this app supports.
++     */
++    val MIGRATION_1_2 = object : Migration(1, 2) {
++        override fun migrate(db: SupportSQLiteDatabase) {
++            db.execSQL("ALTER TABLE standards ADD COLUMN material_type TEXT")
++            db.execSQL("ALTER TABLE standards ADD COLUMN edition_family TEXT")
++            db.execSQL("ALTER TABLE standards ADD COLUMN edition_key TEXT")
++
++            db.execSQL("""
++                CREATE TABLE IF NOT EXISTS `projects_new` (
++                    `id` TEXT NOT NULL, `name` TEXT NOT NULL, `projectNumber` TEXT,
++                    `description` TEXT, `clientName` TEXT, `engineerName` TEXT, `firmName` TEXT,
++                    `createdAtIso` TEXT NOT NULL, `buildingCodeId` TEXT NOT NULL,
++                    `designMethodology` TEXT NOT NULL, `unitSystem` TEXT NOT NULL,
++                    `riskCategory` TEXT NOT NULL, `isWindDesignEnabled` INTEGER NOT NULL,
++                    `isSeismicDesignEnabled` INTEGER NOT NULL, `streetAddress` TEXT NOT NULL,
++                    `city` TEXT NOT NULL, `state` TEXT NOT NULL, `zipCode` TEXT NOT NULL,
++                    `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `elevationFeet` REAL NOT NULL,
++                    `isGeocoded` INTEGER NOT NULL, `seismicSs` REAL NOT NULL, `seismicS1` REAL NOT NULL,
++                    `seismicSds` REAL NOT NULL, `seismicSd1` REAL NOT NULL,
++                    `seismicDesignCategory` TEXT NOT NULL, `isSeismicAuthoritativeOverride` INTEGER NOT NULL,
++                    `steelStandardOverride` TEXT, PRIMARY KEY(`id`)
++                )
++            """.trimIndent())
++
++            db.execSQL("""
++                INSERT INTO projects_new
++                SELECT id, name, projectNumber, description, clientName, engineerName, firmName,
++                       createdAtIso,
++                       CASE buildingCode
++                           WHEN 'CBC_2025' THEN 'CBC_2022'
++                           ELSE buildingCode
++                       END,
++                       designMethodology, unitSystem, riskCategory, isWindDesignEnabled,
++                       isSeismicDesignEnabled, streetAddress, city, state, zipCode, latitude,
++                       longitude, elevationFeet, isGeocoded, seismicSs, seismicS1, seismicSds,
++                       seismicSd1, seismicDesignCategory, isSeismicAuthoritativeOverride,
++                       steelStandardOverride
++                FROM projects
++            """.trimIndent())
++
++            db.execSQL("DROP TABLE projects")
++            db.execSQL("ALTER TABLE projects_new RENAME TO projects")
++        }
++    }
++
++    fun getMigrations(): Array<Migration> = arrayOf(MIGRATION_1_2)
+ }
+\ No newline at end of file
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/dao/BuildingCodeDao.kt b/core/data/src/main/java/com/lz/data/persistence/room/dao/BuildingCodeDao.kt
+deleted file mode 100644
+index c7b4ef9..0000000
+--- a/core/data/src/main/java/com/lz/data/persistence/room/dao/BuildingCodeDao.kt
++++ /dev/null
+@@ -1,69 +0,0 @@
+-package com.lz.data.persistence.room.dao
+-
+-import androidx.room.Dao
+-import androidx.room.Insert
+-import androidx.room.OnConflictStrategy
+-import androidx.room.Query
+-import com.lz.data.persistence.room.entity.BuildingCodeEntity
+-import com.lz.data.persistence.room.entity.BuildingCodeStandardCrossRef
+-import com.lz.data.persistence.room.entity.DefaultLoadCaseRoomEntity
+-import com.lz.data.persistence.room.entity.DefaultMaterialStandardEntity
+-import com.lz.data.persistence.room.entity.LoadCombinationEntity
+-import com.lz.data.persistence.room.entity.LoadCombinationSetEntity
+-import com.lz.data.persistence.room.entity.LoadFactorEntity
+-import com.lz.data.persistence.room.entity.ServiceabilityCriterionRoomEntity
+-import com.lz.data.persistence.room.entity.StandardEntity
+-
+-@Dao
+-interface BuildingCodeDao {
+-    @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
+-    suspend fun insertStandard(standard: StandardEntity)
+-
+-    @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
+-    suspend fun insertBuildingCode(code: BuildingCodeEntity)
+-
+-    @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
+-    suspend fun insertBuildingCodeStandardCrossRef(crossRef: BuildingCodeStandardCrossRef)
+-
+-    @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
+-    suspend fun insertDefaultMaterialStandard(defaultMaterialStandard: DefaultMaterialStandardEntity)
+-
+-    @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
+-    suspend fun insertLoadCombination(combination: LoadCombinationEntity)
+-
+-    @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
+-    suspend fun insertServiceabilityCriterion(criterion: ServiceabilityCriterionRoomEntity)
+-
+-    @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
+-    suspend fun insertDefaultLoadCase(loadCase: DefaultLoadCaseRoomEntity)
+-
+-    @Query("SELECT * FROM building_codes WHERE id = :id")
+-    suspend fun getBuildingCodeById(id: String): BuildingCodeEntity?
+-
+-    @Query("SELECT * FROM standards WHERE id = :id")
+-    suspend fun getStandardById(id: String): StandardEntity?
+-
+-    @Query("SELECT * FROM standards WHERE id IN (SELECT standard_id FROM building_code_standard_cross_ref WHERE code_id = :codeId)")
+-    suspend fun getStandardsForCode(codeId: String): List<StandardEntity>
+-
+-    @Query("SELECT * FROM load_combination_sets WHERE source_id = :sourceId")
+-    suspend fun getLoadCombinationSetsForSource(sourceId: String): List<LoadCombinationSetEntity>
+-
+-    @Query("SELECT * FROM load_combinations WHERE set_id = :setId")
+-    suspend fun getLoadCombinationsForSet(setId: String): List<LoadCombinationEntity>
+-
+-    @Query("SELECT * FROM load_factors WHERE combination_id = :combinationId")
+-    suspend fun getFactorsForCombination(combinationId: String): List<LoadFactorEntity>
+-
+-    @Query("SELECT * FROM serviceability_criteria WHERE buildingCodeId = :codeId")
+-    suspend fun getServiceabilityCriteriaForCode(codeId: String): List<ServiceabilityCriterionRoomEntity>
+-
+-    @Query("SELECT standard_id FROM building_code_standard_cross_ref WHERE code_id = :codeId")
+-    suspend fun getStandardIdsForCode(codeId: String): List<String>
+-
+-    @Query("SELECT * FROM default_material_standards WHERE buildingCodeId = :codeId")
+-    suspend fun getDefaultMaterialStandardsForCode(codeId: String): List<DefaultMaterialStandardEntity>
+-
+-    @Query("SELECT * FROM default_load_cases WHERE buildingCodeId = :codeId")
+-    suspend fun getDefaultLoadCasesForCode(codeId: String): List<DefaultLoadCaseRoomEntity>
+-}
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/dao/CodeRegistryDao.kt b/core/data/src/main/java/com/lz/data/persistence/room/dao/CodeRegistryDao.kt
+index b1fcb82..e891295 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/dao/CodeRegistryDao.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/dao/CodeRegistryDao.kt
+@@ -21,7 +21,12 @@ data class BuildingCodeWithDetails(
+         parentColumn = "id",
+         entityColumn = "source_id"
+     )
+-    val combinationSets: List<CombinationSetWithDetails>
++    val combinationSets: List<CombinationSetWithDetails>,
++    @Relation(
++        parentColumn = "id",
++        entityColumn = "buildingCodeId"
++    )
++    val defaultMaterialStandards: List<DefaultMaterialStandardEntity>
+ )
+ 
+ @Dao
+@@ -36,6 +41,9 @@ interface CodeRegistryDao {
+     @Insert(onConflict = OnConflictStrategy.REPLACE)
+     suspend fun insertBuildingCodeStandardCrossRef(crossRef: BuildingCodeStandardCrossRef)
+ 
++    @Insert(onConflict = OnConflictStrategy.REPLACE)
++    suspend fun insertDefaultMaterialStandard(entity: DefaultMaterialStandardEntity)
++
+     @Transaction
+     @Query("SELECT * FROM building_codes WHERE id = :codeId")
+     fun getBuildingCodeById(codeId: String): Flow<BuildingCodeWithDetails?>
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/entity/CodeRegistryEntities.kt b/core/data/src/main/java/com/lz/data/persistence/room/entity/CodeRegistryEntities.kt
+index 7a41ac4..3cba68f 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/entity/CodeRegistryEntities.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/entity/CodeRegistryEntities.kt
+@@ -21,7 +21,22 @@ data class StandardEntity(
+     @PrimaryKey val id: String, // e.g., "ASCE_7_16"
+     val short_name: String,
+     val long_name: String,
+-    val references_json: String = "{}" // Serialized Map<StandardReferenceKey, String>
++    val references_json: String = "{}", // Serialized Map<StandardReferenceKey, String>
++
++    // Added in schema v2. Nullable/additive so existing rows (and the
++    // v1->v2 migration, which only ALTERs the table) don't need backfilling
++    // beyond what the seeder repopulates on next seed run.
++    //
++    // material_type: MaterialType enum name this standard governs capacity
++    //   for (e.g. "STEEL", "WOOD"); null for standards that aren't
++    //   material-specific (e.g. ASCE 7, which governs loads).
++    // edition_family: which StandardEdition subtype this row maps to —
++    //   one of "ASCE7" / "AISC360" / "NDS" / "ACI318"; null if unmapped.
++    // edition_key: the specific edition enum constant name within that
++    //   family (e.g. "AISC_360_16", "NDS_2018", "ASCE_7_22").
++    val material_type: String? = null,
++    val edition_family: String? = null,
++    val edition_key: String? = null
+ )
+ 
+ @Entity(
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/entity/ProjectRoomEntity.kt b/core/data/src/main/java/com/lz/data/persistence/room/entity/ProjectRoomEntity.kt
+index c259480..45cbee5 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/entity/ProjectRoomEntity.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/entity/ProjectRoomEntity.kt
+@@ -4,7 +4,6 @@ import androidx.room.Entity
+ import androidx.room.PrimaryKey
+ import com.lz.model.structural.DesignMethodology
+ import com.lz.model.units.UnitSystem
+-import com.lz.model.regulatory.PrimaryBuildingCode
+ import com.lz.model.regulatory.AiscEdition
+ import com.lz.model.regulatory.asce7.RiskCategory
+ import java.util.UUID
+@@ -22,7 +21,10 @@ data class ProjectRoomEntity(
+     val createdAtIso: String, // Kept as ISO String across modules
+ 
+     // 2. Global Engineering Settings Configuration
+-    val buildingCode: PrimaryBuildingCode,
++    // NOTE: buildingCodeId matches a real com.lz.model.regulatory.codes.BuildingCode.id
++    // seeded in the standards/building_codes tables (e.g. "IBC_2024", "CBC_2022") —
++    // NOT the old 3-value PrimaryBuildingCode enum, which is retired.
++    val buildingCodeId: String,
+     val designMethodology: DesignMethodology,
+     val unitSystem: UnitSystem,
+     val riskCategory: RiskCategory,
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/mapper/ProjectPersistenceMapper.kt b/core/data/src/main/java/com/lz/data/persistence/room/mapper/ProjectPersistenceMapper.kt
+index 4335bcc..772b96e 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/mapper/ProjectPersistenceMapper.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/mapper/ProjectPersistenceMapper.kt
+@@ -18,7 +18,7 @@ fun Project.toRoomEntity(): ProjectRoomEntity = ProjectRoomEntity(
+     createdAtIso = createdAt.toString(),
+ 
+     // Settings
+-    buildingCode = settings.buildingCode,
++    buildingCodeId = settings.buildingCodeId,
+     designMethodology = settings.designMethodology,
+     unitSystem = settings.unitSystem,
+     riskCategory = settings.riskCategory,
+@@ -57,7 +57,7 @@ fun ProjectRoomEntity.toDomain(): Project = Project(
+     createdAt = LocalDateTime.parse(createdAtIso),
+ 
+     settings = ProjectSettings(
+-        buildingCode = buildingCode,
++        buildingCodeId = buildingCodeId,
+         designMethodology = designMethodology,
+         unitSystem = unitSystem,
+         riskCategory = riskCategory,
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/mapper/StructuralMappers.kt b/core/data/src/main/java/com/lz/data/persistence/room/mapper/StructuralMappers.kt
+index 11c896f..656b21a 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/mapper/StructuralMappers.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/mapper/StructuralMappers.kt
+@@ -8,20 +8,46 @@ import com.lz.model.regulatory.CombinationSource
+ import com.lz.model.regulatory.LoadCombination
+ import com.lz.model.regulatory.LoadCombinationSet
+ import com.lz.model.regulatory.StandardReferenceKey
++import com.lz.model.regulatory.aci318.Aci318Edition
++import com.lz.model.regulatory.asce7.Asce7Edition
+ import com.lz.model.regulatory.codes.BuildingCode
+ import com.lz.model.regulatory.codes.CodeReferenceKey
+ import com.lz.model.regulatory.codes.Standard
++import com.lz.model.regulatory.codes.StandardEdition
++import com.lz.model.regulatory.nds.NdsEdition
+ import com.lz.model.structural.DesignMethodology
++import com.lz.model.structural.MaterialType
+ import kotlinx.serialization.decodeFromString
+ import kotlinx.serialization.json.Json
+ 
+ private val json = Json { ignoreUnknownKeys = true }
+ 
++/**
++ * Resolves a [StandardEntity]'s `edition_family`/`edition_key` columns into
++ * a real [StandardEdition]. Single place this mapping happens — keeps the
++ * seeder (which writes these two columns) and this reader in sync, since
++ * both are just string keys with no compile-time link between them.
++ */
++private fun StandardEntity.resolveEdition(): StandardEdition {
++    val key = edition_key ?: return StandardEdition.Unknown
++    return when (edition_family) {
++        "ASCE7"   -> Asce7Edition.entries.find { it.name == key }?.let { StandardEdition.Asce7(it) }
++        "AISC360" -> com.lz.model.regulatory.AiscEdition.entries.find { it.name == key }?.let { StandardEdition.Aisc360(it) }
++        "NDS"     -> NdsEdition.entries.find { it.name == key }?.let { StandardEdition.Nds(it) }
++        "ACI318"  -> Aci318Edition.entries.find { it.name == key }?.let { StandardEdition.Aci318(it) }
++        else      -> null
++    } ?: StandardEdition.Unknown
++}
++
+ fun StandardEntity.toDomainModel(): Standard {
+     return Standard(
+         id = id,
+         shortName = short_name,
+         longName = long_name,
++        edition = resolveEdition(),
++        materialType = material_type?.let {
++            try { MaterialType.valueOf(it) } catch (e: IllegalArgumentException) { null }
++        },
+         references = try {
+             json.decodeFromString<Map<StandardReferenceKey, String>>(this.references_json)
+         } catch (e: Exception) {
+@@ -61,6 +87,9 @@ fun CombinationSetWithDetails.toDomainModel(): LoadCombinationSet {
+ }
+ 
+ fun BuildingCodeWithDetails.toDomainModel(baseCode: BuildingCode? = null): BuildingCode {
++    val resolvedStandards = standards.map { it.toDomainModel() }
++    val standardsById = resolvedStandards.associateBy { it.id }
++
+     return BuildingCode(
+         id = buildingCode.id,
+         shortName = buildingCode.short_name,
+@@ -70,7 +99,10 @@ fun BuildingCodeWithDetails.toDomainModel(baseCode: BuildingCode? = null): Build
+         stateSpecificCombinations = combinationSets.map { it.toDomainModel() },
+         defaultAsdSetId = buildingCode.default_asd_set_id,
+         defaultLrfdSetId = buildingCode.default_lrfd_set_id,
+-        standards = standards.map { it.toDomainModel() }
++        defaultMaterialStandards = defaultMaterialStandards.mapNotNull { entry ->
++            standardsById[entry.standardId]?.let { entry.materialType to it }
++        }.toMap(),
++        standards = resolvedStandards
+     )
+ }
+ 
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/seeder/BuildingCodeSeeder.kt b/core/data/src/main/java/com/lz/data/persistence/room/seeder/BuildingCodeSeeder.kt
+index 2bc1cd6..8295d43 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/seeder/BuildingCodeSeeder.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/seeder/BuildingCodeSeeder.kt
+@@ -3,7 +3,9 @@ package com.lz.data.persistence.room.seeder
+ import com.lz.data.persistence.room.dao.CodeRegistryDao
+ import com.lz.data.persistence.room.entity.BuildingCodeEntity
+ import com.lz.data.persistence.room.entity.BuildingCodeStandardCrossRef
++import com.lz.data.persistence.room.entity.DefaultMaterialStandardEntity
+ import com.lz.data.persistence.room.entity.StandardEntity
++import com.lz.model.structural.MaterialType
+ 
+ class BuildingCodeSeeder(private val dao: CodeRegistryDao) {
+     suspend fun seed() {
+@@ -14,41 +16,75 @@ class BuildingCodeSeeder(private val dao: CodeRegistryDao) {
+ 
+     private suspend fun seedStandards() {
+         listOf(
+-            StandardEntity("ASCE_7_10", "ASCE 7-10", "Minimum Design Loads for Buildings and Other Structures (2010)"),
+-            StandardEntity("ASCE_7_16", "ASCE 7-16", "Minimum Design Loads and Associated Criteria for Buildings and Other Structures (2016)"),
+-            StandardEntity("ASCE_7_22", "ASCE 7-22", "Minimum Design Loads and Associated Criteria for Buildings and Other Structures (2022)"),
+-            StandardEntity("AISC_360_10", "AISC 360-10", "Specification for Structural Steel Buildings (2010)"),
+-            StandardEntity("AISC_360_16", "AISC 360-16", "Specification for Structural Steel Buildings (2016)"),
+-            StandardEntity("AISC_360_22", "AISC 360-22", "Specification for Structural Steel Buildings (2022)"),
+-            StandardEntity("NDS_2015", "NDS 2015", "National Design Specification for Wood Construction (2015)"),
+-            StandardEntity("NDS_2018", "NDS 2018", "National Design Specification for Wood Construction (2018)"),
+-            StandardEntity("NDS_2024", "NDS 2024", "National Design Specification for Wood Construction (2024)")
++            StandardEntity("ASCE_7_10", "ASCE 7-10", "Minimum Design Loads for Buildings and Other Structures (2010)",
++                material_type = null, edition_family = "ASCE7", edition_key = "ASCE_7_10"),
++            StandardEntity("ASCE_7_16", "ASCE 7-16", "Minimum Design Loads and Associated Criteria for Buildings and Other Structures (2016)",
++                material_type = null, edition_family = "ASCE7", edition_key = "ASCE_7_16"),
++            StandardEntity("ASCE_7_22", "ASCE 7-22", "Minimum Design Loads and Associated Criteria for Buildings and Other Structures (2022)",
++                material_type = null, edition_family = "ASCE7", edition_key = "ASCE_7_22"),
++            StandardEntity("AISC_360_10", "AISC 360-10", "Specification for Structural Steel Buildings (2010)",
++                material_type = MaterialType.STEEL.name, edition_family = "AISC360", edition_key = "AISC_360_10"),
++            StandardEntity("AISC_360_16", "AISC 360-16", "Specification for Structural Steel Buildings (2016)",
++                material_type = MaterialType.STEEL.name, edition_family = "AISC360", edition_key = "AISC_360_16"),
++            StandardEntity("AISC_360_22", "AISC 360-22", "Specification for Structural Steel Buildings (2022)",
++                material_type = MaterialType.STEEL.name, edition_family = "AISC360", edition_key = "AISC_360_22"),
++            StandardEntity("NDS_2015", "NDS 2015", "National Design Specification for Wood Construction (2015)",
++                material_type = MaterialType.WOOD.name, edition_family = "NDS", edition_key = "NDS_2015"),
++            StandardEntity("NDS_2018", "NDS 2018", "National Design Specification for Wood Construction (2018)",
++                material_type = MaterialType.WOOD.name, edition_family = "NDS", edition_key = "NDS_2018"),
++            StandardEntity("NDS_2024", "NDS 2024", "National Design Specification for Wood Construction (2024)",
++                material_type = MaterialType.WOOD.name, edition_family = "NDS", edition_key = "NDS_2024")
+         ).forEach { dao.insertStandard(it) }
+     }
+ 
++    /**
++     * Cross-references a building code to its ASCE/AISC/NDS standards and
++     * seeds its default per-material standard (used to resolve
++     * BuildingCode.defaultMaterialStandards). Typical code-adoption
++     * pairings — e.g. IBC 2021 referencing ASCE 7-16 rather than 7-22 —
++     * reflect the actual multi-year lag between IBC/ASCE/AISC/NDS release
++     * cycles; worth Cody's sign-off since it's domain judgment, not derived
++     * from any single source of truth in this codebase.
++     */
++    private suspend fun linkCodeToStandards(
++        codeId: String,
++        asceId: String,
++        aiscId: String,
++        ndsId: String
++    ) {
++        dao.insertBuildingCodeStandardCrossRef(BuildingCodeStandardCrossRef(codeId, asceId))
++        dao.insertBuildingCodeStandardCrossRef(BuildingCodeStandardCrossRef(codeId, aiscId))
++        dao.insertBuildingCodeStandardCrossRef(BuildingCodeStandardCrossRef(codeId, ndsId))
++
++        dao.insertDefaultMaterialStandard(DefaultMaterialStandardEntity(codeId, MaterialType.STEEL, aiscId))
++        dao.insertDefaultMaterialStandard(DefaultMaterialStandardEntity(codeId, MaterialType.WOOD, ndsId))
++    }
++
+     private suspend fun seedBuildingCodes() {
+         // IBC codes
+         dao.insertBuildingCode(BuildingCodeEntity("IBC_2015", "IBC 2015", "International Building Code 2015",
+             default_asd_set_id = "ASCE_7_10_ASD", default_lrfd_set_id = "ASCE_7_10_LRFD"))
+-        dao.insertBuildingCodeStandardCrossRef(BuildingCodeStandardCrossRef("IBC_2015", "ASCE_7_10"))
++        linkCodeToStandards("IBC_2015", "ASCE_7_10", "AISC_360_10", "NDS_2015")
+ 
+         dao.insertBuildingCode(BuildingCodeEntity("IBC_2018", "IBC 2018", "International Building Code 2018",
+             default_asd_set_id = "ASCE_7_16_ASD", default_lrfd_set_id = "ASCE_7_16_LRFD"))
+-        dao.insertBuildingCodeStandardCrossRef(BuildingCodeStandardCrossRef("IBC_2018", "ASCE_7_16"))
++        linkCodeToStandards("IBC_2018", "ASCE_7_16", "AISC_360_16", "NDS_2018")
+ 
+         dao.insertBuildingCode(BuildingCodeEntity("IBC_2021", "IBC 2021", "International Building Code 2021",
+             default_asd_set_id = "ASCE_7_16_ASD", default_lrfd_set_id = "ASCE_7_16_LRFD"))
+-        dao.insertBuildingCodeStandardCrossRef(BuildingCodeStandardCrossRef("IBC_2021", "ASCE_7_16"))
++        linkCodeToStandards("IBC_2021", "ASCE_7_16", "AISC_360_16", "NDS_2018")
+ 
+         dao.insertBuildingCode(BuildingCodeEntity("IBC_2024", "IBC 2024", "International Building Code 2024",
+             default_asd_set_id = "ASCE_7_22_ASD", default_lrfd_set_id = "ASCE_7_22_LRFD"))
+-        dao.insertBuildingCodeStandardCrossRef(BuildingCodeStandardCrossRef("IBC_2024", "ASCE_7_22"))
++        linkCodeToStandards("IBC_2024", "ASCE_7_22", "AISC_360_22", "NDS_2024")
+ 
+         // State codes
+         dao.insertBuildingCode(BuildingCodeEntity("CBC_2022", "CBC 2022", "California Building Code 2022",
+             base_code_id = "IBC_2021", default_asd_set_id = "ASCE_7_16_ASD", default_lrfd_set_id = "ASCE_7_16_LRFD"))
++        linkCodeToStandards("CBC_2022", "ASCE_7_16", "AISC_360_16", "NDS_2018")
+ 
+         dao.insertBuildingCode(BuildingCodeEntity("FBC_2023", "FBC 2023", "Florida Building Code 2023",
+             base_code_id = "IBC_2021", default_asd_set_id = "ASCE_7_16_ASD", default_lrfd_set_id = "ASCE_7_16_LRFD"))
++        linkCodeToStandards("FBC_2023", "ASCE_7_16", "AISC_360_16", "NDS_2018")
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/core/domain/src/main/java/com/lz/domain/project/Project.kt b/core/domain/src/main/java/com/lz/domain/project/Project.kt
+index 1b00a21..748d068 100644
+--- a/core/domain/src/main/java/com/lz/domain/project/Project.kt
++++ b/core/domain/src/main/java/com/lz/domain/project/Project.kt
+@@ -1,6 +1,5 @@
+ package com.lz.domain.project
+ 
+-import com.lz.model.regulatory.PrimaryBuildingCode
+ import com.lz.model.regulatory.asce7.RiskCategory
+ import com.lz.model.structural.DesignMethodology
+ import com.lz.model.structural.ProjectDesignContext
+@@ -16,8 +15,7 @@ import java.util.UUID
+  */
+ @Serializable
+ data class ProjectSettings(
+-    //val buildingCodeId: String = "IBC_2024",
+-    val buildingCode: PrimaryBuildingCode = PrimaryBuildingCode.IBC_2024,
++    val buildingCodeId: String = "IBC_2024",
+     val designMethodology: DesignMethodology = DesignMethodology.ASD,
+     val unitSystem: UnitSystem = UnitSystem.IMPERIAL,
+     val riskCategory: RiskCategory = RiskCategory.II,
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/RegulatoryEnums.kt b/core/model/src/main/java/com/lz/model/regulatory/RegulatoryEnums.kt
+index 4e2c8eb..e94011a 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/RegulatoryEnums.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/RegulatoryEnums.kt
+@@ -2,43 +2,19 @@ package com.lz.model.regulatory
+ 
+ import kotlinx.serialization.Serializable
+ 
+-/**
+- * Standard referenced editions for ASCE 7 structural loading rules.
+- */
+-@Serializable
+-enum class Asce7Edition(val label: String, val publicationYear: Int) {
+-    ASCE_7_16("ASCE 7-16", 2016),
+-    ASCE_7_22("ASCE 7-22", 2022)
+-}
+-
+ /**
+  * Standard referenced editions for AISC structural steel rules.
++ *
++ * (This file previously also held duplicate, unused `Asce7Edition`/
++ * `NdsEdition` definitions — distinct from and incompatible with the real,
++ * used ones in com.lz.model.regulatory.asce7/.nds — and a `PrimaryBuildingCode`
++ * enum that has been retired in favor of matching real
++ * com.lz.model.regulatory.codes.BuildingCode.id strings directly. All three
++ * were only consumed by the now-deleted RegulatoryRegistry.kt.)
+  */
+ @Serializable
+ enum class AiscEdition(val label: String, val publicationYear: Int) {
++    AISC_360_10("AISC 360-10", 2010),
+     AISC_360_16("AISC 360-16", 2016),
+     AISC_360_22("AISC 360-22", 2022)
+ }
+-
+-/**
+- * Standard referenced editions for NDS wood rules.
+- */
+-@Serializable
+-enum class NdsEdition(val label: String, val publicationYear: Int) {
+-    NDS_12("NDS 2012", 2012),
+-    NDS_15("NDS 2015", 2015),
+-    NDS_18("NDS 2018", 2018),
+-    NDS_24("NDS 2024", 2024)
+-}
+-
+-/**
+- * Standard legal reference IDs for the primary parent building codes
+- * selected by the user inside the Project workspace.
+- */
+-@Serializable
+-enum class PrimaryBuildingCode(val label: String) {
+-    IBC_2021("2021 International Building Code"),
+-    IBC_2024("2024 International Building Code"),
+-    CBC_2025("2025 California Building Code") // Explicitly treated as a top-level selection option
+-}
+-
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/aisc/AiscDesignFactorRegistry.kt b/core/model/src/main/java/com/lz/model/regulatory/aisc/AiscDesignFactorRegistry.kt
+index 09e6276..5a38696 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/aisc/AiscDesignFactorRegistry.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/aisc/AiscDesignFactorRegistry.kt
+@@ -7,15 +7,18 @@ object AiscDesignFactorRegistry {
+ 
+     fun get(edition: AiscEdition, methodology: DesignMethodology): AiscDesignFactors {
+         return when (edition) {
++            AiscEdition.AISC_360_10 -> forAisc360(edition, methodology, "AISC 360-10")
+             AiscEdition.AISC_360_16 -> forAisc360(edition, methodology, "AISC 360-16")
+             AiscEdition.AISC_360_22 -> forAisc360(edition, methodology, "AISC 360-22")
+         }
+     }
+ 
+     /**
+-     * AISC 360-16 and 360-22 share identical phi/omega values.
+-     * If a future edition changes a factor, add a separate branch above
+-     * and override only the changed factor here.
++     * AISC 360-10, 360-16, and 360-22 share identical phi/omega values for
++     * the limit states modeled here — these resistance/safety factors have
++     * been stable across these editions. If a future edition changes a
++     * factor, add a separate branch above and override only the changed
++     * factor here.
+      */
+     private fun forAisc360(
+         edition: AiscEdition,
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/codes/BuildingCode.kt b/core/model/src/main/java/com/lz/model/regulatory/codes/BuildingCode.kt
+index a568483..5b01c13 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/codes/BuildingCode.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/codes/BuildingCode.kt
+@@ -40,22 +40,4 @@ data class BuildingCode(
+     fun getCombinationSet(setId: String): LoadCombinationSet? {
+         return stateSpecificCombinations.find { it.id == setId } ?: baseCode?.getCombinationSet(setId)
+     }
+-
+-    companion object {
+-        /**
+-         * Reconstructs a BuildingCode from an ID.
+-         * NOTE: Your converter saves 'shortName', but calls 'fromId'.
+-         * This implies 'id' passed here might actually be the shortName.
+-         */
+-        fun fromId(id: String): BuildingCode {
+-            // Placeholder implementation to satisfy the compiler
+-            return BuildingCode(
+-                id = id,
+-                shortName = id,
+-                longName = "Unknown Code",
+-                defaultMaterialStandards = emptyMap(),
+-                standards = emptyList()
+-            )
+-        }
+-    }
+ }
+\ No newline at end of file
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/codes/Standard.kt b/core/model/src/main/java/com/lz/model/regulatory/codes/Standard.kt
+index fd4e893..45cfdee 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/codes/Standard.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/codes/Standard.kt
+@@ -13,31 +13,5 @@ data class Standard(
+     val edition: StandardEdition = StandardEdition.Unknown,
+     val materialType: MaterialType? = null,
+     val references: Map<StandardReferenceKey, String> = emptyMap()
+-) {
+-    companion object {
+-        /**
+-         * Reconstructs a Standard from an ID.
+-         * NOTE: Since data classes with lists/maps cannot be reconstructed from just an ID
+-         * without a database lookup, this usually implies these items are Enums or
+-         * Singletons. If they are dynamic DB entities, this logic will require a Repository.
+-         *
+-         * For now, this throws an error or returns a stub to satisfy the compiler.
+-         */
+-        fun fromId(id: String): Standard {
+-            // You must implement actual logic here to find the Standard by ID.
+-            // If these are static/hardcoded standards, you might return a specific one.
+-            // Example implementation:
+-            return Standard(
+-                id = id,
+-                shortName = id, // Fallback
+-                longName = "Unknown Standard",
+-                references = emptyMap()
+-            )
+-
+-            // OR if this should strictly not be used, throw an error:
+-            // throw UnsupportedOperationException("Cannot reconstruct Standard from ID without a Repository lookup.")
+-
+-        }
+-    }
+-}
++)
+ 
+diff --git a/core/solver/src/main/java/com/lz/solver/capacity/CapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/capacity/CapacityCalculator.kt
+index a41d4d5..e25fce6 100644
+--- a/core/solver/src/main/java/com/lz/solver/capacity/CapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/capacity/CapacityCalculator.kt
+@@ -19,4 +19,13 @@ interface CapacityCalculator {
+      * Performs a raw capacity calculation for a specific demand station.
+      */
+     fun evaluate(demand: StationDemand): RawCapacityResult
++
++    /**
++     * Real, material-specific per-limit-state design factors for the given
++     * methodology — used by [com.lz.solver.capacity.CapacityEngine] to turn
++     * this calculator's nominal [RawCapacityResult] values into design
++     * (factored) capacities. See [DesignFactorSet] for how `value` is
++     * interpreted per methodology.
++     */
++    fun designFactors(methodology: DesignMethodology): DesignFactorSet
+ }
+\ No newline at end of file
+diff --git a/core/solver/src/main/java/com/lz/solver/capacity/CapacityEngine.kt b/core/solver/src/main/java/com/lz/solver/capacity/CapacityEngine.kt
+index 2a58707..e0f961d 100644
+--- a/core/solver/src/main/java/com/lz/solver/capacity/CapacityEngine.kt
++++ b/core/solver/src/main/java/com/lz/solver/capacity/CapacityEngine.kt
+@@ -43,66 +43,63 @@ object CapacityEngine {
+     /**
+      * Iterates through the enriched station demands and calculates utilization
+      * for all limit states (shear, axial, flexure, torsion, and serviceability) at every point.
++     *
++     * [factors] supplies the real, material-specific per-limit-state design
++     * factors (see [DesignFactorSet]) — sourced from the same calculator that
++     * produced [capacityCalculator]'s nominal values, so ASD/LRFD factoring
++     * here always matches what that material's code actually specifies.
+      */
+     fun evaluate(
+         demands: List<StationDemand>,
+         section: SectionProfile,
+         methodology: DesignMethodology,
++        factors: DesignFactorSet,
+         capacityCalculator: (StationDemand) -> RawCapacityResult
+     ): List<PointCapacityResult> {
+ 
+-        // Simplified factors for placeholder; normally pulled from code specifications
+-        val phiFlexure = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
+-        val omegaFlexure = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
+-
+-        val phiShear = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
+-        val omegaShear = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
+-
+-        val phiAxial = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
+-        val omegaAxial = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
+-
+-        val phiTorsion = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
+-        val omegaTorsion = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
+-
+         return demands.map { demand ->
+             val raw = capacityCalculator(demand)
++            val isAxialTension = demand.axial.pounds >= 0.0
+ 
+             // Flexure X
+-            val designFlexureX = if (methodology == DesignMethodology.LRFD) raw.nominalFlexureX * phiFlexure else raw.nominalFlexureX / omegaFlexure
++            val designFlexureX = factors.apply(raw.nominalFlexureX, factors.flexure)
+             val demandFlexureX = abs(demand.moment.inLbIn)
+             val ratioFlexureX = if (designFlexureX > 0) demandFlexureX / designFlexureX else 0.0
+             val checkFlexureX =
+                 CodeCheck(raw.limitStateFlexureX, demandFlexureX, designFlexureX, ratioFlexureX)
+ 
+-            // Flexure Y
+-            val designFlexureY = if (methodology == DesignMethodology.LRFD) raw.nominalFlexureY * phiFlexure else raw.nominalFlexureY / omegaFlexure
++            // Flexure Y (same flexure factor — AISC/NDS don't distinguish
++            // strong/weak axis bending for phi/omega purposes)
++            val designFlexureY = factors.apply(raw.nominalFlexureY, factors.flexure)
+             val demandFlexureY = abs(demand.momentY.inLbIn)
+             val ratioFlexureY = if (designFlexureY > 0) demandFlexureY / designFlexureY else 0.0
+             val checkFlexureY =
+                 CodeCheck(raw.limitStateFlexureY, demandFlexureY, designFlexureY, ratioFlexureY)
+ 
+             // Shear X (Strong axis / Vy demand)
+-            val designShearX = if (methodology == DesignMethodology.LRFD) raw.nominalShearX * phiShear else raw.nominalShearX / omegaShear
++            val designShearX = factors.apply(raw.nominalShearX, factors.shear)
+             val demandShearX = abs(demand.shear.inPoundsForce)
+             val ratioShearX = if (designShearX > 0) demandShearX / designShearX else 0.0
+             val checkShearX =
+                 CodeCheck(raw.limitStateShearX, demandShearX, designShearX, ratioShearX)
+ 
+             // Shear Y (Weak axis / Vz demand)
+-            val designShearY = if (methodology == DesignMethodology.LRFD) raw.nominalShearY * phiShear else raw.nominalShearY / omegaShear
++            val designShearY = factors.apply(raw.nominalShearY, factors.shear)
+             val demandShearY = abs(demand.shearY.inPoundsForce)
+             val ratioShearY = if (designShearY > 0) demandShearY / designShearY else 0.0
+             val checkShearY =
+                 CodeCheck(raw.limitStateShearY, demandShearY, designShearY, ratioShearY)
+ 
+-            // Axial
+-            val designAxial = if (methodology == DesignMethodology.LRFD) raw.nominalAxial * phiAxial else raw.nominalAxial / omegaAxial
++            // Axial — tension and compression can carry different factors
++            // (e.g. NDS: phi=0.80 tension vs 0.90 compression)
++            val axialFactor = if (isAxialTension) factors.axialTension else factors.axialCompression
++            val designAxial = factors.apply(raw.nominalAxial, axialFactor)
+             val demandAxial = abs(demand.axial.inPoundsForce)
+             val ratioAxial = if (designAxial > 0) demandAxial / designAxial else 0.0
+             val checkAxial = CodeCheck(raw.limitStateAxial, demandAxial, designAxial, ratioAxial)
+ 
+             // Torsion
+-            val designTorsion = if (methodology == DesignMethodology.LRFD) raw.nominalTorsion * phiTorsion else raw.nominalTorsion / omegaTorsion
++            val designTorsion = factors.apply(raw.nominalTorsion, factors.torsion)
+             val demandTorsion = abs(demand.torque.inLbIn)
+             val ratioTorsion = if (designTorsion > 0) demandTorsion / designTorsion else 0.0
+             val checkTorsion =
+diff --git a/core/solver/src/main/java/com/lz/solver/capacity/DesignFactorSet.kt b/core/solver/src/main/java/com/lz/solver/capacity/DesignFactorSet.kt
+new file mode 100644
+index 0000000..6a4793c
+--- /dev/null
++++ b/core/solver/src/main/java/com/lz/solver/capacity/DesignFactorSet.kt
+@@ -0,0 +1,42 @@
++package com.lz.solver.capacity
++
++import com.lz.model.regulatory.aisc.DesignFactor
++import com.lz.model.structural.DesignMethodology
++
++/**
++ * Per-limit-state design factors for one methodology (LRFD or ASD), supplied
++ * by each material's [CapacityCalculator] so [CapacityEngine] can factor
++ * nominal capacities correctly without embedding material-specific numbers
++ * itself.
++ *
++ * [DesignFactor] (value + code citation) is reused here even though it lives
++ * in the `com.lz.model.regulatory.aisc` package — the (value, citation) shape
++ * is material-agnostic. A future cleanup could relocate it to a neutral
++ * package; not done here to keep this fix's blast radius small.
++ *
++ * Interpretation of `value` mirrors [com.lz.model.regulatory.aisc.AiscDesignFactors.applyToNominal]:
++ *  - LRFD: design = nominal * value   (value is phi, or an NDS-style
++ *          lambda*phi format-converted phi for wood)
++ *  - ASD:  design = nominal / value   (value is omega; for wood ASD this is
++ *          1.0, since NDS's "nominal" already IS the fully code-adjusted
++ *          ASD allowable capacity — dividing by anything other than 1.0
++ *          here would double-count NDS's adjustment factors)
++ *
++ * Axial tension and compression are kept separate because they can have
++ * different factors (NDS: phi=0.80 tension vs 0.90 compression; AISC:
++ * currently equal, but modeled separately for correctness/future editions).
++ */
++data class DesignFactorSet(
++    val methodology: DesignMethodology,
++    val flexure: DesignFactor,
++    val shear: DesignFactor,
++    val axialTension: DesignFactor,
++    val axialCompression: DesignFactor,
++    val torsion: DesignFactor
++) {
++    fun apply(nominal: Double, factor: DesignFactor): Double =
++        when (methodology) {
++            DesignMethodology.LRFD -> nominal * factor.value
++            DesignMethodology.ASD  -> nominal / factor.value
++        }
++}
+diff --git a/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
+index c36e30e..7749417 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
+@@ -1,5 +1,6 @@
+ package com.lz.solver.material
+ 
++import com.lz.model.regulatory.AiscEdition
+ import com.lz.model.regulatory.aisc.AiscDesignFactors
+ import com.lz.model.structural.DesignMethodology
+ import com.lz.model.structural.Flange
+@@ -18,6 +19,7 @@ import com.lz.model.units.inIn4
+ import com.lz.model.units.inInches
+ import com.lz.model.units.inPsi
+ import com.lz.solver.capacity.CapacityCalculator
++import com.lz.solver.capacity.DesignFactorSet
+ import com.lz.solver.capacity.RawCapacityResult
+ import java.util.Locale
+ import kotlin.math.PI
+@@ -47,7 +49,15 @@ import kotlin.math.sqrt
+ @Suppress("PropertyName", "LocalVariableName")
+ class AiscSteelCapacityCalculator(
+     private val profile: SectionProfile,
+-    private val material: MaterialGrade.Steel
++    private val material: MaterialGrade.Steel,
++    /**
++     * Resolved AISC edition (from the active project's BuildingCode ->
++     * Standard -> StandardEdition.Aisc360 chain). Defaults to AISC 360-22
++     * — the same default AiscDesignFactors.forMethodology() used before
++     * this was wired through — so existing call sites that haven't been
++     * updated to pass a resolved edition keep identical behavior.
++     */
++    private val edition: AiscEdition = AiscEdition.AISC_360_22
+ ) : CapacityCalculator {
+ 
+     private val E: Double = material.modulusOfElasticity.inPsi
+@@ -101,7 +111,7 @@ class AiscSteelCapacityCalculator(
+         demand: StationDemand,
+         methodology: DesignMethodology
+     ): StrengthDesignResult {
+-        val f  = AiscDesignFactors.forMethodology(methodology)
++        val f  = AiscDesignFactors.forEditionAndMethodology(edition, methodology)
+         val lb = if (demand.compressionFlange == Flange.TOP)
+             demand.lbTop.inInches else demand.lbBottom.inInches
+         val cb = demand.cb
+@@ -171,6 +181,23 @@ class AiscSteelCapacityCalculator(
+         )
+     }
+ 
++    /**
++     * Real AISC 360 phi/omega factors per limit state, sourced from
++     * [AiscDesignFactors] — used by [com.lz.solver.capacity.CapacityEngine]
++     * in place of its previous hardcoded 0.90/1.67 placeholder.
++     */
++    override fun designFactors(methodology: DesignMethodology): DesignFactorSet {
++        val f = AiscDesignFactors.forEditionAndMethodology(edition, methodology)
++        return DesignFactorSet(
++            methodology       = methodology,
++            flexure           = f.flexure,
++            shear             = f.shear,
++            axialTension      = f.tensionYield,
++            axialCompression  = f.compression,
++            torsion           = f.torsion
++        )
++    }
++
+     // ------------------------------------------------------------------
+     // Chapter F — Flexure
+     // ------------------------------------------------------------------
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+new file mode 100644
+index 0000000..b736ce2
+--- /dev/null
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+@@ -0,0 +1,68 @@
++package com.lz.solver.material
++
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++import com.lz.model.structural.MaterialGrade
++import com.lz.model.structural.SectionProfile
++import com.lz.model.structural.WoodProfile
++import com.lz.model.units.inIn3
++import com.lz.model.units.inIn4
++import com.lz.model.units.inInches
++import com.lz.model.units.inPsi
++import kotlin.math.pow
++import kotlin.math.sqrt
++
++/**
++ * NDS 3.3.3 Beam Stability Factor CL — single source of truth.
++ *
++ * Shared by [NdsWoodCapacityCalculator] (applies CL to F'b for the actual
++ * bending capacity check) and [NdsClCalculator] (reports CL as the generic
++ * [com.lz.solver.bracing.StabilityFactorCalculator] segment factor, i.e.
++ * [com.lz.model.structural.StationDemand.cb]). Both must agree on the same
++ * number for the same inputs — computing this in two places previously let
++ * them silently drift (see NdsClCalculator, which stubbed CL = 1.0).
++ *
++ * CL accounts for lateral-torsional buckling of beams. Requires Emin for
++ * stability calculations — uses E/1.76 as approximation when Emin is not
++ * separately tracked (conservative, per NDS commentary).
++ *
++ * @param lb Unbraced length in inches (0 or negative → no LTB check, CL = 1.0).
++ */
++internal fun computeNdsCL(
++    lb: Double,
++    profile: SectionProfile,
++    material: MaterialGrade.Wood,
++    adjustmentFactors: NdsAdjustmentFactors,
++    isGlulam: Boolean
++): Double {
++    if (lb <= 0.0) return 1.0
++
++    val d = profile.depth.inInches
++    val b = if (profile is WoodProfile) profile.dressedWidth.inInches
++    else profile.propertiesWeakAxis.s.inIn3 / profile.propertiesWeakAxis.i.inIn4 * 2.0
++
++    if (b <= 0.0) return 1.0
++
++    // Effective span length le (NDS Table 3.3.3 — approximate for uniformly loaded)
++    val le = 1.63 * lb + 3.0 * d
++
++    val rbSquared = le * d / b.pow(2)
++    if (rbSquared <= 0.0) return 1.0
++
++    // Critical buckling stress FbE (NDS 3.3.3)
++    val eMin = material.modulusOfElasticity.inPsi / 1.76 // Approx Emin = E / 1.76
++    val fbe = 1.20 * eMin / rbSquared
++
++    val fbStar = material.referenceBending.inPsi *
++            adjustmentFactors.cd * adjustmentFactors.cm *
++            adjustmentFactors.ct * adjustmentFactors.cf *
++            adjustmentFactors.ci * adjustmentFactors.cr
++
++    if (fbStar <= 0.0) return 1.0
++
++    val ratio = fbe / fbStar
++    val c = if (isGlulam) 0.90 else 0.85 // NDS 3.3.3: c=0.90 glulam, 0.85 sawn
++
++    // NDS Eq. 3.3-6
++    val term = (1.0 + ratio) / (2.0 * c)
++    return term - sqrt(term.pow(2) - ratio / c)
++}
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsClCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsClCalculator.kt
+index e6e04de..d58d649 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsClCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsClCalculator.kt
+@@ -1,18 +1,46 @@
+ package com.lz.solver.material
+ 
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++import com.lz.model.structural.MaterialGrade
++import com.lz.model.structural.SectionProfile
+ import com.lz.model.structural.StationDemand
++import com.lz.model.units.inches
+ import com.lz.solver.bracing.StabilityFactorCalculator
++import kotlin.math.abs
+ 
+ /**
+- * NDS Section 3.3.3 beam stability factor CL.
+- * CL is section-property dependent (RB slenderness ratio) and requires
+- * Emin and Fb — those are passed in at construction from NdsWoodCapacityCalculator.
++ * NDS Section 3.3.3 beam stability factor CL, exposed as a
++ * [StabilityFactorCalculator] for [com.lz.solver.bracing.BracingLogic]
++ * (populates [StationDemand.cb] for wood spans).
+  *
+- * Placeholder returns conservative 1.0 until full NDS property chain is wired.
++ * Note: this is a *reporting* path. The wood bending capacity check itself
++ * ([NdsWoodCapacityCalculator]) computes CL independently, per-station, from
++ * the station's own Lb — it does not read [StationDemand.cb]. This class
++ * exists so the segment-level factor reported alongside steel/aluminum Cb
++ * is a real NDS 3.3.3 value instead of the previous CL = 1.0 stub, and so
++ * both paths share one formula ([computeNdsCL]) rather than risk drifting
++ * apart.
++ *
++ * @param isGlulam Whether the member's species is a glulam species —
++ *   changes the NDS 3.3.3 curve-fit constant c (0.90 glulam, 0.85 sawn).
+  */
+-class NdsClCalculator : StabilityFactorCalculator {
++class NdsClCalculator(
++    private val profile: SectionProfile,
++    private val material: MaterialGrade.Wood,
++    private val adjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors(),
++    private val isGlulam: Boolean = material.species.isGlulam
++) : StabilityFactorCalculator {
++
+     override fun calculate(segmentDemands: List<StationDemand>, isCantilever: Boolean): Double {
+-        // TODO: implement NDS 3.3.3 CL using RB = sqrt(le*d/b²), Emin, Fb*
+-        return 1.0
++        if (segmentDemands.isEmpty()) return 1.0
++
++        // Unbraced length for this segment — span of the station demands
++        // BracingLogic passed in. Matches how AiscCbCalculator derives its
++        // segment length from the same list.
++        val xStart = segmentDemands.first().x.inches
++        val xEnd = segmentDemands.last().x.inches
++        val lb = abs(xEnd - xStart)
++
++        return computeNdsCL(lb, profile, material, adjustmentFactors, isGlulam)
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index aca38c0..2a2710b 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -1,6 +1,8 @@
+ package com.lz.solver.material
+ 
++import com.lz.model.regulatory.aisc.DesignFactor
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++import com.lz.model.regulatory.nds.NdsEdition
+ import com.lz.model.structural.DesignMethodology
+ import com.lz.model.structural.Flange
+ import com.lz.model.structural.MaterialGrade
+@@ -19,6 +21,7 @@ import com.lz.model.units.inIn4
+ import com.lz.model.units.inInches
+ import com.lz.model.units.inPsi
+ import com.lz.solver.capacity.CapacityCalculator
++import com.lz.solver.capacity.DesignFactorSet
+ import com.lz.solver.capacity.RawCapacityResult
+ import java.util.Locale
+ import kotlin.math.PI
+@@ -50,7 +53,17 @@ import kotlin.math.sqrt
+ class NdsWoodCapacityCalculator(
+     private val profile: SectionProfile,
+     private val material: MaterialGrade.Wood,
+-    private val adjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors()
++    private val adjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors(),
++    /**
++     * Resolved NDS edition (from the active project's BuildingCode ->
++     * Standard -> StandardEdition.Nds chain). Not currently used to vary
++     * any factor here — NDS 2015/2018/2024 share the same values for
++     * everything this calculator models (adjustment factors, phi, lambda).
++     * Carried through purely for report citation traceability; if a future
++     * edition genuinely changes one of these values, branch on [edition]
++     * at that point rather than assuming it stays inert.
++     */
++    private val edition: NdsEdition = NdsEdition.NDS_2018
+ ) : CapacityCalculator {
+ 
+     private val isGlulam: Boolean = material.species.isGlulam
+@@ -181,6 +194,50 @@ class NdsWoodCapacityCalculator(
+         )
+     }
+ 
++    /**
++     * NDS is inherently ASD: [evaluate]'s nominal values already ARE the
++     * fully code-adjusted allowable capacity (F' * S, with CD/CM/Ct/CL/CF/
++     * etc. baked in). So for ASD, `value = 1.0` here — CapacityEngine will
++     * divide by 1.0, i.e. use the nominal as-is. Dividing by anything else
++     * would double-count NDS's own adjustment factors.
++     *
++     * For LRFD, reproduces exactly the same lambda*phi logic already used in
++     * [evaluateDetailed] (NDS Appendix N format conversion). Folding lambda
++     * into the returned factor's `value` lets [DesignFactorSet.apply] use
++     * the same `nominal * value` shape as the AISC LRFD case.
++     */
++    override fun designFactors(methodology: DesignMethodology): DesignFactorSet {
++        if (methodology == DesignMethodology.ASD) {
++            val one = DesignFactor(1.0, "NDS ASD — nominal is already the adjusted allowable capacity")
++            return DesignFactorSet(
++                methodology       = methodology,
++                flexure           = one,
++                shear             = one,
++                axialTension      = one,
++                axialCompression  = one,
++                torsion           = one
++            )
++        }
++
++        // LRFD — NDS Appendix N. lambda = 0.8 for occupancy live/snow/roof
++        // live, 1.0 for wind/seismic; 0.8 used as the conservative default,
++        // matching evaluateDetailed().
++        val lambda = 0.8
++        val phiBending     = 0.85
++        val phiShear       = 0.75
++        val phiCompression = 0.90
++        val phiTension     = 0.80
++
++        return DesignFactorSet(
++            methodology       = methodology,
++            flexure           = DesignFactor(lambda * phiBending,     "NDS Appendix N — Kf/phi (bending)"),
++            shear             = DesignFactor(lambda * phiShear,       "NDS Appendix N — Kf/phi (shear)"),
++            axialTension      = DesignFactor(lambda * phiTension,     "NDS Appendix N — Kf/phi (tension)"),
++            axialCompression  = DesignFactor(lambda * phiCompression, "NDS Appendix N — Kf/phi (compression)"),
++            torsion           = DesignFactor(1.0, "Torsion not codified for wood")
++        )
++    }
++
+     // ------------------------------------------------------------------
+     // NDS 3.3 — Bending
+     // ------------------------------------------------------------------
+@@ -227,45 +284,11 @@ class NdsWoodCapacityCalculator(
+ 
+     /**
+      * NDS 3.3.3 Beam Stability Factor CL.
+-     * CL accounts for lateral-torsional buckling of beams.
+-     * Requires Emin for stability calculations — uses E/1.76 as approximation
+-     * when Emin is not separately tracked (conservative).
++     * Delegates to [computeNdsCL] — see that function for the formula and
++     * why it's shared with [NdsClCalculator].
+      */
+-    private fun computeCL(lb: Double): Double {
+-        if (lb <= 0.0) return 1.0
+-
+-        val d = profile.depth.inInches
+-        val b = if (profile is WoodProfile) profile.dressedWidth.inInches
+-        else profile.propertiesWeakAxis.s.inIn3 / profile.propertiesWeakAxis.i.inIn4 * 2.0
+-
+-        if (b <= 0.0) return 1.0
+-
+-        // Effective span length le (NDS Table 3.3.3 — approximate for uniformly loaded)
+-        val le = 1.63 * lb + 3.0 * d
+-
+-        val rbSquared = le * d / b.pow(2)
+-        if (rbSquared <= 0.0) return 1.0
+-
+-        val rb = sqrt(rbSquared)
+-
+-        // Critical buckling stress FbE (NDS 3.3.3)
+-        val eMin = material.modulusOfElasticity.inPsi / 1.76  // Approx Emin = E / 1.76
+-        val fbe = 1.20 * eMin / rbSquared
+-
+-        val fbStar = material.referenceBending.inPsi *
+-                adjustmentFactors.cd * adjustmentFactors.cm *
+-                adjustmentFactors.ct * adjustmentFactors.cf *
+-                adjustmentFactors.ci * adjustmentFactors.cr
+-
+-        if (fbStar <= 0.0) return 1.0
+-
+-        val ratio = fbe / fbStar
+-        val c = if (isGlulam) 0.90 else 0.85  // NDS 3.3.3: c=0.90 glulam, 0.85 sawn
+-
+-        // NDS Eq. 3.3-6
+-        val term = (1.0 + ratio) / (2.0 * c)
+-        return term - sqrt(term.pow(2) - ratio / c)
+-    }
++    private fun computeCL(lb: Double): Double =
++        computeNdsCL(lb, profile, material, adjustmentFactors, isGlulam)
+ 
+     /**
+      * NDS 5.3.6 Volume Factor CV for glulam.
+diff --git a/core/solver/src/main/java/com/lz/solver/regulatory/RegulatoryRegistry.kt b/core/solver/src/main/java/com/lz/solver/regulatory/RegulatoryRegistry.kt
+deleted file mode 100644
+index a934e97..0000000
+--- a/core/solver/src/main/java/com/lz/solver/regulatory/RegulatoryRegistry.kt
++++ /dev/null
+@@ -1,64 +0,0 @@
+-package com.lz.solver.regulatory
+-
+-import com.lz.model.regulatory.PrimaryBuildingCode
+-import com.lz.model.regulatory.Asce7Edition
+-import com.lz.model.regulatory.AiscEdition
+-import com.lz.model.regulatory.LoadCombination
+-
+-/**
+- * Defines the legal, structural configuration metadata contract for a jurisdiction.
+- */
+-interface RegulatoryFramework {
+-    val code: PrimaryBuildingCode
+-    val baseCode: PrimaryBuildingCode?      // Allows cascading inheritance (e.g., CBC inherits from IBC)
+-    val loadingStandard: Asce7Edition      // Governs default load combinations
+-    val steelStandard: AiscEdition         // Governs default material calculation engines
+-    val loadCombinationOverrides: List<LoadCombination>? // Local structural adjustments (null if using standard default)
+-}
+-
+-/**
+- * Single source of truth for the VectOS regulatory framework.
+- * To add a new code edition or state amendment, simply append a new entry to this map.
+- */
+-object RegulatoryRegistry {
+-
+-    private val registry: Map<PrimaryBuildingCode, RegulatoryFramework> = mapOf(
+-
+-        // 1. Model Code Baselines
+-        PrimaryBuildingCode.IBC_2021 to object : RegulatoryFramework {
+-            override val code = PrimaryBuildingCode.IBC_2021
+-            override val baseCode = null
+-            override val loadingStandard = Asce7Edition.ASCE_7_16
+-            override val steelStandard = AiscEdition.AISC_360_16
+-            override val loadCombinationOverrides = null
+-        },
+-
+-        PrimaryBuildingCode.IBC_2024 to object : RegulatoryFramework {
+-            override val code = PrimaryBuildingCode.IBC_2024
+-            override val baseCode = null
+-            override val loadingStandard = Asce7Edition.ASCE_7_22
+-            override val steelStandard = AiscEdition.AISC_360_22
+-            override val loadCombinationOverrides = null
+-        },
+-
+-        // 2. Local State Amendments (Inherits properties from IBC 2024 but allows explicit overrides)
+-        PrimaryBuildingCode.CBC_2025 to object : RegulatoryFramework {
+-            override val code = PrimaryBuildingCode.CBC_2025
+-            override val baseCode = PrimaryBuildingCode.IBC_2024 // Cascading legal inheritance
+-            override val loadingStandard = Asce7Edition.ASCE_7_22
+-            override val steelStandard = AiscEdition.AISC_360_22
+-
+-            // If California adjusts specific combination rules, declare them directly here.
+-            // Otherwise, set to null to fall back to the default parent standard.
+-            override val loadCombinationOverrides = null
+-        }
+-    )
+-
+-    /**
+-     * Resolves the complete regulatory profile for a given building code.
+-     */
+-    fun getFramework(code: PrimaryBuildingCode): RegulatoryFramework {
+-        return registry[code]
+-            ?: throw IllegalArgumentException("Regulatory parameters for ${code.name} have not been registered.")
+-    }
+-}
+\ No newline at end of file
+diff --git a/core/solver/src/test/java/com/lz/solver/capacity/CapacityEngineTest.kt b/core/solver/src/test/java/com/lz/solver/capacity/CapacityEngineTest.kt
+new file mode 100644
+index 0000000..fcd7446
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/capacity/CapacityEngineTest.kt
+@@ -0,0 +1,151 @@
++package com.lz.solver.capacity
++
++import com.lz.model.structural.*
++import com.lz.model.units.*
++import com.lz.solver.material.AiscSteelCapacityCalculator
++import com.lz.solver.material.NdsWoodCapacityCalculator
++import org.junit.Assert.assertEquals
++import org.junit.Test
++import java.util.UUID
++
++/**
++ * Regression coverage for the CapacityEngine fix: it previously applied a
++ * hardcoded placeholder (phi=0.9 LRFD / omega=1.67 ASD, flat across every
++ * limit state and every material) instead of each material's real code
++ * factors. For wood specifically this silently double-divided ASD capacity
++ * (NDS's nominal already IS the adjusted allowable value) and used the
++ * wrong phi for LRFD (flat 0.9 instead of NDS's per-limit-state 0.85/0.75/
++ * 0.80/0.90).
++ */
++class CapacityEngineTest {
++
++    private val woodProfile = WoodProfile(
++        id = "2x10",
++        designation = "2x10",
++        nominalWidth = 2.0.inches,
++        nominalDepth = 10.0.inches,
++        dressedWidth = 1.5.inches,
++        dressedDepth = 9.25.inches
++    )
++
++    private val woodMaterial = MaterialGrade.Wood(
++        id = "df-l-no2",
++        name = "DF-L No.2",
++        species = WoodSpecies.DF_L,
++        grade = WoodGrade.NO_2,
++        referenceBending = 875.0.psi,
++        referenceShear = 180.0.psi,
++        referenceCompressionParallel = 1350.0.psi,
++        referenceCompressionPerp = 625.0.psi,
++        referenceTensionParallel = 575.0.psi,
++        modulusOfElasticity = 1600000.0.psi,
++        shearModulus = 100000.0.psi,
++        densityPcf = 35.0
++    )
++
++    private fun woodDemand() = StationDemand(
++        spanId = UUID.randomUUID(),
++        x = 60.0.inches,
++        moment = Moment(-10000.0),
++        shear = Force(500.0),
++        lbTop = 0.0.inches,
++        lbBottom = 0.0.inches,
++        compressionFlange = Flange.TOP
++    )
++
++    @Test
++    fun `wood ASD is not double-divided by an extra Omega`() {
++        val calculator = NdsWoodCapacityCalculator(woodProfile, woodMaterial)
++        val demand = woodDemand()
++
++        val nominal = calculator.evaluate(demand).nominalFlexureX
++        val factors = calculator.designFactors(DesignMethodology.ASD)
++
++        val result = CapacityEngine.evaluate(
++            demands = listOf(demand),
++            section = woodProfile,
++            methodology = DesignMethodology.ASD,
++            factors = factors
++        ) { calculator.evaluate(it) }.first()
++
++        // ASD design capacity must equal the nominal (already-adjusted NDS
++        // allowable value) exactly — NOT nominal / 1.67, which was the
++        // previous behavior.
++        assertEquals(nominal, result.flexureCheckX.capacity, 1e-6)
++    }
++
++    @Test
++    fun `wood LRFD uses real NDS phi, not the old flat 0_9`() {
++        val calculator = NdsWoodCapacityCalculator(woodProfile, woodMaterial)
++        val demand = woodDemand()
++
++        val nominal = calculator.evaluate(demand).nominalFlexureX
++        val factors = calculator.designFactors(DesignMethodology.LRFD)
++
++        val result = CapacityEngine.evaluate(
++            demands = listOf(demand),
++            section = woodProfile,
++            methodology = DesignMethodology.LRFD,
++            factors = factors
++        ) { calculator.evaluate(it) }.first()
++
++        // Expected: lambda (0.8) * phiBending (0.85) * nominal — matches
++        // NdsWoodCapacityCalculator.evaluateDetailed()'s own logic, NOT the
++        // old flat 0.9 placeholder.
++        val expected = 0.8 * 0.85 * nominal
++        assertEquals(expected, result.flexureCheckX.capacity, 1e-6)
++    }
++
++    @Test
++    fun `steel LRFD and ASD flexure factors match AiscDesignFactors, not a placeholder`() {
++        val profile = SteelProfile(
++            id = "W8x10",
++            designation = "W8x10",
++            shapeType = ShapeType.WIDE_FLANGE,
++            area = Area(2.96),
++            depth = Length(7.89),
++            webThickness = Length(0.170),
++            flangeWidth = Length(3.94),
++            flangeThickness = Length(0.205),
++            propertiesStrongAxis = SectionAxisProperties(
++                i = MomentOfInertia(30.8), s = SectionModulus(7.81),
++                r = Length(3.22), z = SectionModulus(8.87)
++            ),
++            propertiesWeakAxis = SectionAxisProperties(
++                i = MomentOfInertia(2.09), s = SectionModulus(1.06),
++                r = Length(0.841), z = SectionModulus(1.64)
++            ),
++            torsionalConstantJ = 0.0436,
++            warpingConstantCw = 31.7
++        )
++        val material = MaterialGrade.Steel(
++            id = "A992", name = "A992",
++            yieldStrength = Pressure(50000.0),
++            ultimateStrength = Pressure(65000.0),
++            modulusOfElasticity = Pressure(29000000.0),
++            shearModulus = Pressure(11200000.0),
++            densityPcf = 490.0
++        )
++        val calculator = AiscSteelCapacityCalculator(profile, material)
++        val demand = StationDemand(
++            spanId = UUID.randomUUID(), x = 0.0.inches,
++            moment = Moment(100000.0), shear = Force(0.0),
++            lbTop = 0.0.inches, lbBottom = 0.0.inches,
++            compressionFlange = Flange.TOP
++        )
++
++        val nominal = calculator.evaluate(demand).nominalFlexureX
++
++        val lrfdResult = CapacityEngine.evaluate(
++            listOf(demand), profile, DesignMethodology.LRFD,
++            calculator.designFactors(DesignMethodology.LRFD)
++        ) { calculator.evaluate(it) }.first()
++        assertEquals(nominal * 0.90, lrfdResult.flexureCheckX.capacity, 1e-6)
++
++        val asdResult = CapacityEngine.evaluate(
++            listOf(demand), profile, DesignMethodology.ASD,
++            calculator.designFactors(DesignMethodology.ASD)
++        ) { calculator.evaluate(it) }.first()
++        assertEquals(nominal / 1.67, asdResult.flexureCheckX.capacity, 1e-6)
++    }
++}
+diff --git a/core/solver/src/test/java/com/lz/solver/material/NdsClCalculatorTest.kt b/core/solver/src/test/java/com/lz/solver/material/NdsClCalculatorTest.kt
+new file mode 100644
+index 0000000..d449a97
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/material/NdsClCalculatorTest.kt
+@@ -0,0 +1,127 @@
++package com.lz.solver.material
++
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++import com.lz.model.structural.*
++import com.lz.model.units.*
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.util.UUID
++
++class NdsClCalculatorTest {
++
++    // Nominal 2x10 DF-L No.2, dressed dimensions
++    private val profile = WoodProfile(
++        id = "2x10",
++        designation = "2x10",
++        nominalWidth = 2.0.inches,
++        nominalDepth = 10.0.inches,
++        dressedWidth = 1.5.inches,
++        dressedDepth = 9.25.inches
++    )
++
++    private val material = MaterialGrade.Wood(
++        id = "df-l-no2",
++        name = "DF-L No.2",
++        species = WoodSpecies.DF_L,
++        grade = WoodGrade.NO_2,
++        referenceBending = 875.0.psi,
++        referenceShear = 180.0.psi,
++        referenceCompressionParallel = 1350.0.psi,
++        referenceCompressionPerp = 625.0.psi,
++        referenceTensionParallel = 575.0.psi,
++        modulusOfElasticity = 1600000.0.psi,
++        shearModulus = 100000.0.psi,
++        densityPcf = 35.0
++    )
++
++    private val spanId: UUID = UUID.randomUUID()
++
++    private fun demandAt(x: Double) = StationDemand(
++        spanId = spanId,
++        x = x.inches,
++        moment = Moment(0.0),
++        shear = Force(0.0)
++    )
++
++    @Test
++    fun `zero unbraced length returns CL of 1_0`() {
++        val cl = computeNdsCL(
++            lb = 0.0,
++            profile = profile,
++            material = material,
++            adjustmentFactors = NdsAdjustmentFactors(),
++            isGlulam = false
++        )
++        assertEquals(1.0, cl, 1e-9)
++    }
++
++    @Test
++    fun `long unbraced segment produces a real reduction, not the old 1_0 stub`() {
++        // 10 ft unbraced length on a shallow 2x10 — should meaningfully
++        // reduce CL below 1.0. Prior to this fix, NdsClCalculator always
++        // returned 1.0 regardless of Lb.
++        val cl = computeNdsCL(
++            lb = 120.0,
++            profile = profile,
++            material = material,
++            adjustmentFactors = NdsAdjustmentFactors(),
++            isGlulam = false
++        )
++        assertTrue("Expected CL < 1.0 for a long unbraced segment, was $cl", cl < 1.0)
++        assertTrue("CL should never be negative or absurdly small, was $cl", cl > 0.0)
++    }
++
++    @Test
++    fun `NdsClCalculator segment result matches the shared computeNdsCL formula`() {
++        val calculator = NdsClCalculator(profile, material)
++
++        // Segment spanning 0" to 120" (matches lb = 120 case above)
++        val segmentDemands = listOf(demandAt(0.0), demandAt(120.0))
++
++        val expected = computeNdsCL(
++            lb = 120.0,
++            profile = profile,
++            material = material,
++            adjustmentFactors = NdsAdjustmentFactors(),
++            isGlulam = false
++        )
++        val actual = calculator.calculate(segmentDemands, isCantilever = false)
++
++        assertEquals(expected, actual, 1e-9)
++    }
++
++    @Test
++    fun `empty segment demands returns conservative default of 1_0`() {
++        val calculator = NdsClCalculator(profile, material)
++        val cl = calculator.calculate(emptyList(), isCantilever = false)
++        assertEquals(1.0, cl, 1e-9)
++    }
++
++    @Test
++    fun `NdsClCalculator agrees with NdsWoodCapacityCalculator's internal CL for the same Lb`() {
++        // Regression guard against the two paths drifting apart again now
++        // that they're split across two classes but share one formula.
++        val demand = StationDemand(
++            spanId = spanId,
++            x = 60.0.inches,
++            moment = Moment(-50000.0), // sagging per solver's negated convention
++            shear = Force(500.0),
++            lbTop = 120.0.inches,
++            lbBottom = 120.0.inches,
++            compressionFlange = Flange.TOP
++        )
++
++        val capacityCalculator = NdsWoodCapacityCalculator(profile, material)
++        val detailed = capacityCalculator.evaluateDetailed(demand, DesignMethodology.ASD)
++        val clFromCapacityCheck = detailed.designParameters["CL"]!!.toDouble()
++
++        val stabilityCalculator = NdsClCalculator(profile, material)
++        val clFromStabilityCalculator = stabilityCalculator.calculate(
++            segmentDemands = listOf(demandAt(0.0), demandAt(120.0)),
++            isCantilever = false
++        )
++
++        assertEquals(clFromCapacityCheck, clFromStabilityCalculator, 1e-3)
++    }
++}
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 94f479f..065cca3 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
+ import com.lz.beam.domain.BeamCalculationRepository
+ import com.lz.beam.model.BeamCalculation
+ import com.lz.beam.model.BeamCalculationResults
++import com.lz.data.repository.CodeNotFoundException
+ import com.lz.data.repository.IStructuralCodeRepository
+ import com.lz.domain.calculation.CalculationMetadata
+ import com.lz.domain.material.MaterialRepository
+@@ -235,7 +236,15 @@ class BeamViewModel @Inject constructor(
+     private fun loadDefaultBuildingCode() {
+         viewModelScope.launch {
+             try {
+-                activeBuildingCode = structuralRepository.getDefaultBuildingCode()
++                // Use the active project's own selected building code — falling
++                // back to the app default only if that project hasn't set one
++                // or its id no longer resolves (e.g. seed data changed).
++                val projectBuildingCodeId = activeProjectProvider.activeProject.value.settings.buildingCodeId
++                activeBuildingCode = try {
++                    structuralRepository.getBuildingCode(projectBuildingCodeId)
++                } catch (e: CodeNotFoundException) {
++                    structuralRepository.getDefaultBuildingCode()
++                }
+ 
+                 activeBuildingCode?.let { bc ->
+                     val setId = if (methodology == DesignMethodology.LRFD) bc.defaultLrfdSetId else bc.defaultAsdSetId
+@@ -295,7 +304,8 @@ class BeamViewModel @Inject constructor(
+                         braceState = getGlobalBraceState(),
+                         designMethodology = methodology,
+                         sectionProfile = selectedSection,
+-                        material = activeMaterialGrade
++                        material = activeMaterialGrade,
++                        buildingCode = code
+                     )
+                 )
+ 
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt
+index 63cdaa8..6e3368d 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt
+@@ -1,6 +1,7 @@
+ package com.lz.beam.solver
+ 
+ import com.lz.model.regulatory.LoadCombination
++import com.lz.model.regulatory.codes.BuildingCode
+ import com.lz.model.structural.DesignMethodology
+ import com.lz.model.structural.Load
+ import com.lz.model.structural.LoadCase
+@@ -35,7 +36,14 @@ data class BeamAnalysisConfig(
+     val sectionProfile: SectionProfile? = null,
+     val material: MaterialGrade? = null,
+     val liveLoadDeflectionLimitRatio: Double = 360.0,
+-    val totalLoadDeflectionLimitRatio: Double = 240.0
++    val totalLoadDeflectionLimitRatio: Double = 240.0,
++    /**
++     * The active project's building code — used to resolve which AISC/NDS
++     * edition governs capacity checks (BuildingCode.defaultMaterialStandards
++     * -> Standard.edition). Null falls back to each calculator's own
++     * default edition (currently AISC 360-22 / NDS 2018).
++     */
++    val buildingCode: BuildingCode? = null
+ ) {
+     /**
+      * All loads across all load cases.
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+index 10647be..1e9f104 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+@@ -1,6 +1,10 @@
+ package com.lz.beam.solver
+ 
++import com.lz.model.regulatory.AiscEdition
++import com.lz.model.regulatory.codes.StandardEdition
++import com.lz.model.regulatory.nds.NdsEdition
+ import com.lz.model.structural.MaterialGrade
++import com.lz.model.structural.MaterialType
+ import com.lz.model.structural.StationDemand
+ import com.lz.model.units.Force
+ import com.lz.model.units.Length
+@@ -29,6 +33,22 @@ import kotlin.math.abs
+ 
+ object BeamAnalysisSolver {
+ 
++    /**
++     * Resolves the AISC edition that governs this config's building code,
++     * via BuildingCode.defaultMaterialStandards[STEEL] -> Standard.edition.
++     * Returns null (calculator falls back to its own default) if the
++     * config has no building code, or the resolved standard's edition
++     * isn't a recognized StandardEdition.Aisc360.
++     */
++    private fun resolveAiscEdition(config: BeamAnalysisConfig): AiscEdition? =
++        (config.buildingCode?.defaultMaterialStandards?.get(MaterialType.STEEL)?.edition as? StandardEdition.Aisc360)?.edition
++
++    /**
++     * Same as [resolveAiscEdition] but for NDS / wood.
++     */
++    private fun resolveNdsEdition(config: BeamAnalysisConfig): NdsEdition? =
++        (config.buildingCode?.defaultMaterialStandards?.get(MaterialType.WOOD)?.edition as? StandardEdition.Nds)?.edition
++
+     fun solve(config: BeamAnalysisConfig): AnalysisResult {
+ 
+         // Step 1 — Generic FEM pass: get unfactored forces, reactions,
+@@ -36,12 +56,17 @@ object BeamAnalysisSolver {
+         // nothing about beams, materials, or capacity.
+         val genericResult = MemberAnalysisSolver.solve(config.toAnalysisConfig())
+ 
+-        // Step 2 — Select material-appropriate stability factor calculator
+-        val stabilityCalculator: StabilityFactorCalculator = when (config.material) {
+-            is MaterialGrade.Steel    -> AiscCbCalculator
+-            is MaterialGrade.Aluminum -> AiscCbCalculator  // ADM uses same Cb formula
+-            is MaterialGrade.Wood     -> NdsClCalculator()
+-            else                      -> StabilityFactorCalculator { _, _ -> 1.0 }
++        // Step 2 — Select material-appropriate stability factor calculator.
++        // NdsClCalculator needs section/material data (CL depends on d, b,
++        // Fb, E) — only available when both are configured; falls back to
++        // the conservative 1.0 default otherwise, same as the `else` branch.
++        val profile = config.sectionProfile
++        val material = config.material
++        val stabilityCalculator: StabilityFactorCalculator = when {
++            material is MaterialGrade.Steel    -> AiscCbCalculator
++            material is MaterialGrade.Aluminum -> AiscCbCalculator  // ADM uses same Cb formula
++            material is MaterialGrade.Wood && profile != null -> NdsClCalculator(profile, material)
++            else                                -> StabilityFactorCalculator { _, _ -> 1.0 }
+         }
+ 
+         val totalLength = config.member.spans.sumOf { it.length.inches }
+@@ -112,8 +137,14 @@ object BeamAnalysisSolver {
+         val material = config.material         ?: return emptyList()
+ 
+         val calculator: CapacityCalculator? = when (material) {
+-            is MaterialGrade.Steel -> AiscSteelCapacityCalculator(profile, material)
+-            is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(profile, material)
++            is MaterialGrade.Steel -> AiscSteelCapacityCalculator(
++                profile, material,
++                edition = resolveAiscEdition(config) ?: AiscEdition.AISC_360_22
++            )
++            is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
++                profile, material,
++                edition = resolveNdsEdition(config) ?: NdsEdition.NDS_2018
++            )
+             else                   -> null
+         }
+ 
+@@ -122,7 +153,8 @@ object BeamAnalysisSolver {
+         return CapacityEngine.evaluate(
+             demands              = demands,
+             section              = profile,
+-            methodology          = config.designMethodology
++            methodology          = config.designMethodology,
++            factors              = calculator.designFactors(config.designMethodology)
+         ) { demand -> calculator.evaluate(demand) }
+             .map { cap ->
+                 UtilizationPoint(

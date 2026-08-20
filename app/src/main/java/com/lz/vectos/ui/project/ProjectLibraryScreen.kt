@@ -185,7 +185,7 @@ fun ProjectSummaryCard(
                 Spacer(modifier = Modifier.height(4.dp))
                 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TagItem(text = project.settings.buildingCode.name)
+                    TagItem(text = project.settings.buildingCodeId)
                     TagItem(text = project.settings.designMethodology.name)
                 }
             }

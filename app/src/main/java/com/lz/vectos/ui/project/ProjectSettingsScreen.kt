@@ -30,8 +30,7 @@ fun ProjectSettingsScreen(
     projectState.let { activeProject ->
         var units by remember { mutableStateOf(activeProject.settings.unitSystem) }
         var methodology by remember { mutableStateOf(activeProject.settings.designMethodology) }
-        // Note: activeProject.settings.buildingCode is an enum, we need to find the full object
-        var selectedCodeId by remember { mutableStateOf(activeProject.settings.buildingCode.name) }
+        var selectedCodeId by remember { mutableStateOf(activeProject.settings.buildingCodeId) }
         var buildingCode by remember { mutableStateOf<BuildingCode?>(null) }
 
         LaunchedEffect(buildingCodes, selectedCodeId) {

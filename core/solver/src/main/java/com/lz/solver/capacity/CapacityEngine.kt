@@ -43,66 +43,63 @@ object CapacityEngine {
     /**
      * Iterates through the enriched station demands and calculates utilization
      * for all limit states (shear, axial, flexure, torsion, and serviceability) at every point.
+     *
+     * [factors] supplies the real, material-specific per-limit-state design
+     * factors (see [DesignFactorSet]) — sourced from the same calculator that
+     * produced [capacityCalculator]'s nominal values, so ASD/LRFD factoring
+     * here always matches what that material's code actually specifies.
      */
     fun evaluate(
         demands: List<StationDemand>,
         section: SectionProfile,
         methodology: DesignMethodology,
+        factors: DesignFactorSet,
         capacityCalculator: (StationDemand) -> RawCapacityResult
     ): List<PointCapacityResult> {
 
-        // Simplified factors for placeholder; normally pulled from code specifications
-        val phiFlexure = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
-        val omegaFlexure = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
-
-        val phiShear = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
-        val omegaShear = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
-
-        val phiAxial = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
-        val omegaAxial = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
-
-        val phiTorsion = if (methodology == DesignMethodology.LRFD) 0.9 else 1.0
-        val omegaTorsion = if (methodology == DesignMethodology.ASD) 1.67 else 1.0
-
         return demands.map { demand ->
             val raw = capacityCalculator(demand)
+            val isAxialTension = demand.axial.pounds >= 0.0
 
             // Flexure X
-            val designFlexureX = if (methodology == DesignMethodology.LRFD) raw.nominalFlexureX * phiFlexure else raw.nominalFlexureX / omegaFlexure
+            val designFlexureX = factors.apply(raw.nominalFlexureX, factors.flexure)
             val demandFlexureX = abs(demand.moment.inLbIn)
             val ratioFlexureX = if (designFlexureX > 0) demandFlexureX / designFlexureX else 0.0
             val checkFlexureX =
                 CodeCheck(raw.limitStateFlexureX, demandFlexureX, designFlexureX, ratioFlexureX)
 
-            // Flexure Y
-            val designFlexureY = if (methodology == DesignMethodology.LRFD) raw.nominalFlexureY * phiFlexure else raw.nominalFlexureY / omegaFlexure
+            // Flexure Y (same flexure factor — AISC/NDS don't distinguish
+            // strong/weak axis bending for phi/omega purposes)
+            val designFlexureY = factors.apply(raw.nominalFlexureY, factors.flexure)
             val demandFlexureY = abs(demand.momentY.inLbIn)
             val ratioFlexureY = if (designFlexureY > 0) demandFlexureY / designFlexureY else 0.0
             val checkFlexureY =
                 CodeCheck(raw.limitStateFlexureY, demandFlexureY, designFlexureY, ratioFlexureY)
 
             // Shear X (Strong axis / Vy demand)
-            val designShearX = if (methodology == DesignMethodology.LRFD) raw.nominalShearX * phiShear else raw.nominalShearX / omegaShear
+            val designShearX = factors.apply(raw.nominalShearX, factors.shear)
             val demandShearX = abs(demand.shear.inPoundsForce)
             val ratioShearX = if (designShearX > 0) demandShearX / designShearX else 0.0
             val checkShearX =
                 CodeCheck(raw.limitStateShearX, demandShearX, designShearX, ratioShearX)
 
             // Shear Y (Weak axis / Vz demand)
-            val designShearY = if (methodology == DesignMethodology.LRFD) raw.nominalShearY * phiShear else raw.nominalShearY / omegaShear
+            val designShearY = factors.apply(raw.nominalShearY, factors.shear)
             val demandShearY = abs(demand.shearY.inPoundsForce)
             val ratioShearY = if (designShearY > 0) demandShearY / designShearY else 0.0
             val checkShearY =
                 CodeCheck(raw.limitStateShearY, demandShearY, designShearY, ratioShearY)
 
-            // Axial
-            val designAxial = if (methodology == DesignMethodology.LRFD) raw.nominalAxial * phiAxial else raw.nominalAxial / omegaAxial
+            // Axial — tension and compression can carry different factors
+            // (e.g. NDS: phi=0.80 tension vs 0.90 compression)
+            val axialFactor = if (isAxialTension) factors.axialTension else factors.axialCompression
+            val designAxial = factors.apply(raw.nominalAxial, axialFactor)
             val demandAxial = abs(demand.axial.inPoundsForce)
             val ratioAxial = if (designAxial > 0) demandAxial / designAxial else 0.0
             val checkAxial = CodeCheck(raw.limitStateAxial, demandAxial, designAxial, ratioAxial)
 
             // Torsion
-            val designTorsion = if (methodology == DesignMethodology.LRFD) raw.nominalTorsion * phiTorsion else raw.nominalTorsion / omegaTorsion
+            val designTorsion = factors.apply(raw.nominalTorsion, factors.torsion)
             val demandTorsion = abs(demand.torque.inLbIn)
             val ratioTorsion = if (designTorsion > 0) demandTorsion / designTorsion else 0.0
             val checkTorsion =

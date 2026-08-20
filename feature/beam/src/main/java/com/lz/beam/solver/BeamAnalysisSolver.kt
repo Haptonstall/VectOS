@@ -1,6 +1,10 @@
 package com.lz.beam.solver
 
+import com.lz.model.regulatory.AiscEdition
+import com.lz.model.regulatory.codes.StandardEdition
+import com.lz.model.regulatory.nds.NdsEdition
 import com.lz.model.structural.MaterialGrade
+import com.lz.model.structural.MaterialType
 import com.lz.model.structural.StationDemand
 import com.lz.model.units.Force
 import com.lz.model.units.Length
@@ -29,6 +33,22 @@ import kotlin.math.abs
 
 object BeamAnalysisSolver {
 
+    /**
+     * Resolves the AISC edition that governs this config's building code,
+     * via BuildingCode.defaultMaterialStandards[STEEL] -> Standard.edition.
+     * Returns null (calculator falls back to its own default) if the
+     * config has no building code, or the resolved standard's edition
+     * isn't a recognized StandardEdition.Aisc360.
+     */
+    private fun resolveAiscEdition(config: BeamAnalysisConfig): AiscEdition? =
+        (config.buildingCode?.defaultMaterialStandards?.get(MaterialType.STEEL)?.edition as? StandardEdition.Aisc360)?.edition
+
+    /**
+     * Same as [resolveAiscEdition] but for NDS / wood.
+     */
+    private fun resolveNdsEdition(config: BeamAnalysisConfig): NdsEdition? =
+        (config.buildingCode?.defaultMaterialStandards?.get(MaterialType.WOOD)?.edition as? StandardEdition.Nds)?.edition
+
     fun solve(config: BeamAnalysisConfig): AnalysisResult {
 
         // Step 1 — Generic FEM pass: get unfactored forces, reactions,
@@ -36,12 +56,17 @@ object BeamAnalysisSolver {
         // nothing about beams, materials, or capacity.
         val genericResult = MemberAnalysisSolver.solve(config.toAnalysisConfig())
 
-        // Step 2 — Select material-appropriate stability factor calculator
-        val stabilityCalculator: StabilityFactorCalculator = when (config.material) {
-            is MaterialGrade.Steel    -> AiscCbCalculator
-            is MaterialGrade.Aluminum -> AiscCbCalculator  // ADM uses same Cb formula
-            is MaterialGrade.Wood     -> NdsClCalculator()
-            else                      -> StabilityFactorCalculator { _, _ -> 1.0 }
+        // Step 2 — Select material-appropriate stability factor calculator.
+        // NdsClCalculator needs section/material data (CL depends on d, b,
+        // Fb, E) — only available when both are configured; falls back to
+        // the conservative 1.0 default otherwise, same as the `else` branch.
+        val profile = config.sectionProfile
+        val material = config.material
+        val stabilityCalculator: StabilityFactorCalculator = when {
+            material is MaterialGrade.Steel    -> AiscCbCalculator
+            material is MaterialGrade.Aluminum -> AiscCbCalculator  // ADM uses same Cb formula
+            material is MaterialGrade.Wood && profile != null -> NdsClCalculator(profile, material)
+            else                                -> StabilityFactorCalculator { _, _ -> 1.0 }
         }
 
         val totalLength = config.member.spans.sumOf { it.length.inches }
@@ -112,8 +137,14 @@ object BeamAnalysisSolver {
         val material = config.material         ?: return emptyList()
 
         val calculator: CapacityCalculator? = when (material) {
-            is MaterialGrade.Steel -> AiscSteelCapacityCalculator(profile, material)
-            is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(profile, material)
+            is MaterialGrade.Steel -> AiscSteelCapacityCalculator(
+                profile, material,
+                edition = resolveAiscEdition(config) ?: AiscEdition.AISC_360_22
+            )
+            is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
+                profile, material,
+                edition = resolveNdsEdition(config) ?: NdsEdition.NDS_2018
+            )
             else                   -> null
         }
 
@@ -122,7 +153,8 @@ object BeamAnalysisSolver {
         return CapacityEngine.evaluate(
             demands              = demands,
             section              = profile,
-            methodology          = config.designMethodology
+            methodology          = config.designMethodology,
+            factors              = calculator.designFactors(config.designMethodology)
         ) { demand -> calculator.evaluate(demand) }
             .map { cap ->
                 UtilizationPoint(

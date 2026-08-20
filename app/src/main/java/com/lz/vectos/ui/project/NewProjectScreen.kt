@@ -21,7 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lz.domain.project.Project
-import com.lz.model.regulatory.PrimaryBuildingCode
 import com.lz.model.regulatory.codes.BuildingCode
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.units.UnitSystem
@@ -59,7 +58,7 @@ fun NewProjectScreen(
     LaunchedEffect(buildingCodes, projectToEdit) {
         if (selectedCode == null && buildingCodes.isNotEmpty()) {
             selectedCode = if (projectToEdit != null) {
-                buildingCodes.find { it.id == projectToEdit.settings.buildingCode.name }
+                buildingCodes.find { it.id == projectToEdit.settings.buildingCodeId }
             } else {
                 buildingCodes.find { it.id == "IBC_2021" } ?: buildingCodes.firstOrNull()
             }
@@ -107,7 +106,7 @@ fun NewProjectScreen(
                                         settings = projectToEdit.settings.copy(
                                             unitSystem = unitSystem,
                                             designMethodology = methodology,
-                                            buildingCode = PrimaryBuildingCode.valueOf(code.id)
+                                            buildingCodeId = code.id
                                         ),
                                         coordinates = projectToEdit.coordinates.copy(
                                             streetAddress = streetAddress,

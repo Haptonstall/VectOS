@@ -170,7 +170,7 @@ class ProjectViewModel @Inject constructor(
             settings = ProjectSettings(
                 unitSystem = units,
                 designMethodology = methodology,
-                buildingCode = com.lz.model.regulatory.PrimaryBuildingCode.valueOf(buildingCode.id)
+                buildingCodeId = buildingCode.id
             ),
             coordinates = GeographicCoordinates(
                 streetAddress = streetAddress,
@@ -196,7 +196,7 @@ class ProjectViewModel @Inject constructor(
             settings = currentProject.settings.copy(
                 unitSystem = units,
                 designMethodology = methodology,
-                buildingCode = com.lz.model.regulatory.PrimaryBuildingCode.valueOf(buildingCode.id)
+                buildingCodeId = buildingCode.id
             )
         )
         updateProject(updatedProject)

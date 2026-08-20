@@ -1,6 +1,8 @@
 package com.lz.solver.material
 
+import com.lz.model.regulatory.aisc.DesignFactor
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+import com.lz.model.regulatory.nds.NdsEdition
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.Flange
 import com.lz.model.structural.MaterialGrade
@@ -19,6 +21,7 @@ import com.lz.model.units.inIn4
 import com.lz.model.units.inInches
 import com.lz.model.units.inPsi
 import com.lz.solver.capacity.CapacityCalculator
+import com.lz.solver.capacity.DesignFactorSet
 import com.lz.solver.capacity.RawCapacityResult
 import java.util.Locale
 import kotlin.math.PI
@@ -50,7 +53,17 @@ import kotlin.math.sqrt
 class NdsWoodCapacityCalculator(
     private val profile: SectionProfile,
     private val material: MaterialGrade.Wood,
-    private val adjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors()
+    private val adjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors(),
+    /**
+     * Resolved NDS edition (from the active project's BuildingCode ->
+     * Standard -> StandardEdition.Nds chain). Not currently used to vary
+     * any factor here — NDS 2015/2018/2024 share the same values for
+     * everything this calculator models (adjustment factors, phi, lambda).
+     * Carried through purely for report citation traceability; if a future
+     * edition genuinely changes one of these values, branch on [edition]
+     * at that point rather than assuming it stays inert.
+     */
+    private val edition: NdsEdition = NdsEdition.NDS_2018
 ) : CapacityCalculator {
 
     private val isGlulam: Boolean = material.species.isGlulam
@@ -181,6 +194,50 @@ class NdsWoodCapacityCalculator(
         )
     }
 
+    /**
+     * NDS is inherently ASD: [evaluate]'s nominal values already ARE the
+     * fully code-adjusted allowable capacity (F' * S, with CD/CM/Ct/CL/CF/
+     * etc. baked in). So for ASD, `value = 1.0` here — CapacityEngine will
+     * divide by 1.0, i.e. use the nominal as-is. Dividing by anything else
+     * would double-count NDS's own adjustment factors.
+     *
+     * For LRFD, reproduces exactly the same lambda*phi logic already used in
+     * [evaluateDetailed] (NDS Appendix N format conversion). Folding lambda
+     * into the returned factor's `value` lets [DesignFactorSet.apply] use
+     * the same `nominal * value` shape as the AISC LRFD case.
+     */
+    override fun designFactors(methodology: DesignMethodology): DesignFactorSet {
+        if (methodology == DesignMethodology.ASD) {
+            val one = DesignFactor(1.0, "NDS ASD — nominal is already the adjusted allowable capacity")
+            return DesignFactorSet(
+                methodology       = methodology,
+                flexure           = one,
+                shear             = one,
+                axialTension      = one,
+                axialCompression  = one,
+                torsion           = one
+            )
+        }
+
+        // LRFD — NDS Appendix N. lambda = 0.8 for occupancy live/snow/roof
+        // live, 1.0 for wind/seismic; 0.8 used as the conservative default,
+        // matching evaluateDetailed().
+        val lambda = 0.8
+        val phiBending     = 0.85
+        val phiShear       = 0.75
+        val phiCompression = 0.90
+        val phiTension     = 0.80
+
+        return DesignFactorSet(
+            methodology       = methodology,
+            flexure           = DesignFactor(lambda * phiBending,     "NDS Appendix N — Kf/phi (bending)"),
+            shear             = DesignFactor(lambda * phiShear,       "NDS Appendix N — Kf/phi (shear)"),
+            axialTension      = DesignFactor(lambda * phiTension,     "NDS Appendix N — Kf/phi (tension)"),
+            axialCompression  = DesignFactor(lambda * phiCompression, "NDS Appendix N — Kf/phi (compression)"),
+            torsion           = DesignFactor(1.0, "Torsion not codified for wood")
+        )
+    }
+
     // ------------------------------------------------------------------
     // NDS 3.3 — Bending
     // ------------------------------------------------------------------
@@ -227,45 +284,11 @@ class NdsWoodCapacityCalculator(
 
     /**
      * NDS 3.3.3 Beam Stability Factor CL.
-     * CL accounts for lateral-torsional buckling of beams.
-     * Requires Emin for stability calculations — uses E/1.76 as approximation
-     * when Emin is not separately tracked (conservative).
+     * Delegates to [computeNdsCL] — see that function for the formula and
+     * why it's shared with [NdsClCalculator].
      */
-    private fun computeCL(lb: Double): Double {
-        if (lb <= 0.0) return 1.0
-
-        val d = profile.depth.inInches
-        val b = if (profile is WoodProfile) profile.dressedWidth.inInches
-        else profile.propertiesWeakAxis.s.inIn3 / profile.propertiesWeakAxis.i.inIn4 * 2.0
-
-        if (b <= 0.0) return 1.0
-
-        // Effective span length le (NDS Table 3.3.3 — approximate for uniformly loaded)
-        val le = 1.63 * lb + 3.0 * d
-
-        val rbSquared = le * d / b.pow(2)
-        if (rbSquared <= 0.0) return 1.0
-
-        val rb = sqrt(rbSquared)
-
-        // Critical buckling stress FbE (NDS 3.3.3)
-        val eMin = material.modulusOfElasticity.inPsi / 1.76  // Approx Emin = E / 1.76
-        val fbe = 1.20 * eMin / rbSquared
-
-        val fbStar = material.referenceBending.inPsi *
-                adjustmentFactors.cd * adjustmentFactors.cm *
-                adjustmentFactors.ct * adjustmentFactors.cf *
-                adjustmentFactors.ci * adjustmentFactors.cr
-
-        if (fbStar <= 0.0) return 1.0
-
-        val ratio = fbe / fbStar
-        val c = if (isGlulam) 0.90 else 0.85  // NDS 3.3.3: c=0.90 glulam, 0.85 sawn
-
-        // NDS Eq. 3.3-6
-        val term = (1.0 + ratio) / (2.0 * c)
-        return term - sqrt(term.pow(2) - ratio / c)
-    }
+    private fun computeCL(lb: Double): Double =
+        computeNdsCL(lb, profile, material, adjustmentFactors, isGlulam)
 
     /**
      * NDS 5.3.6 Volume Factor CV for glulam.

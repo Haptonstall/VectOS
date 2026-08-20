@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.lz.beam.domain.BeamCalculationRepository
 import com.lz.beam.model.BeamCalculation
 import com.lz.beam.model.BeamCalculationResults
+import com.lz.data.repository.CodeNotFoundException
 import com.lz.data.repository.IStructuralCodeRepository
 import com.lz.domain.calculation.CalculationMetadata
 import com.lz.domain.material.MaterialRepository
@@ -235,7 +236,15 @@ class BeamViewModel @Inject constructor(
     private fun loadDefaultBuildingCode() {
         viewModelScope.launch {
             try {
-                activeBuildingCode = structuralRepository.getDefaultBuildingCode()
+                // Use the active project's own selected building code — falling
+                // back to the app default only if that project hasn't set one
+                // or its id no longer resolves (e.g. seed data changed).
+                val projectBuildingCodeId = activeProjectProvider.activeProject.value.settings.buildingCodeId
+                activeBuildingCode = try {
+                    structuralRepository.getBuildingCode(projectBuildingCodeId)
+                } catch (e: CodeNotFoundException) {
+                    structuralRepository.getDefaultBuildingCode()
+                }
 
                 activeBuildingCode?.let { bc ->
                     val setId = if (methodology == DesignMethodology.LRFD) bc.defaultLrfdSetId else bc.defaultAsdSetId
@@ -295,7 +304,8 @@ class BeamViewModel @Inject constructor(
                         braceState = getGlobalBraceState(),
                         designMethodology = methodology,
                         sectionProfile = selectedSection,
-                        material = activeMaterialGrade
+                        material = activeMaterialGrade,
+                        buildingCode = code
                     )
                 )
 

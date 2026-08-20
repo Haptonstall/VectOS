@@ -4,7 +4,6 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.units.UnitSystem
-import com.lz.model.regulatory.PrimaryBuildingCode
 import com.lz.model.regulatory.AiscEdition
 import com.lz.model.regulatory.asce7.RiskCategory
 import java.util.UUID
@@ -22,7 +21,10 @@ data class ProjectRoomEntity(
     val createdAtIso: String, // Kept as ISO String across modules
 
     // 2. Global Engineering Settings Configuration
-    val buildingCode: PrimaryBuildingCode,
+    // NOTE: buildingCodeId matches a real com.lz.model.regulatory.codes.BuildingCode.id
+    // seeded in the standards/building_codes tables (e.g. "IBC_2024", "CBC_2022") —
+    // NOT the old 3-value PrimaryBuildingCode enum, which is retired.
+    val buildingCodeId: String,
     val designMethodology: DesignMethodology,
     val unitSystem: UnitSystem,
     val riskCategory: RiskCategory,

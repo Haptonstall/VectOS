@@ -40,22 +40,4 @@ data class BuildingCode(
     fun getCombinationSet(setId: String): LoadCombinationSet? {
         return stateSpecificCombinations.find { it.id == setId } ?: baseCode?.getCombinationSet(setId)
     }
-
-    companion object {
-        /**
-         * Reconstructs a BuildingCode from an ID.
-         * NOTE: Your converter saves 'shortName', but calls 'fromId'.
-         * This implies 'id' passed here might actually be the shortName.
-         */
-        fun fromId(id: String): BuildingCode {
-            // Placeholder implementation to satisfy the compiler
-            return BuildingCode(
-                id = id,
-                shortName = id,
-                longName = "Unknown Code",
-                defaultMaterialStandards = emptyMap(),
-                standards = emptyList()
-            )
-        }
-    }
 }

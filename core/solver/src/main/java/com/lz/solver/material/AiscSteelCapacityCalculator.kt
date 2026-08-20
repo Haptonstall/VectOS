@@ -1,5 +1,6 @@
 package com.lz.solver.material
 
+import com.lz.model.regulatory.AiscEdition
 import com.lz.model.regulatory.aisc.AiscDesignFactors
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.Flange
@@ -18,6 +19,7 @@ import com.lz.model.units.inIn4
 import com.lz.model.units.inInches
 import com.lz.model.units.inPsi
 import com.lz.solver.capacity.CapacityCalculator
+import com.lz.solver.capacity.DesignFactorSet
 import com.lz.solver.capacity.RawCapacityResult
 import java.util.Locale
 import kotlin.math.PI
@@ -47,7 +49,15 @@ import kotlin.math.sqrt
 @Suppress("PropertyName", "LocalVariableName")
 class AiscSteelCapacityCalculator(
     private val profile: SectionProfile,
-    private val material: MaterialGrade.Steel
+    private val material: MaterialGrade.Steel,
+    /**
+     * Resolved AISC edition (from the active project's BuildingCode ->
+     * Standard -> StandardEdition.Aisc360 chain). Defaults to AISC 360-22
+     * — the same default AiscDesignFactors.forMethodology() used before
+     * this was wired through — so existing call sites that haven't been
+     * updated to pass a resolved edition keep identical behavior.
+     */
+    private val edition: AiscEdition = AiscEdition.AISC_360_22
 ) : CapacityCalculator {
 
     private val E: Double = material.modulusOfElasticity.inPsi
@@ -101,7 +111,7 @@ class AiscSteelCapacityCalculator(
         demand: StationDemand,
         methodology: DesignMethodology
     ): StrengthDesignResult {
-        val f  = AiscDesignFactors.forMethodology(methodology)
+        val f  = AiscDesignFactors.forEditionAndMethodology(edition, methodology)
         val lb = if (demand.compressionFlange == Flange.TOP)
             demand.lbTop.inInches else demand.lbBottom.inInches
         val cb = demand.cb
@@ -168,6 +178,23 @@ class AiscSteelCapacityCalculator(
                 "Axial" to if (isAxialTension) "Tension (D2a)" else "Compression (E3)",
                 "Edition" to f.edition.name
             )
+        )
+    }
+
+    /**
+     * Real AISC 360 phi/omega factors per limit state, sourced from
+     * [AiscDesignFactors] — used by [com.lz.solver.capacity.CapacityEngine]
+     * in place of its previous hardcoded 0.90/1.67 placeholder.
+     */
+    override fun designFactors(methodology: DesignMethodology): DesignFactorSet {
+        val f = AiscDesignFactors.forEditionAndMethodology(edition, methodology)
+        return DesignFactorSet(
+            methodology       = methodology,
+            flexure           = f.flexure,
+            shear             = f.shear,
+            axialTension      = f.tensionYield,
+            axialCompression  = f.compression,
+            torsion           = f.torsion
         )
     }
 

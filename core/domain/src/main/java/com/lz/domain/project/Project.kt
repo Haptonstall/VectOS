@@ -1,6 +1,5 @@
 package com.lz.domain.project
 
-import com.lz.model.regulatory.PrimaryBuildingCode
 import com.lz.model.regulatory.asce7.RiskCategory
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.ProjectDesignContext
@@ -16,8 +15,7 @@ import java.util.UUID
  */
 @Serializable
 data class ProjectSettings(
-    //val buildingCodeId: String = "IBC_2024",
-    val buildingCode: PrimaryBuildingCode = PrimaryBuildingCode.IBC_2024,
+    val buildingCodeId: String = "IBC_2024",
     val designMethodology: DesignMethodology = DesignMethodology.ASD,
     val unitSystem: UnitSystem = UnitSystem.IMPERIAL,
     val riskCategory: RiskCategory = RiskCategory.II,

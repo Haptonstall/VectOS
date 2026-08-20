@@ -8,20 +8,46 @@ import com.lz.model.regulatory.CombinationSource
 import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.LoadCombinationSet
 import com.lz.model.regulatory.StandardReferenceKey
+import com.lz.model.regulatory.aci318.Aci318Edition
+import com.lz.model.regulatory.asce7.Asce7Edition
 import com.lz.model.regulatory.codes.BuildingCode
 import com.lz.model.regulatory.codes.CodeReferenceKey
 import com.lz.model.regulatory.codes.Standard
+import com.lz.model.regulatory.codes.StandardEdition
+import com.lz.model.regulatory.nds.NdsEdition
 import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.MaterialType
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
 private val json = Json { ignoreUnknownKeys = true }
+
+/**
+ * Resolves a [StandardEntity]'s `edition_family`/`edition_key` columns into
+ * a real [StandardEdition]. Single place this mapping happens — keeps the
+ * seeder (which writes these two columns) and this reader in sync, since
+ * both are just string keys with no compile-time link between them.
+ */
+private fun StandardEntity.resolveEdition(): StandardEdition {
+    val key = edition_key ?: return StandardEdition.Unknown
+    return when (edition_family) {
+        "ASCE7"   -> Asce7Edition.entries.find { it.name == key }?.let { StandardEdition.Asce7(it) }
+        "AISC360" -> com.lz.model.regulatory.AiscEdition.entries.find { it.name == key }?.let { StandardEdition.Aisc360(it) }
+        "NDS"     -> NdsEdition.entries.find { it.name == key }?.let { StandardEdition.Nds(it) }
+        "ACI318"  -> Aci318Edition.entries.find { it.name == key }?.let { StandardEdition.Aci318(it) }
+        else      -> null
+    } ?: StandardEdition.Unknown
+}
 
 fun StandardEntity.toDomainModel(): Standard {
     return Standard(
         id = id,
         shortName = short_name,
         longName = long_name,
+        edition = resolveEdition(),
+        materialType = material_type?.let {
+            try { MaterialType.valueOf(it) } catch (e: IllegalArgumentException) { null }
+        },
         references = try {
             json.decodeFromString<Map<StandardReferenceKey, String>>(this.references_json)
         } catch (e: Exception) {
@@ -61,6 +87,9 @@ fun CombinationSetWithDetails.toDomainModel(): LoadCombinationSet {
 }
 
 fun BuildingCodeWithDetails.toDomainModel(baseCode: BuildingCode? = null): BuildingCode {
+    val resolvedStandards = standards.map { it.toDomainModel() }
+    val standardsById = resolvedStandards.associateBy { it.id }
+
     return BuildingCode(
         id = buildingCode.id,
         shortName = buildingCode.short_name,
@@ -70,7 +99,10 @@ fun BuildingCodeWithDetails.toDomainModel(baseCode: BuildingCode? = null): Build
         stateSpecificCombinations = combinationSets.map { it.toDomainModel() },
         defaultAsdSetId = buildingCode.default_asd_set_id,
         defaultLrfdSetId = buildingCode.default_lrfd_set_id,
-        standards = standards.map { it.toDomainModel() }
+        defaultMaterialStandards = defaultMaterialStandards.mapNotNull { entry ->
+            standardsById[entry.standardId]?.let { entry.materialType to it }
+        }.toMap(),
+        standards = resolvedStandards
     )
 }
 

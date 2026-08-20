@@ -7,15 +7,18 @@ object AiscDesignFactorRegistry {
 
     fun get(edition: AiscEdition, methodology: DesignMethodology): AiscDesignFactors {
         return when (edition) {
+            AiscEdition.AISC_360_10 -> forAisc360(edition, methodology, "AISC 360-10")
             AiscEdition.AISC_360_16 -> forAisc360(edition, methodology, "AISC 360-16")
             AiscEdition.AISC_360_22 -> forAisc360(edition, methodology, "AISC 360-22")
         }
     }
 
     /**
-     * AISC 360-16 and 360-22 share identical phi/omega values.
-     * If a future edition changes a factor, add a separate branch above
-     * and override only the changed factor here.
+     * AISC 360-10, 360-16, and 360-22 share identical phi/omega values for
+     * the limit states modeled here — these resistance/safety factors have
+     * been stable across these editions. If a future edition changes a
+     * factor, add a separate branch above and override only the changed
+     * factor here.
      */
     private fun forAisc360(
         edition: AiscEdition,

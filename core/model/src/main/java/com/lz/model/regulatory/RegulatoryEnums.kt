@@ -3,42 +3,18 @@ package com.lz.model.regulatory
 import kotlinx.serialization.Serializable
 
 /**
- * Standard referenced editions for ASCE 7 structural loading rules.
- */
-@Serializable
-enum class Asce7Edition(val label: String, val publicationYear: Int) {
-    ASCE_7_16("ASCE 7-16", 2016),
-    ASCE_7_22("ASCE 7-22", 2022)
-}
-
-/**
  * Standard referenced editions for AISC structural steel rules.
+ *
+ * (This file previously also held duplicate, unused `Asce7Edition`/
+ * `NdsEdition` definitions — distinct from and incompatible with the real,
+ * used ones in com.lz.model.regulatory.asce7/.nds — and a `PrimaryBuildingCode`
+ * enum that has been retired in favor of matching real
+ * com.lz.model.regulatory.codes.BuildingCode.id strings directly. All three
+ * were only consumed by the now-deleted RegulatoryRegistry.kt.)
  */
 @Serializable
 enum class AiscEdition(val label: String, val publicationYear: Int) {
+    AISC_360_10("AISC 360-10", 2010),
     AISC_360_16("AISC 360-16", 2016),
     AISC_360_22("AISC 360-22", 2022)
 }
-
-/**
- * Standard referenced editions for NDS wood rules.
- */
-@Serializable
-enum class NdsEdition(val label: String, val publicationYear: Int) {
-    NDS_12("NDS 2012", 2012),
-    NDS_15("NDS 2015", 2015),
-    NDS_18("NDS 2018", 2018),
-    NDS_24("NDS 2024", 2024)
-}
-
-/**
- * Standard legal reference IDs for the primary parent building codes
- * selected by the user inside the Project workspace.
- */
-@Serializable
-enum class PrimaryBuildingCode(val label: String) {
-    IBC_2021("2021 International Building Code"),
-    IBC_2024("2024 International Building Code"),
-    CBC_2025("2025 California Building Code") // Explicitly treated as a top-level selection option
-}
-

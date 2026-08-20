@@ -18,7 +18,7 @@ fun Project.toRoomEntity(): ProjectRoomEntity = ProjectRoomEntity(
     createdAtIso = createdAt.toString(),
 
     // Settings
-    buildingCode = settings.buildingCode,
+    buildingCodeId = settings.buildingCodeId,
     designMethodology = settings.designMethodology,
     unitSystem = settings.unitSystem,
     riskCategory = settings.riskCategory,
@@ -57,7 +57,7 @@ fun ProjectRoomEntity.toDomain(): Project = Project(
     createdAt = LocalDateTime.parse(createdAtIso),
 
     settings = ProjectSettings(
-        buildingCode = buildingCode,
+        buildingCodeId = buildingCodeId,
         designMethodology = designMethodology,
         unitSystem = unitSystem,
         riskCategory = riskCategory,

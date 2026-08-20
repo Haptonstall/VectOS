@@ -19,4 +19,13 @@ interface CapacityCalculator {
      * Performs a raw capacity calculation for a specific demand station.
      */
     fun evaluate(demand: StationDemand): RawCapacityResult
+
+    /**
+     * Real, material-specific per-limit-state design factors for the given
+     * methodology — used by [com.lz.solver.capacity.CapacityEngine] to turn
+     * this calculator's nominal [RawCapacityResult] values into design
+     * (factored) capacities. See [DesignFactorSet] for how `value` is
+     * interpreted per methodology.
+     */
+    fun designFactors(methodology: DesignMethodology): DesignFactorSet
 }

@@ -1,6 +1,7 @@
 package com.lz.beam.solver
 
 import com.lz.model.regulatory.LoadCombination
+import com.lz.model.regulatory.codes.BuildingCode
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.Load
 import com.lz.model.structural.LoadCase
@@ -35,7 +36,14 @@ data class BeamAnalysisConfig(
     val sectionProfile: SectionProfile? = null,
     val material: MaterialGrade? = null,
     val liveLoadDeflectionLimitRatio: Double = 360.0,
-    val totalLoadDeflectionLimitRatio: Double = 240.0
+    val totalLoadDeflectionLimitRatio: Double = 240.0,
+    /**
+     * The active project's building code — used to resolve which AISC/NDS
+     * edition governs capacity checks (BuildingCode.defaultMaterialStandards
+     * -> Standard.edition). Null falls back to each calculator's own
+     * default edition (currently AISC 360-22 / NDS 2018).
+     */
+    val buildingCode: BuildingCode? = null
 ) {
     /**
      * All loads across all load cases.
