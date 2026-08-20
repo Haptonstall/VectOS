@@ -1,27 +1,21 @@
-package com.lz.vectos.domain.structural.aisc
+package com.lz.solver.material
 
-import com.lz.model.units.Area
-import com.lz.model.units.Force
-import com.lz.model.units.Length
-import com.lz.model.units.Moment
-import com.lz.model.units.MomentOfInertia
-import com.lz.model.units.Pressure
-import com.lz.model.units.SectionModulus
-import com.lz.model.structural.MaterialGrade
-import com.lz.model.structural.SectionAxisProperties
-import com.lz.model.structural.ShapeType
-import com.lz.model.structural.SteelProfile
-import com.lz.model.structural.Flange
-import com.lz.model.structural.StationDemand
+import com.lz.model.structural.*
+import com.lz.model.units.*
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.UUID
 
+/**
+ * Ported from the pre-migration app/src/test/.../aisc/AiscSteelCapacityCalculatorTest.kt,
+ * which referenced a com.lz.vectos.domain.structural.aisc package that no
+ * longer exists as real source (broke `./gradlew build` — see 260820 session).
+ * Reference value/assertions unchanged from the original.
+ */
 class AiscSteelCapacityCalculatorTest {
 
     @Test
     fun `verify W8x10 flexural capacity against AISC Table 3-2`() {
-        // Setup W8x10 profile
         val w8x10 = SteelProfile(
             id = UUID.randomUUID().toString(),
             designation = "W8x10",
@@ -47,7 +41,6 @@ class AiscSteelCapacityCalculatorTest {
             warpingConstantCw = 31.7
         )
 
-        // Setup A992 Material
         val a992 = MaterialGrade.Steel(
             id = "A992",
             name = "A992",

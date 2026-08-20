@@ -1,25 +1,25 @@
-package com.lz.vectos.domain.structural
+package com.lz.solver.capacity
 
-import com.lz.model.structural.DesignMethodology
-import com.lz.model.structural.Flange
-import com.lz.model.units.Area
-import com.lz.model.units.Force
-import com.lz.model.units.Length
-import com.lz.model.units.Moment
-import com.lz.model.units.MomentOfInertia
-import com.lz.model.units.Pressure
-import com.lz.model.units.SectionModulus
-import com.lz.model.structural.MaterialGrade
-import com.lz.model.structural.SectionAxisProperties
-import com.lz.model.structural.ShapeType
-import com.lz.model.structural.StationDemand
-import com.lz.model.structural.SteelProfile
-import com.lz.vectos.domain.structural.aisc.AiscSteelCapacityCalculator
+import com.lz.model.structural.*
+import com.lz.model.units.*
+import com.lz.solver.material.AiscSteelCapacityCalculator
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.UUID
 
-class CapacityEngineTest {
+/**
+ * Ported from the pre-migration app/src/test/.../CapacityEngineTest.kt,
+ * which referenced a com.lz.vectos.domain.structural package that no longer
+ * exists as real source (broke `./gradlew build` — see 260820 session).
+ * Reference values/assertions unchanged from the original; only the
+ * `evaluate()` call is updated to pass `factors` (see DesignFactorSet —
+ * evaluate() no longer hardcodes phi/omega internally).
+ *
+ * Distinct from CapacityEngineTest's other coverage in this file: this
+ * specifically checks the Chapter H1-1 interaction equation and
+ * governingLimitState labeling, which nothing else in this test class covers.
+ */
+class CapacityEngineInteractionTest {
 
     @Test
     fun `verify interaction equations Chapter H1-1`() {
@@ -59,22 +59,17 @@ class CapacityEngineTest {
         )
 
         val calculator = AiscSteelCapacityCalculator(w8x10, a992)
-        
+
         // Pn = Ag * Fy = 2.96 * 50 = 148 kips = 148,000 lbs (assuming Lb=0)
         // Mnx = Zx * Fy = 8.87 * 50 = 443.5 kip-in = 443,500 lb-in
-        // Mny = Zy * Fy = 1.64 * 50 = 82 kip-in = 82,000 lb-in
-        
-        // Let's create a demand such that Pr/Pc = 0.5 (which is >= 0.2)
-        // LRFD: Pc = 0.9 * 148000 = 133,200 lbs
-        // Pr = 66,600 lbs
-        // Mrx/Mcx = 0.45
-        // LRFD: Mcx = 0.9 * 443500 = 399,150 lb-in
-        // Mrx = 0.45 * 399150 = 179,617.5 lb-in
-        // Mry = 0
+        //
+        // Demand set so Pr/Pc = 0.5 (>= 0.2, so H1-1a governs):
+        // LRFD: Pc = 0.9 * 148000 = 133,200 lbs -> Pr = 66,600 lbs
+        // LRFD: Mcx = 0.9 * 443500 = 399,150 lb-in -> Mrx/Mcx = 0.45 -> Mrx = 179,617.5 lb-in
 
         val demand = StationDemand(
             x = Length(0.0),
-            moment = Moment(179617.5), // in lb-in
+            moment = Moment(179617.5),
             shear = Force(0.0),
             axial = Force(66600.0),
             momentY = Moment(0.0),
@@ -93,18 +88,14 @@ class CapacityEngineTest {
             demands = listOf(demand),
             section = w8x10,
             methodology = DesignMethodology.LRFD,
+            factors = calculator.designFactors(DesignMethodology.LRFD),
             capacityCalculator = { calculator.evaluate(it) }
         )
 
         val result = results.first()
-        println("ratioAxial: ${result.axialCheck.ratio}")
-        println("ratioFlexureX: ${result.flexureCheckX.ratio}")
-        println("ratioFlexureY: ${result.flexureCheckY.ratio}")
-        println("interactionRatio: ${result.interactionCheck.ratio}")
-        
+
         // Expected Interaction: Pr/Pc + (8/9)(Mrx/Mcx + Mry/Mcy)
         // = 0.5 + (8/9)*(0.45 + 0) = 0.5 + 0.4 = 0.9
-        
         assertEquals(0.9, result.interactionCheck.ratio, 0.01)
         assertEquals("Interaction Eq H1-1", result.governingLimitState)
     }
