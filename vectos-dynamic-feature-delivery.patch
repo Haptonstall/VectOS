@@ -1,0 +1,722 @@
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index f938d01..0ac7b5b 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -41,7 +41,16 @@ android {
+     }
+     buildFeatures {
+         compose = true
++        buildConfig = true
+     }
++
++    // Declares :feature:beam as an on-demand split rather than a compile
++    // dependency — this is what removes :app's build-time coupling to
++    // feature modules while keeping them loadable at runtime once Play
++    // delivers/installs the split. See feature/beam's AndroidManifest.xml
++    // <dist:module> for delivery mode (on-demand + fusing=true for local
++    // debug installs).
++    dynamicFeatures += setOf(":feature:beam")
+ }
+ 
+ kotlin {
+@@ -51,6 +60,8 @@ kotlin {
+ }
+ 
+ dependencies {
++    implementation(libs.play.feature.delivery)
++    implementation(libs.play.feature.delivery.ktx)
+     implementation(libs.androidx.core.ktx)
+     implementation(libs.androidx.core.splashscreen)
+     implementation(libs.androidx.lifecycle.runtime.ktx)
+diff --git a/app/src/main/java/com/lz/vectos/app/VectosApplication.kt b/app/src/main/java/com/lz/vectos/app/VectosApplication.kt
+index e16229c..5a7803a 100644
+--- a/app/src/main/java/com/lz/vectos/app/VectosApplication.kt
++++ b/app/src/main/java/com/lz/vectos/app/VectosApplication.kt
+@@ -1,11 +1,16 @@
+ package com.lz.vectos.app
+ 
+ import android.app.Application
++import android.content.Context
++import com.google.android.play.core.splitcompat.SplitCompat
+ import com.lz.data.persistence.room.AppDatabase
+ import com.lz.data.persistence.room.seeder.AiscSectionSeeder
+ import com.lz.data.persistence.room.seeder.BuildingCodeSeeder
+ import com.lz.data.persistence.room.seeder.MaterialSeeder
+ import com.lz.data.persistence.room.seeder.StructuralDataSeeder
++import com.lz.domain.module.ModuleCatalogRepository
++import com.lz.domain.module.SubscriptionRepository
++import com.lz.vectos.BuildConfig
+ import dagger.hilt.android.HiltAndroidApp
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+@@ -28,12 +33,67 @@ class VectosApplication : Application() {
+     // Hilt injects AppDatabase via DatabaseModule
+     @Inject lateinit var database: AppDatabase
+ 
++    @Inject lateinit var subscriptionRepository: SubscriptionRepository
++    @Inject lateinit var moduleCatalogRepository: ModuleCatalogRepository
++
+     // Application-scoped coroutine scope — cancelled only when the process dies
+     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+ 
++    override fun attachBaseContext(base: Context) {
++        super.attachBaseContext(base)
++        // Attaches installed dynamic-feature module classloaders/resources
++        // to this process. Without this, a split delivered by Play (or
++        // fused into a debug build) can be present on disk yet still fail
++        // Class.forName() lookups at runtime — see SubscriptionAware
++        // InstalledModuleRepository and AndroidRuntimeModuleProviderResolver.
++        SplitCompat.install(this)
++    }
++
+     override fun onCreate() {
+         super.onCreate()
+         seedDatabase()
++        grantDebugSubscriptions()
++    }
++
++    /**
++     * Debug-build convenience answering "how do we give the test app a
++     * subscription": auto-grants every catalog module so local runs exercise
++     * the same enabled/licensed path a real entitled user would hit, without
++     * needing a Play Billing transaction or a debug settings toggle.
++     *
++     * "beam" itself doesn't currently need this — it's the loss-leader
++     * module (ModuleDescriptor.requiresSubscription = false), always
++     * considered licensed. This exists for testing the gating logic itself
++     * and any future non-free module (e.g. "column").
++     *
++     * Deliberately blocking (runBlocking), not fire-and-forget on
++     * applicationScope: MainActivity.onCreate() (which triggers
++     * RuntimeInitializer's synchronous license check via Hilt) can start
++     * immediately after Application.onCreate() returns, and an async grant
++     * wouldn't be guaranteed to finish first — a race that wouldn't affect
++     * beam (always licensed) but would silently break debug-testing any
++     * future non-free module's gating. Both repositories are trivial
++     * in-memory reads today, so blocking here costs microseconds — same
++     * reasoning as the runBlocking bridge in
++     * SubscriptionAwareInstalledModuleRepository, and it'll need revisiting
++     * alongside that one if real persistence/network backing ever lands.
++     *
++     * Release builds must NOT do this — GooglePlayPurchaseManager (not yet
++     * wired to a real entitlement check) is the intended real source of
++     * truth there.
++     */
++    private fun grantDebugSubscriptions() {
++        if (!BuildConfig.DEBUG) return
++
++        try {
++            kotlinx.coroutines.runBlocking {
++                moduleCatalogRepository.getAvailableModules().forEach { descriptor ->
++                    subscriptionRepository.grantLicense(descriptor.id)
++                }
++            }
++        } catch (e: Exception) {
++            android.util.Log.e("VectosApplication", "Debug subscription grant failed", e)
++        }
+     }
+ 
+     private fun seedDatabase() {
+diff --git a/app/src/main/java/com/lz/vectos/app/platform/RuntimeInitializer.kt b/app/src/main/java/com/lz/vectos/app/platform/RuntimeInitializer.kt
+index 389c54f..0bb482d 100644
+--- a/app/src/main/java/com/lz/vectos/app/platform/RuntimeInitializer.kt
++++ b/app/src/main/java/com/lz/vectos/app/platform/RuntimeInitializer.kt
+@@ -5,7 +5,7 @@ import com.lz.runtime.api.RuntimeEnvironment
+ import com.lz.runtime.boot.RuntimeBootstrapper
+ import com.lz.runtime.loader.DefaultRuntimeModuleLoader
+ import com.lz.runtime.loader.RuntimeModuleInstaller
+-import com.lz.vectos.app.runtime.DefaultInstalledModuleRepository
++import com.lz.runtime.repository.InstalledModuleRepository
+ import com.lz.vectos.app.runtime.AndroidRuntimeModuleProviderResolver
+ 
+ object RuntimeInitializer {
+@@ -14,7 +14,8 @@ object RuntimeInitializer {
+     private var runtime: RuntimeEnvironment? = null
+ 
+     fun initialize(
+-        context: Context
++        context: Context,
++        installedModuleRepository: InstalledModuleRepository
+     ): RuntimeEnvironment {
+ 
+         runtime?.let { return it }
+@@ -26,9 +27,6 @@ object RuntimeInitializer {
+             val configuration =
+                 RuntimeConfigurationFactory.create(context)
+ 
+-            val repository =
+-                DefaultInstalledModuleRepository()
+-
+             val moduleLoader =
+                 DefaultRuntimeModuleLoader(
+                     AndroidRuntimeModuleProviderResolver()
+@@ -36,7 +34,7 @@ object RuntimeInitializer {
+ 
+             val installer =
+                 RuntimeModuleInstaller(
+-                    repository,
++                    installedModuleRepository,
+                     moduleLoader
+                 )
+ 
+@@ -69,4 +67,4 @@ object RuntimeInitializer {
+ 
+     }
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/app/src/main/java/com/lz/vectos/app/runtime/DefaultInstalledModuleRepository.kt b/app/src/main/java/com/lz/vectos/app/runtime/DefaultInstalledModuleRepository.kt
+deleted file mode 100644
+index 0c12016..0000000
+--- a/app/src/main/java/com/lz/vectos/app/runtime/DefaultInstalledModuleRepository.kt
++++ /dev/null
+@@ -1,46 +0,0 @@
+-package com.lz.vectos.app.runtime
+-
+-import com.lz.common.Version
+-import com.lz.runtime.api.marketplace.InstallState
+-import com.lz.runtime.api.marketplace.InstalledModule
+-import com.lz.runtime.api.marketplace.ModuleEntryPoint
+-import com.lz.runtime.api.marketplace.ModuleSource
+-import com.lz.runtime.repository.InstalledModuleRepository
+-
+-class DefaultInstalledModuleRepository :
+-    InstalledModuleRepository {
+-
+-    override fun installedModules(): List<InstalledModule> {
+-
+-        return listOf(
+-
+-            InstalledModule(
+-
+-                moduleId = "beam",
+-
+-                displayName = "Beam Calculator",
+-
+-                version = Version(1, 0, 0),
+-
+-                installState = InstallState.INSTALLED,
+-
+-                enabled = true,
+-
+-                source = ModuleSource.BUNDLED,
+-
+-                featureName = null,
+-
+-                entryPoint = ModuleEntryPoint(
+-                    value =
+-                        "com.lz.beam.api.BeamRuntimeModuleProvider"
+-                ),
+-
+-                signature = null
+-
+-            )
+-
+-        )
+-
+-    }
+-
+-}
+diff --git a/app/src/main/java/com/lz/vectos/app/runtime/RuntimeManager.kt b/app/src/main/java/com/lz/vectos/app/runtime/RuntimeManager.kt
+index 1d69d5a..6150bff 100644
+--- a/app/src/main/java/com/lz/vectos/app/runtime/RuntimeManager.kt
++++ b/app/src/main/java/com/lz/vectos/app/runtime/RuntimeManager.kt
+@@ -1,70 +1,29 @@
+ package com.lz.vectos.app.runtime
+ 
+-import android.content.Context
+ import com.lz.runtime.api.RuntimeEnvironment
+ import com.lz.vectos.app.platform.RuntimeInitializer
+ 
+-
+ /**
+- * Singleton owner of the RuntimeEnvironment.
++ * Thin accessor for the RuntimeEnvironment singleton.
+  *
+- * The application creates the Runtime exactly once.
++ * Previously maintained its own separate `runtime` field, populated only by
++ * an `initialize()` that nothing ever called — the real initialization path
++ * is Hilt's ModuleBindings.provideRuntimeEnvironment() -> RuntimeInitializer.
++ * That meant runtime() always threw "RuntimeEnvironment has not been
++ * initialized." Now delegates directly to RuntimeInitializer's actually-
++ * populated singleton instead of duplicating that state.
+  */
+ object RuntimeManager {
+ 
+-    @Volatile
+-    private var runtime: RuntimeEnvironment? = null
+-
+     /**
+      * Returns the running RuntimeEnvironment.
+      */
+-    fun runtime(): RuntimeEnvironment {
+-
+-        return checkNotNull(runtime) {
+-
+-            "RuntimeEnvironment has not been initialized."
+-
+-        }
+-
+-    }
+-
+-    /**
+-     * Initializes Runtime once.
+-     */
+-    fun initialize(
+-
+-        context: Context
+-
+-    ) {
+-
+-        if (runtime != null)
+-            return
+-
+-        synchronized(this) {
+-
+-            if (runtime == null) {
+-
+-                runtime =
+-
+-                    RuntimeInitializer.initialize(
+-                        context
+-                    )
+-
+-            }
+-
+-        }
+-
+-    }
++    fun runtime(): RuntimeEnvironment = RuntimeInitializer.runtime()
+ 
+     /**
+      * Stops Runtime.
+      */
+     fun shutdown() {
+-
+-        runtime?.stop()
+-
+-        runtime = null
+-
++        RuntimeInitializer.shutdown()
+     }
+-
+-}
+\ No newline at end of file
++}
+diff --git a/app/src/main/java/com/lz/vectos/app/runtime/RuntimeModuleInstaller.kt b/app/src/main/java/com/lz/vectos/app/runtime/RuntimeModuleInstaller.kt
+index 0f7d97c..f07c301 100644
+--- a/app/src/main/java/com/lz/vectos/app/runtime/RuntimeModuleInstaller.kt
++++ b/app/src/main/java/com/lz/vectos/app/runtime/RuntimeModuleInstaller.kt
+@@ -1,51 +1,97 @@
+ package com.lz.vectos.app.runtime
+ 
++import android.content.Context
++import com.google.android.play.core.splitinstall.SplitInstallManager
++import com.google.android.play.core.splitinstall.SplitInstallManagerFactory
++import com.google.android.play.core.splitinstall.SplitInstallRequest
+ import com.lz.domain.module.InstallResult
++import com.lz.domain.module.ModuleCatalogRepository
+ import com.lz.domain.module.ModuleInstaller
+-import com.lz.runtime.api.RuntimeEnvironment
++import dagger.hilt.android.qualifiers.ApplicationContext
++import kotlinx.coroutines.suspendCancellableCoroutine
+ import javax.inject.Inject
+ import javax.inject.Singleton
++import kotlin.coroutines.resume
+ 
++/**
++ * Real [ModuleInstaller] — replaces the previous stub, which only checked
++ * whether a module was already present in the runtime's in-memory registry
++ * rather than actually downloading anything.
++ *
++ * [install]/[uninstall] resolve [moduleId] (e.g. "beam") to its
++ * [com.lz.domain.module.ModuleDescriptor.dynamicFeatureName] via the
++ * catalog, then drive a real SplitInstallManager session. Play Core's
++ * SplitInstallManager API is Task-based (Google Play Services Task, not a
++ * coroutine) — bridged here via suspendCancellableCoroutine rather than
++ * pulling in kotlinx-coroutines-play-services for one call site.
++ *
++ * Progress/state updates (downloading %, REQUIRES_USER_CONFIRMATION, etc.)
++ * are intentionally not surfaced through this simple Success/Cancelled/Error
++ * result — a real "add module" UI would want to observe
++ * SplitInstallManager.registerListener() directly for progress. Out of
++ * scope for this pass; this makes install() correctly *complete* the
++ * install, which is the immediate gap.
++ */
+ @Singleton
+ class RuntimeModuleInstaller @Inject constructor(
++    @ApplicationContext private val context: Context,
++    private val moduleCatalogRepository: ModuleCatalogRepository
++) : ModuleInstaller {
+ 
+-    private val runtime: RuntimeEnvironment
++    private val splitInstallManager: SplitInstallManager by lazy {
++        SplitInstallManagerFactory.create(context)
++    }
+ 
+-) : ModuleInstaller {
++    override suspend fun install(moduleId: String): InstallResult {
++        val descriptor = moduleCatalogRepository.getAvailableModules()
++            .find { it.id == moduleId }
++            ?: return InstallResult.Error("Unknown module '$moduleId'.")
+ 
+-    override suspend fun install(
+-        moduleId: String
+-    ): InstallResult {
+-
+-        val installed =
+-            runtime.context
+-                .runtimeModuleRegistry
+-                .contains(moduleId)
+-
+-        return if (installed) {
+-            InstallResult.Success
+-        } else {
+-            InstallResult.Error(
+-                "Module '$moduleId' is not available."
+-            )
++        if (splitInstallManager.installedModules.contains(descriptor.dynamicFeatureName)) {
++            return InstallResult.Success
+         }
+-    }
+ 
+-    override suspend fun uninstall(
+-        moduleId: String
+-    ): InstallResult {
++        val request = SplitInstallRequest.newBuilder()
++            .addModule(descriptor.dynamicFeatureName)
++            .build()
++
++        return suspendCancellableCoroutine { continuation ->
++            splitInstallManager.startInstall(request)
++                .addOnSuccessListener {
++                    if (continuation.isActive) continuation.resume(InstallResult.Success)
++                }
++                .addOnFailureListener { exception ->
++                    if (continuation.isActive) {
++                        continuation.resume(
++                            InstallResult.Error(exception.message ?: "Module install failed.")
++                        )
++                    }
++                }
++                .addOnCanceledListener {
++                    if (continuation.isActive) continuation.resume(InstallResult.Cancelled)
++                }
++        }
++    }
+ 
+-        // Marketplace removal will be implemented later.
++    override suspend fun uninstall(moduleId: String): InstallResult {
++        val descriptor = moduleCatalogRepository.getAvailableModules()
++            .find { it.id == moduleId }
++            ?: return InstallResult.Error("Unknown module '$moduleId'.")
+ 
++        // deferredUninstall queues removal for the next time the app isn't
++        // running — Play doesn't support synchronous/immediate uninstall of
++        // an in-use split. No completion callback to bridge; this always
++        // reports Success once queued (matches the "removal will be
++        // implemented later" stub's prior always-Success behavior, now
++        // actually backed by a real API call).
++        splitInstallManager.deferredUninstall(listOf(descriptor.dynamicFeatureName))
+         return InstallResult.Success
+     }
+ 
+-    override suspend fun isInstalled(
+-        moduleId: String
+-    ): Boolean {
++    override suspend fun isInstalled(moduleId: String): Boolean {
++        val descriptor = moduleCatalogRepository.getAvailableModules()
++            .find { it.id == moduleId } ?: return false
+ 
+-        return runtime.context
+-            .runtimeModuleRegistry
+-            .contains(moduleId)
++        return splitInstallManager.installedModules.contains(descriptor.dynamicFeatureName)
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/app/src/main/java/com/lz/vectos/app/runtime/SubscriptionAwareInstalledModuleRepository.kt b/app/src/main/java/com/lz/vectos/app/runtime/SubscriptionAwareInstalledModuleRepository.kt
+new file mode 100644
+index 0000000..b11a797
+--- /dev/null
++++ b/app/src/main/java/com/lz/vectos/app/runtime/SubscriptionAwareInstalledModuleRepository.kt
+@@ -0,0 +1,91 @@
++package com.lz.vectos.app.runtime
++
++import android.content.Context
++import com.google.android.play.core.splitinstall.SplitInstallManager
++import com.google.android.play.core.splitinstall.SplitInstallManagerFactory
++import com.lz.domain.module.ModuleCatalogRepository
++import com.lz.domain.module.SubscriptionRepository
++import com.lz.runtime.api.marketplace.InstallState
++import com.lz.runtime.api.marketplace.InstalledModule
++import com.lz.runtime.api.marketplace.ModuleEntryPoint
++import com.lz.runtime.api.marketplace.ModuleSource
++import com.lz.runtime.repository.InstalledModuleRepository
++import dagger.hilt.android.qualifiers.ApplicationContext
++import kotlinx.coroutines.runBlocking
++import javax.inject.Inject
++import javax.inject.Singleton
++
++/**
++ * Real [InstalledModuleRepository] — replaces the previous hardcoded
++ * DefaultInstalledModuleRepository stub (which unconditionally claimed
++ * beam was INSTALLED/enabled regardless of licensing, and crashed app
++ * startup on any device where the beam dynamic feature wasn't actually
++ * bundled — see the 260820 session crash investigation).
++ *
++ * A module is reported here only if:
++ *  1. It's licensed for this user (SubscriptionRepository) — modules with
++ *     [com.lz.domain.module.ModuleDescriptor.requiresSubscription] = false
++ *     (e.g. "beam", the loss-leader module) are always considered licensed.
++ *  2. Its dynamic feature split is confirmed physically present on-device
++ *     (SplitInstallManager.installedModules) — determines InstallState.
++ *
++ * [RuntimeModuleInstaller] (runtime.loader — the generic, channel-agnostic
++ * loader) only attempts to Class.forName() modules that come back here as
++ * both `enabled` and `InstallState.INSTALLED`, so a licensed-but-not-yet-
++ * downloaded module is safely skipped at boot rather than crashing — it's
++ * the responsibility of an explicit "install module" flow (this app's
++ * [com.lz.domain.module.ModuleInstaller]) to trigger the real download via
++ * SplitInstallManager.startInstall(), after which this repository will
++ * naturally report it as INSTALLED on next read.
++ *
++ * NOTE on suspend bridging: [ModuleCatalogRepository]/[SubscriptionRepository]
++ * are suspend APIs (anticipating real persistence/network-backed licensing
++ * later), but [InstalledModuleRepository.installedModules] — inherited from
++ * the synchronous `runtime` module's boot chain (RuntimeEnvironment.start()
++ * is not suspend) — is not. `runBlocking` here is a deliberate, narrow
++ * bridge: today's implementations of both repositories are trivial in-memory
++ * reads with zero real IO, so blocking costs microseconds. If/when
++ * SubscriptionRepository or ModuleCatalogRepository gain real backing (Room,
++ * Play Billing, a backend call), this bridge — and likely the synchronous
++ * assumption running all the way up through RuntimeStartupPipeline.start()
++ * — will need revisiting. Flagging here rather than silently letting it rot.
++ */
++@Singleton
++class SubscriptionAwareInstalledModuleRepository @Inject constructor(
++    @ApplicationContext private val context: Context,
++    private val moduleCatalogRepository: ModuleCatalogRepository,
++    private val subscriptionRepository: SubscriptionRepository
++) : InstalledModuleRepository {
++
++    private val splitInstallManager: SplitInstallManager by lazy {
++        SplitInstallManagerFactory.create(context)
++    }
++
++    override fun installedModules(): List<InstalledModule> = runBlocking {
++        val catalog = moduleCatalogRepository.getAvailableModules()
++        val licensedModuleIds = subscriptionRepository.getLicensedModules()
++        val physicallyInstalledFeatures = splitInstallManager.installedModules
++
++        catalog.mapNotNull { descriptor ->
++            val isLicensed = !descriptor.requiresSubscription ||
++                licensedModuleIds.contains(descriptor.id)
++
++            if (!isLicensed) return@mapNotNull null
++
++            val isPhysicallyInstalled =
++                physicallyInstalledFeatures.contains(descriptor.dynamicFeatureName)
++
++            InstalledModule(
++                moduleId = descriptor.id,
++                displayName = descriptor.displayName,
++                version = descriptor.version,
++                installState = if (isPhysicallyInstalled) InstallState.INSTALLED else InstallState.NOT_INSTALLED,
++                enabled = isLicensed,
++                source = ModuleSource.DYNAMIC_FEATURE,
++                featureName = descriptor.dynamicFeatureName,
++                entryPoint = ModuleEntryPoint(descriptor.entryPointClassName),
++                signature = null
++            )
++        }
++    }
++}
+diff --git a/app/src/main/java/com/lz/vectos/di/ModuleBindings.kt b/app/src/main/java/com/lz/vectos/di/ModuleBindings.kt
+index 400a675..bfd8910 100644
+--- a/app/src/main/java/com/lz/vectos/di/ModuleBindings.kt
++++ b/app/src/main/java/com/lz/vectos/di/ModuleBindings.kt
+@@ -14,6 +14,7 @@ import com.lz.vectos.app.platform.RuntimeInitializer
+ import com.lz.vectos.app.runtime.RuntimeModuleInstaller
+ import com.lz.vectos.app.runtime.RuntimeModuleLauncher
+ import com.lz.vectos.app.runtime.RuntimeModuleRegistryAdapter
++import com.lz.vectos.app.runtime.SubscriptionAwareInstalledModuleRepository
+ import com.lz.vectos.plugin.GooglePlayPurchaseManager
+ import com.lz.vectos.plugin.LocalModuleCatalogRepository
+ import com.lz.vectos.plugin.LocalRegisteredModuleRepository
+@@ -32,9 +33,10 @@ object ModuleBindings {
+     @Provides
+     @Singleton
+     fun provideRuntimeEnvironment(
+-        @ApplicationContext context: Context
++        @ApplicationContext context: Context,
++        installedModuleRepository: SubscriptionAwareInstalledModuleRepository
+     ): RuntimeEnvironment {
+-        return RuntimeInitializer.initialize(context)
++        return RuntimeInitializer.initialize(context, installedModuleRepository)
+     }
+ 
+     @Provides
+@@ -65,8 +67,9 @@ object ModuleBindings {
+     @Provides
+     @Singleton
+     fun provideModuleInstaller(
+-        runtime: RuntimeEnvironment
+-    ): ModuleInstaller = RuntimeModuleInstaller(runtime)
++        @ApplicationContext context: Context,
++        moduleCatalogRepository: ModuleCatalogRepository
++    ): ModuleInstaller = RuntimeModuleInstaller(context, moduleCatalogRepository)
+ 
+     @Provides
+     @Singleton
+diff --git a/app/src/main/java/com/lz/vectos/plugin/LocalModuleCatalogRepository.kt b/app/src/main/java/com/lz/vectos/plugin/LocalModuleCatalogRepository.kt
+index 4a59277..ae2e8df 100644
+--- a/app/src/main/java/com/lz/vectos/plugin/LocalModuleCatalogRepository.kt
++++ b/app/src/main/java/com/lz/vectos/plugin/LocalModuleCatalogRepository.kt
+@@ -19,6 +19,8 @@ class LocalModuleCatalogRepository :
+                 version = Version(1, 0, 0),
+                 moduleType = ModuleType.CALCULATION,
+                 dynamicFeatureName = "beam",
++                entryPointClassName = "com.lz.beam.api.BeamRuntimeModuleProvider",
++                requiresSubscription = false, // loss-leader — bundled for every user; see BeamRuntimeModuleProvider for tiered capability gating
+                 supportsProjectMode = true,
+                 supportsQuickCalcMode = true
+             ),
+@@ -26,9 +28,10 @@ class LocalModuleCatalogRepository :
+                 id = "column",
+                 displayName = "Column Design",
+                 description = "Column design module",
+-                version = Version(1,0,0),
++                version = Version(1, 0, 0),
+                 moduleType = ModuleType.CALCULATION,
+                 dynamicFeatureName = "column",
++                entryPointClassName = "com.lz.column.api.ColumnRuntimeModuleProvider",
+                 supportsProjectMode = true,
+                 supportsQuickCalcMode = false
+             )
+diff --git a/core/domain/src/main/java/com/lz/domain/module/ModuleDescriptor.kt b/core/domain/src/main/java/com/lz/domain/module/ModuleDescriptor.kt
+index dd4b11a..b424d9c 100644
+--- a/core/domain/src/main/java/com/lz/domain/module/ModuleDescriptor.kt
++++ b/core/domain/src/main/java/com/lz/domain/module/ModuleDescriptor.kt
+@@ -10,6 +10,13 @@ data class ModuleDescriptor(
+     val version: Version,
+     val moduleType: ModuleType,
+     val dynamicFeatureName: String,
++    /**
++     * Fully-qualified class name of this module's RuntimeModuleProvider
++     * (e.g. "com.lz.beam.api.BeamRuntimeModuleProvider") — instantiated via
++     * reflection once the dynamic feature identified by [dynamicFeatureName]
++     * is confirmed installed. See SubscriptionAwareInstalledModuleRepository.
++     */
++    val entryPointClassName: String,
+     val requiresSubscription: Boolean = true,
+     val supportsProjectMode: Boolean,
+     val supportsQuickCalcMode: Boolean
+diff --git a/feature/beam/build.gradle.kts b/feature/beam/build.gradle.kts
+index 8d59251..408796a 100644
+--- a/feature/beam/build.gradle.kts
++++ b/feature/beam/build.gradle.kts
+@@ -1,5 +1,5 @@
+ plugins {
+-    alias(libs.plugins.android.library)
++    alias(libs.plugins.android.dynamic.feature)
+     alias(libs.plugins.kotlin.android)
+     alias(libs.plugins.kotlin.compose)
+     alias(libs.plugins.kotlin.symbol.processing)
+@@ -12,7 +12,9 @@ android {
+     compileSdk = 37
+ 
+     defaultConfig {
+-        minSdk = 26
++        // Must match :app's minSdk — AGP requires a dynamic-feature
++        // module's minSdk to be consistent with its base module.
++        minSdk = 28
+ 
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+         consumerProguardFiles("consumer-rules.pro")
+@@ -34,6 +36,14 @@ kotlin {
+ }
+ 
+ dependencies {
++    // Required by AGP for every dynamic-feature module — the dependency
++    // direction here is intentionally the reverse of a normal library:
++    // the feature depends on the base app (inherits its applicationId,
++    // signing config, versionCode/Name), NOT the other way around. :app
++    // never gains a compile dependency on :feature:beam; the two are
++    // associated only via :app's `dynamicFeatures` declaration.
++    implementation(project(":app"))
++
+     implementation(libs.androidx.appcompat)
+     implementation(libs.androidx.compose.foundation.layout)
+     implementation(libs.androidx.core.ktx)
+diff --git a/feature/beam/src/main/AndroidManifest.xml b/feature/beam/src/main/AndroidManifest.xml
+index a5918e6..e9903d2 100644
+--- a/feature/beam/src/main/AndroidManifest.xml
++++ b/feature/beam/src/main/AndroidManifest.xml
+@@ -1,4 +1,23 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:dist="http://schemas.android.com/apk/distribution">
+ 
+-</manifest>
+\ No newline at end of file
++    <dist:module
++        dist:instant="false"
++        dist:title="@string/beam_feature_title">
++        <dist:delivery>
++            <dist:on-demand />
++        </dist:delivery>
++        <!--
++          fusing include="true" bundles this module into the base APK for
++          devices/App-Bundle configurations that can't do split delivery
++          (and, practically, is what makes `./gradlew installDebug` /
++          Android Studio "Run" install this module locally without any
++          Play Store transaction — see CHANGES_README for local dev notes).
++          Real on-demand-only delivery still applies for production App
++          Bundles distributed through Play.
++        -->
++        <dist:fusing dist:include="true" />
++    </dist:module>
++
++</manifest>
+diff --git a/feature/beam/src/main/res/values/strings.xml b/feature/beam/src/main/res/values/strings.xml
+new file mode 100644
+index 0000000..103542f
+--- /dev/null
++++ b/feature/beam/src/main/res/values/strings.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="beam_feature_title">Beam Design</string>
++</resources>
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index 2d1cbf0..09e056e 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -4,6 +4,7 @@ coreKtx = "1.15.0"
+ junit = "4.13.2"
+ junitVersion = "1.2.1"
+ espressoCore = "3.6.1"
++playFeatureDelivery = "2.1.0"
+ lifecycleRuntimeKtx = "2.8.7"
+ activityCompose = "1.10.0"
+ kotlin = "2.0.21"
+@@ -31,6 +32,8 @@ navigationCommonKtx = "2.9.8"
+ firebaseCrashlyticsBuildtools = "3.0.7"
+ 
+ [libraries]
++play-feature-delivery = { module = "com.google.android.play:feature-delivery", version.ref = "playFeatureDelivery" }
++play-feature-delivery-ktx = { module = "com.google.android.play:feature-delivery-ktx", version.ref = "playFeatureDelivery" }
+ androidx-compose-foundation = { module = "androidx.compose.foundation:foundation" }
+ androidx-compose-runtime = { module = "androidx.compose.runtime:runtime" }
+ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+@@ -83,5 +86,6 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
+ kotlin-symbol-processing = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ android-library = { id = "com.android.library", version.ref = "agp" }
++android-dynamic-feature = { id = "com.android.dynamic-feature", version.ref = "agp" }
+ hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt"}
+ jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "jetbrainsKotlinJvm" }

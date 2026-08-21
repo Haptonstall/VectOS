@@ -1,4 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:dist="http://schemas.android.com/apk/distribution">
+
+    <dist:module
+        dist:instant="false"
+        dist:title="@string/beam_feature_title">
+        <dist:delivery>
+            <dist:on-demand />
+        </dist:delivery>
+        <!--
+          fusing include="true" bundles this module into the base APK for
+          devices/App-Bundle configurations that can't do split delivery
+          (and, practically, is what makes `./gradlew installDebug` /
+          Android Studio "Run" install this module locally without any
+          Play Store transaction — see CHANGES_README for local dev notes).
+          Real on-demand-only delivery still applies for production App
+          Bundles distributed through Play.
+        -->
+        <dist:fusing dist:include="true" />
+    </dist:module>
 
 </manifest>

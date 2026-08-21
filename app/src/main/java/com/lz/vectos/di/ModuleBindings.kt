@@ -14,6 +14,7 @@ import com.lz.vectos.app.platform.RuntimeInitializer
 import com.lz.vectos.app.runtime.RuntimeModuleInstaller
 import com.lz.vectos.app.runtime.RuntimeModuleLauncher
 import com.lz.vectos.app.runtime.RuntimeModuleRegistryAdapter
+import com.lz.vectos.app.runtime.SubscriptionAwareInstalledModuleRepository
 import com.lz.vectos.plugin.GooglePlayPurchaseManager
 import com.lz.vectos.plugin.LocalModuleCatalogRepository
 import com.lz.vectos.plugin.LocalRegisteredModuleRepository
@@ -32,9 +33,10 @@ object ModuleBindings {
     @Provides
     @Singleton
     fun provideRuntimeEnvironment(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        installedModuleRepository: SubscriptionAwareInstalledModuleRepository
     ): RuntimeEnvironment {
-        return RuntimeInitializer.initialize(context)
+        return RuntimeInitializer.initialize(context, installedModuleRepository)
     }
 
     @Provides
@@ -65,8 +67,9 @@ object ModuleBindings {
     @Provides
     @Singleton
     fun provideModuleInstaller(
-        runtime: RuntimeEnvironment
-    ): ModuleInstaller = RuntimeModuleInstaller(runtime)
+        @ApplicationContext context: Context,
+        moduleCatalogRepository: ModuleCatalogRepository
+    ): ModuleInstaller = RuntimeModuleInstaller(context, moduleCatalogRepository)
 
     @Provides
     @Singleton

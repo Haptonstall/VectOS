@@ -1,70 +1,29 @@
 package com.lz.vectos.app.runtime
 
-import android.content.Context
 import com.lz.runtime.api.RuntimeEnvironment
 import com.lz.vectos.app.platform.RuntimeInitializer
 
-
 /**
- * Singleton owner of the RuntimeEnvironment.
+ * Thin accessor for the RuntimeEnvironment singleton.
  *
- * The application creates the Runtime exactly once.
+ * Previously maintained its own separate `runtime` field, populated only by
+ * an `initialize()` that nothing ever called — the real initialization path
+ * is Hilt's ModuleBindings.provideRuntimeEnvironment() -> RuntimeInitializer.
+ * That meant runtime() always threw "RuntimeEnvironment has not been
+ * initialized." Now delegates directly to RuntimeInitializer's actually-
+ * populated singleton instead of duplicating that state.
  */
 object RuntimeManager {
-
-    @Volatile
-    private var runtime: RuntimeEnvironment? = null
 
     /**
      * Returns the running RuntimeEnvironment.
      */
-    fun runtime(): RuntimeEnvironment {
-
-        return checkNotNull(runtime) {
-
-            "RuntimeEnvironment has not been initialized."
-
-        }
-
-    }
-
-    /**
-     * Initializes Runtime once.
-     */
-    fun initialize(
-
-        context: Context
-
-    ) {
-
-        if (runtime != null)
-            return
-
-        synchronized(this) {
-
-            if (runtime == null) {
-
-                runtime =
-
-                    RuntimeInitializer.initialize(
-                        context
-                    )
-
-            }
-
-        }
-
-    }
+    fun runtime(): RuntimeEnvironment = RuntimeInitializer.runtime()
 
     /**
      * Stops Runtime.
      */
     fun shutdown() {
-
-        runtime?.stop()
-
-        runtime = null
-
+        RuntimeInitializer.shutdown()
     }
-
 }

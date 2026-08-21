@@ -19,6 +19,8 @@ class LocalModuleCatalogRepository :
                 version = Version(1, 0, 0),
                 moduleType = ModuleType.CALCULATION,
                 dynamicFeatureName = "beam",
+                entryPointClassName = "com.lz.beam.api.BeamRuntimeModuleProvider",
+                requiresSubscription = false, // loss-leader — bundled for every user; see BeamRuntimeModuleProvider for tiered capability gating
                 supportsProjectMode = true,
                 supportsQuickCalcMode = true
             ),
@@ -26,9 +28,10 @@ class LocalModuleCatalogRepository :
                 id = "column",
                 displayName = "Column Design",
                 description = "Column design module",
-                version = Version(1,0,0),
+                version = Version(1, 0, 0),
                 moduleType = ModuleType.CALCULATION,
                 dynamicFeatureName = "column",
+                entryPointClassName = "com.lz.column.api.ColumnRuntimeModuleProvider",
                 supportsProjectMode = true,
                 supportsQuickCalcMode = false
             )

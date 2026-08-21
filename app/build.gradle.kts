@@ -41,7 +41,16 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
+
+    // Declares :feature:beam as an on-demand split rather than a compile
+    // dependency — this is what removes :app's build-time coupling to
+    // feature modules while keeping them loadable at runtime once Play
+    // delivers/installs the split. See feature/beam's AndroidManifest.xml
+    // <dist:module> for delivery mode (on-demand + fusing=true for local
+    // debug installs).
+    dynamicFeatures += setOf(":feature:beam")
 }
 
 kotlin {
@@ -51,6 +60,8 @@ kotlin {
 }
 
 dependencies {
+    implementation(libs.play.feature.delivery)
+    implementation(libs.play.feature.delivery.ktx)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
