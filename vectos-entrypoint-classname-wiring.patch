@@ -1,0 +1,59 @@
+diff --git a/app/src/main/java/com/lz/vectos/app/runtime/RuntimeModuleDescriptorMapper.kt b/app/src/main/java/com/lz/vectos/app/runtime/RuntimeModuleDescriptorMapper.kt
+index c082f02..c66f33e 100644
+--- a/app/src/main/java/com/lz/vectos/app/runtime/RuntimeModuleDescriptorMapper.kt
++++ b/app/src/main/java/com/lz/vectos/app/runtime/RuntimeModuleDescriptorMapper.kt
+@@ -23,6 +23,8 @@ fun RuntimeModuleDescriptor.toModuleDescriptor(
+ 
+         dynamicFeatureName = id,
+ 
++        entryPointClassName = entryPointClassName,
++
+         requiresSubscription = true,
+ 
+         supportsProjectMode = capability.supportsProjectMode,
+diff --git a/app/src/main/java/com/lz/vectos/app/runtime/RuntimeModuleRegistryAdapter.kt b/app/src/main/java/com/lz/vectos/app/runtime/RuntimeModuleRegistryAdapter.kt
+index 01a9171..1b28227 100644
+--- a/app/src/main/java/com/lz/vectos/app/runtime/RuntimeModuleRegistryAdapter.kt
++++ b/app/src/main/java/com/lz/vectos/app/runtime/RuntimeModuleRegistryAdapter.kt
+@@ -85,6 +85,8 @@ private fun RuntimeModuleDescriptor.toDomain(
+ 
+         dynamicFeatureName = id,
+ 
++        entryPointClassName = entryPointClassName,
++
+         moduleType = ModuleType.CALCULATION,
+ 
+         supportsProjectMode = capability.supportsProjectMode,
+diff --git a/feature/beam/src/main/java/com/lz/beam/runtime/BeamDescriptor.kt b/feature/beam/src/main/java/com/lz/beam/runtime/BeamDescriptor.kt
+index 7e734e1..e119067 100644
+--- a/feature/beam/src/main/java/com/lz/beam/runtime/BeamDescriptor.kt
++++ b/feature/beam/src/main/java/com/lz/beam/runtime/BeamDescriptor.kt
+@@ -11,6 +11,7 @@ val BeamDescriptor = RuntimeModuleDescriptor(
+     version = Version(1,0,0),
+     publisher = "LZ Engineering",
+     iconKey = "beam",
++    entryPointClassName = "com.lz.beam.api.BeamRuntimeModuleProvider",
+     capabilityTypes = setOf(
+         CapabilityType.CALCULATOR
+     ),
+diff --git a/runtime/src/main/java/com/lz/runtime/api/RuntimeModuleDescriptor.kt b/runtime/src/main/java/com/lz/runtime/api/RuntimeModuleDescriptor.kt
+index 884c9d6..fe33226 100644
+--- a/runtime/src/main/java/com/lz/runtime/api/RuntimeModuleDescriptor.kt
++++ b/runtime/src/main/java/com/lz/runtime/api/RuntimeModuleDescriptor.kt
+@@ -55,6 +55,16 @@ data class RuntimeModuleDescriptor(
+      */
+     val iconKey: String,
+ 
++    /**
++     * Fully-qualified class name of this module's RuntimeModuleProvider
++     * (e.g. "com.lz.beam.api.BeamRuntimeModuleProvider").
++     *
++     * Mirrors the same-named field on the domain-layer ModuleDescriptor
++     * (see LocalModuleCatalogRepository), which is the not-yet-installed
++     * counterpart of this descriptor.
++     */
++    val entryPointClassName: String,
++
+     /**
+      * Capability categories implemented by the module.
+      */

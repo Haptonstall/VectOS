@@ -85,6 +85,8 @@ private fun RuntimeModuleDescriptor.toDomain(
 
         dynamicFeatureName = id,
 
+        entryPointClassName = entryPointClassName,
+
         moduleType = ModuleType.CALCULATION,
 
         supportsProjectMode = capability.supportsProjectMode,

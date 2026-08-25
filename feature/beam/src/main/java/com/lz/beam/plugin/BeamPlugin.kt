@@ -16,6 +16,7 @@ class BeamPlugin : CalculatorPlugin {
             version = Version(1,0,0),
             moduleType = ModuleType.CALCULATION,
             dynamicFeatureName = "beam",
+            entryPointClassName = "com.lz.beam.api.BeamRuntimeModuleProvider",
             supportsProjectMode = true,
             supportsQuickCalcMode = true
         )

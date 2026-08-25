@@ -1,0 +1,12 @@
+diff --git a/feature/beam/build.gradle.kts b/feature/beam/build.gradle.kts
+index 408796a..b7ce973 100644
+--- a/feature/beam/build.gradle.kts
++++ b/feature/beam/build.gradle.kts
+@@ -17,7 +17,6 @@ android {
+         minSdk = 28
+ 
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+-        consumerProguardFiles("consumer-rules.pro")
+     }
+     compileOptions {
+         sourceCompatibility = JavaVersion.VERSION_19

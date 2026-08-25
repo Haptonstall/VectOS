@@ -56,11 +56,13 @@ import java.time.LocalDateTime
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.collections.plus
+import dagger.hilt.android.lifecycle.HiltViewModel
 
 /**
  * Modernized ViewModel for Beam Analysis & Design.
  * Orchestrates multi-span geometry, load combinations, and station-by-station validation.
  */
+@HiltViewModel
 class BeamViewModel @Inject constructor(
     private val activeProjectProvider: ActiveProjectProvider,
     private val beamRepository: BeamCalculationRepository,

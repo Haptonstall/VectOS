@@ -23,6 +23,8 @@ fun RuntimeModuleDescriptor.toModuleDescriptor(
 
         dynamicFeatureName = id,
 
+        entryPointClassName = entryPointClassName,
+
         requiresSubscription = true,
 
         supportsProjectMode = capability.supportsProjectMode,

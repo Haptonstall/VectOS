@@ -11,6 +11,7 @@ val BeamDescriptor = RuntimeModuleDescriptor(
     version = Version(1,0,0),
     publisher = "LZ Engineering",
     iconKey = "beam",
+    entryPointClassName = "com.lz.beam.api.BeamRuntimeModuleProvider",
     capabilityTypes = setOf(
         CapabilityType.CALCULATOR
     ),

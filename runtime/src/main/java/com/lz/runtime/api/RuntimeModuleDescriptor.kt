@@ -56,6 +56,16 @@ data class RuntimeModuleDescriptor(
     val iconKey: String,
 
     /**
+     * Fully-qualified class name of this module's RuntimeModuleProvider
+     * (e.g. "com.lz.beam.api.BeamRuntimeModuleProvider").
+     *
+     * Mirrors the same-named field on the domain-layer ModuleDescriptor
+     * (see LocalModuleCatalogRepository), which is the not-yet-installed
+     * counterpart of this descriptor.
+     */
+    val entryPointClassName: String,
+
+    /**
      * Capability categories implemented by the module.
      */
     val capabilityTypes: Set<CapabilityType>

@@ -1,0 +1,12 @@
+diff --git a/feature/beam/src/main/java/com/lz/beam/plugin/BeamPlugin.kt b/feature/beam/src/main/java/com/lz/beam/plugin/BeamPlugin.kt
+index 842921b..82311f6 100644
+--- a/feature/beam/src/main/java/com/lz/beam/plugin/BeamPlugin.kt
++++ b/feature/beam/src/main/java/com/lz/beam/plugin/BeamPlugin.kt
+@@ -16,6 +16,7 @@ class BeamPlugin : CalculatorPlugin {
+             version = Version(1,0,0),
+             moduleType = ModuleType.CALCULATION,
+             dynamicFeatureName = "beam",
++            entryPointClassName = "com.lz.beam.api.BeamRuntimeModuleProvider",
+             supportsProjectMode = true,
+             supportsQuickCalcMode = true
+         )
