@@ -54,6 +54,18 @@ class NdsSectionRepository(private val context: Context) : SectionRepository {
     private val json = Json { ignoreUnknownKeys = true }
     private var dbCache: WoodDatabaseJson? = null
 
+    // Maps the NDS database's raw shapeType string onto the domain enum.
+    // "RECTANGULAR" covers solid-sawn dimensional lumber; "GLULAM" covers
+    // glue-laminated timber. Unrecognized values fall back to
+    // SOLID_RECTANGULAR rather than throwing, since new NDS data additions
+    // shouldn't crash section lookups for shapes that are still readable.
+    private fun mapShapeType(raw: String): ShapeType =
+        when (raw) {
+            "RECTANGULAR" -> ShapeType.SOLID_RECTANGULAR
+            "GLULAM" -> ShapeType.GLULAM
+            else -> ShapeType.SOLID_RECTANGULAR
+        }
+
     private fun loadDatabase(): WoodDatabaseJson {
         dbCache?.let { return it }
         return try {
@@ -84,7 +96,7 @@ class NdsSectionRepository(private val context: Context) : SectionRepository {
 
     override suspend fun getShapeTypes(material: MaterialType): List<ShapeType> {
         if (material != MaterialType.WOOD) return emptyList()
-        return loadDatabase().sections.map { ShapeType.SOLID_RECTANGULAR }.distinct()
+        return loadDatabase().sections.map { mapShapeType(it.shapeType) }.distinct()
     }
 
     override suspend fun getSections(material: MaterialType, shapeType: ShapeType): List<SectionProfile> {
@@ -92,7 +104,9 @@ class NdsSectionRepository(private val context: Context) : SectionRepository {
         val db = loadDatabase()
         val metadata = getDatabaseMetadata(material)
 
-        return db.sections.map { s ->
+        return db.sections
+            .filter { mapShapeType(it.shapeType) == shapeType }
+            .map { s ->
             WoodProfile(
                 id = s.id,
                 designation = s.designation,
@@ -107,7 +121,7 @@ class NdsSectionRepository(private val context: Context) : SectionRepository {
 
     override suspend fun getSectionById(id: String): SectionProfile? {
         val db = loadDatabase()
-        db.sections.find { it.id == id } ?: return null
-        return getSections(MaterialType.WOOD, ShapeType.SOLID_RECTANGULAR).find { it.id == id }
+        val entry = db.sections.find { it.id == id } ?: return null
+        return getSections(MaterialType.WOOD, mapShapeType(entry.shapeType)).find { it.id == id }
     }
 }

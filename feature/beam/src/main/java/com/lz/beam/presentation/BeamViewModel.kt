@@ -56,13 +56,15 @@ import java.time.LocalDateTime
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.collections.plus
-import dagger.hilt.android.lifecycle.HiltViewModel
 
 /**
  * Modernized ViewModel for Beam Analysis & Design.
  * Orchestrates multi-span geometry, load combinations, and station-by-station validation.
+ *
+ * Not annotated @HiltViewModel: Hilt cannot see ViewModels declared inside a
+ * dynamic-feature module (see RuntimeServicesEntryPoint), so this is constructed
+ * manually via BeamViewModelFactory instead of hiltViewModel().
  */
-@HiltViewModel
 class BeamViewModel @Inject constructor(
     private val activeProjectProvider: ActiveProjectProvider,
     private val beamRepository: BeamCalculationRepository,
@@ -70,11 +72,6 @@ class BeamViewModel @Inject constructor(
     private val sectionRepository: SectionRepository,
     private val materialRepository: MaterialRepository
 ) : ViewModel() {
-
-    init {
-        loadInitialGeometryData()
-        loadDefaultBuildingCode()
-    }
 
     // --- State: Geometry & Properties ---
     var structuralMember by mutableStateOf(
@@ -553,5 +550,16 @@ class BeamViewModel @Inject constructor(
                 isBotBraced = braces.any { it.isBotBraced }
             )
         }.sortedBy { it.x.inches }
+    }
+
+
+    // Must run after every property above is initialized: loadInitialGeometryData()
+    // and loadDefaultBuildingCode() both assign mutableStateOf properties declared
+    // throughout this class as soon as their coroutines run (Dispatchers.Main.immediate
+    // executes synchronously up to the first real suspension point). An init block
+    // placed before those declarations would hit their still-null backing MutableState.
+    init {
+        loadInitialGeometryData()
+        loadDefaultBuildingCode()
     }
 }

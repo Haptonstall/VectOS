@@ -1,0 +1,379 @@
+diff --git a/app/src/main/java/com/lz/vectos/di/DatabaseModule.kt b/app/src/main/java/com/lz/vectos/di/DatabaseModule.kt
+index e1f902f..e019b3e 100644
+--- a/app/src/main/java/com/lz/vectos/di/DatabaseModule.kt
++++ b/app/src/main/java/com/lz/vectos/di/DatabaseModule.kt
+@@ -4,15 +4,23 @@ import android.content.Context
+ import dagger.hilt.components.SingletonComponent
+ import com.lz.data.persistence.room.AppDatabase
+ import com.lz.data.project.DefaultActiveProjectProvider
++import com.lz.data.repository.CalculationWriter
++import com.lz.data.repository.CompositeSectionRepository
+ import com.lz.data.repository.DataStoreSettingsRepository
+ import com.lz.data.repository.IStructuralCodeRepository
++import com.lz.data.repository.NdsSectionRepository
++import com.lz.data.repository.RoomAiscSectionRepository
+ import com.lz.data.repository.RoomCalculationRepository
++import com.lz.data.repository.RoomCalculationWriter
+ import com.lz.data.repository.RoomProjectRepository
+ import com.lz.data.repository.StructuralCodeRepositoryImpl
++import com.lz.data.persistence.room.repository.RoomMaterialRepository
++import com.lz.domain.material.MaterialRepository
+ import com.lz.domain.project.ActiveProjectProvider
+ import com.lz.domain.repository.CalculationRepository
+ import com.lz.domain.repository.ProjectRepository
+ import com.lz.domain.repository.SettingsRepository
++import com.lz.model.structural.SectionRepository
+ import com.lz.vectos.domain.calculation.ProjectCalculationRegistry
+ import dagger.Module
+ import dagger.Provides
+@@ -57,4 +65,25 @@ object DatabaseModule {
+     @Singleton
+     fun provideStructuralCodeRepository(db: AppDatabase): IStructuralCodeRepository =
+         StructuralCodeRepositoryImpl(db.codeRegistryDao(), db.loadCombinationDao())
++
++    @Provides
++    @Singleton
++    fun provideCalculationWriter(db: AppDatabase): CalculationWriter =
++        RoomCalculationWriter(db.calculationDao())
++
++    @Provides
++    @Singleton
++    fun provideMaterialRepository(db: AppDatabase): MaterialRepository =
++        RoomMaterialRepository(db.materialDao())
++
++    @Provides
++    @Singleton
++    fun provideSectionRepository(
++        db: AppDatabase,
++        @ApplicationContext context: Context
++    ): SectionRepository =
++        CompositeSectionRepository(
++            steelSectionRepository = RoomAiscSectionRepository(db.aiscSectionDao()),
++            woodSectionRepository = NdsSectionRepository(context)
++        )
+ }
+\ No newline at end of file
+diff --git a/core/data/src/main/java/com/lz/data/repository/CompositeSectionRepository.kt b/core/data/src/main/java/com/lz/data/repository/CompositeSectionRepository.kt
+new file mode 100644
+index 0000000..1c0c8d9
+--- /dev/null
++++ b/core/data/src/main/java/com/lz/data/repository/CompositeSectionRepository.kt
+@@ -0,0 +1,50 @@
++package com.lz.data.repository
++
++import com.lz.model.structural.MaterialType
++import com.lz.model.structural.SectionDatabaseMetadata
++import com.lz.model.structural.SectionProfile
++import com.lz.model.structural.SectionRepository
++import com.lz.model.structural.ShapeType
++
++/**
++ * Routes SectionRepository calls to the real backing repository for each
++ * material family:
++ *
++ *   STEEL -> [RoomAiscSectionRepository] (AISC shapes, Room-backed)
++ *   WOOD  -> [NdsSectionRepository] (NDS shapes, bundled JSON asset)
++ *
++ * [AiscSectionRepository] is intentionally NOT wired here — per its own
++ * doc comment it's a stub; [RoomAiscSectionRepository] is the real steel
++ * source.
++ *
++ * CONCRETE, COLDFORM, MASONRY, and ALUMINUM have no section database yet
++ * and route to empty results rather than failing, so getMaterials() can
++ * safely omit them until a real backend exists.
++ */
++class CompositeSectionRepository(
++    private val steelSectionRepository: RoomAiscSectionRepository,
++    private val woodSectionRepository: NdsSectionRepository
++) : SectionRepository {
++
++    private fun repositoryFor(material: MaterialType): SectionRepository? =
++        when (material) {
++            MaterialType.STEEL -> steelSectionRepository
++            MaterialType.WOOD -> woodSectionRepository
++            else -> null
++        }
++
++    override suspend fun getDatabaseMetadata(material: MaterialType): SectionDatabaseMetadata? =
++        repositoryFor(material)?.getDatabaseMetadata(material)
++
++    override suspend fun getMaterials(): List<MaterialType> =
++        steelSectionRepository.getMaterials() + woodSectionRepository.getMaterials()
++
++    override suspend fun getShapeTypes(material: MaterialType): List<ShapeType> =
++        repositoryFor(material)?.getShapeTypes(material) ?: emptyList()
++
++    override suspend fun getSections(material: MaterialType, shapeType: ShapeType): List<SectionProfile> =
++        repositoryFor(material)?.getSections(material, shapeType) ?: emptyList()
++
++    override suspend fun getSectionById(id: String): SectionProfile? =
++        steelSectionRepository.getSectionById(id) ?: woodSectionRepository.getSectionById(id)
++}
+diff --git a/core/data/src/main/java/com/lz/data/repository/NdsSectionRepository.kt b/core/data/src/main/java/com/lz/data/repository/NdsSectionRepository.kt
+index 8dbf908..ec26d5a 100644
+--- a/core/data/src/main/java/com/lz/data/repository/NdsSectionRepository.kt
++++ b/core/data/src/main/java/com/lz/data/repository/NdsSectionRepository.kt
+@@ -54,6 +54,18 @@ class NdsSectionRepository(private val context: Context) : SectionRepository {
+     private val json = Json { ignoreUnknownKeys = true }
+     private var dbCache: WoodDatabaseJson? = null
+ 
++    // Maps the NDS database's raw shapeType string onto the domain enum.
++    // "RECTANGULAR" covers solid-sawn dimensional lumber; "GLULAM" covers
++    // glue-laminated timber. Unrecognized values fall back to
++    // SOLID_RECTANGULAR rather than throwing, since new NDS data additions
++    // shouldn't crash section lookups for shapes that are still readable.
++    private fun mapShapeType(raw: String): ShapeType =
++        when (raw) {
++            "RECTANGULAR" -> ShapeType.SOLID_RECTANGULAR
++            "GLULAM" -> ShapeType.GLULAM
++            else -> ShapeType.SOLID_RECTANGULAR
++        }
++
+     private fun loadDatabase(): WoodDatabaseJson {
+         dbCache?.let { return it }
+         return try {
+@@ -84,7 +96,7 @@ class NdsSectionRepository(private val context: Context) : SectionRepository {
+ 
+     override suspend fun getShapeTypes(material: MaterialType): List<ShapeType> {
+         if (material != MaterialType.WOOD) return emptyList()
+-        return loadDatabase().sections.map { ShapeType.SOLID_RECTANGULAR }.distinct()
++        return loadDatabase().sections.map { mapShapeType(it.shapeType) }.distinct()
+     }
+ 
+     override suspend fun getSections(material: MaterialType, shapeType: ShapeType): List<SectionProfile> {
+@@ -92,7 +104,9 @@ class NdsSectionRepository(private val context: Context) : SectionRepository {
+         val db = loadDatabase()
+         val metadata = getDatabaseMetadata(material)
+ 
+-        return db.sections.map { s ->
++        return db.sections
++            .filter { mapShapeType(it.shapeType) == shapeType }
++            .map { s ->
+             WoodProfile(
+                 id = s.id,
+                 designation = s.designation,
+@@ -107,7 +121,7 @@ class NdsSectionRepository(private val context: Context) : SectionRepository {
+ 
+     override suspend fun getSectionById(id: String): SectionProfile? {
+         val db = loadDatabase()
+-        db.sections.find { it.id == id } ?: return null
+-        return getSections(MaterialType.WOOD, ShapeType.SOLID_RECTANGULAR).find { it.id == id }
++        val entry = db.sections.find { it.id == id } ?: return null
++        return getSections(MaterialType.WOOD, mapShapeType(entry.shapeType)).find { it.id == id }
+     }
+ }
+\ No newline at end of file
+diff --git a/core/model/src/main/java/com/lz/model/structural/SectionModels.kt b/core/model/src/main/java/com/lz/model/structural/SectionModels.kt
+index cab6b1e..6e5aa89 100644
+--- a/core/model/src/main/java/com/lz/model/structural/SectionModels.kt
++++ b/core/model/src/main/java/com/lz/model/structural/SectionModels.kt
+@@ -363,6 +363,7 @@ enum class ShapeType {
+     ROUND_HSS,
+     PIPE,
+     SOLID_RECTANGULAR,
++    GLULAM,
+     SOLID_ROUND,
+     SINGLE_ANGLE,
+     DOUBLE_ANGLE
+diff --git a/feature/beam/src/main/java/com/lz/beam/data/persistence/room/BeamDatabaseHolder.kt b/feature/beam/src/main/java/com/lz/beam/data/persistence/room/BeamDatabaseHolder.kt
+new file mode 100644
+index 0000000..eb9bc7a
+--- /dev/null
++++ b/feature/beam/src/main/java/com/lz/beam/data/persistence/room/BeamDatabaseHolder.kt
+@@ -0,0 +1,24 @@
++package com.lz.beam.data.persistence.room
++
++import android.content.Context
++
++/**
++ * Caches the single BeamDatabase instance for the process lifetime.
++ *
++ * BeamDatabase isn't Hilt-managed (see BeamEntryPoint for why), so nothing
++ * else enforces singleton scoping for it. Without this holder, each
++ * BeamViewModel construction would open a new Room connection against the
++ * same physical "vectos.db" file that AppDatabase also uses.
++ */
++internal object BeamDatabaseHolder {
++
++    @Volatile
++    private var instance: BeamDatabase? = null
++
++    fun get(context: Context): BeamDatabase =
++        instance ?: synchronized(this) {
++            instance ?: BeamDatabase.create(context.applicationContext).also {
++                instance = it
++            }
++        }
++}
+diff --git a/feature/beam/src/main/java/com/lz/beam/di/BeamEntryPoint.kt b/feature/beam/src/main/java/com/lz/beam/di/BeamEntryPoint.kt
+new file mode 100644
+index 0000000..c521b90
+--- /dev/null
++++ b/feature/beam/src/main/java/com/lz/beam/di/BeamEntryPoint.kt
+@@ -0,0 +1,53 @@
++package com.lz.beam.di
++
++import com.lz.data.persistence.room.AppDatabase
++import com.lz.data.repository.CalculationWriter
++import com.lz.data.repository.IStructuralCodeRepository
++import com.lz.domain.material.MaterialRepository
++import com.lz.domain.project.ActiveProjectProvider
++import com.lz.domain.repository.ProjectRepository
++import com.lz.model.structural.SectionRepository
++import dagger.hilt.EntryPoint
++import dagger.hilt.InstallIn
++import dagger.hilt.android.EntryPointAccessors
++import dagger.hilt.components.SingletonComponent
++import android.content.Context
++
++/**
++ * Hilt's @HiltViewModel / hiltViewModel() cannot see classes declared inside
++ * a dynamic-feature module — the app module's Hilt component graph is
++ * generated when :app itself compiles, which happens BEFORE feature/beam
++ * (dynamic-feature modules intentionally depend on :app, not the reverse,
++ * so :app never has feature/beam on its compile classpath).
++ *
++ * This EntryPoint is the standard workaround: it lets feature/beam pull
++ * already-bound dependencies out of :app's SingletonComponent manually,
++ * for use in a hand-written ViewModelProvider.Factory (see
++ * BeamViewModelFactory) instead of relying on Hilt's ViewModel injection.
++ */
++@EntryPoint
++@InstallIn(SingletonComponent::class)
++interface BeamEntryPoint {
++
++    fun activeProjectProvider(): ActiveProjectProvider
++
++    fun structuralCodeRepository(): IStructuralCodeRepository
++
++    fun sectionRepository(): SectionRepository
++
++    fun materialRepository(): MaterialRepository
++
++    fun calculationWriter(): CalculationWriter
++
++    fun projectRepository(): ProjectRepository
++
++    fun appDatabase(): AppDatabase
++
++    companion object {
++        fun from(context: Context): BeamEntryPoint =
++            EntryPointAccessors.fromApplication(
++                context.applicationContext,
++                BeamEntryPoint::class.java
++            )
++    }
++}
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 4c403e3..c342c72 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -56,13 +56,15 @@ import java.time.LocalDateTime
+ import java.util.UUID
+ import javax.inject.Inject
+ import kotlin.collections.plus
+-import dagger.hilt.android.lifecycle.HiltViewModel
+ 
+ /**
+  * Modernized ViewModel for Beam Analysis & Design.
+  * Orchestrates multi-span geometry, load combinations, and station-by-station validation.
++ *
++ * Not annotated @HiltViewModel: Hilt cannot see ViewModels declared inside a
++ * dynamic-feature module (see BeamEntryPoint), so this is constructed
++ * manually via BeamViewModelFactory instead of hiltViewModel().
+  */
+-@HiltViewModel
+ class BeamViewModel @Inject constructor(
+     private val activeProjectProvider: ActiveProjectProvider,
+     private val beamRepository: BeamCalculationRepository,
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModelFactory.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModelFactory.kt
+new file mode 100644
+index 0000000..c70825f
+--- /dev/null
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModelFactory.kt
+@@ -0,0 +1,56 @@
++package com.lz.beam.presentation
++
++import android.content.Context
++import androidx.lifecycle.ViewModel
++import androidx.lifecycle.ViewModelProvider
++import androidx.lifecycle.viewmodel.CreationExtras
++import com.lz.beam.data.persistence.room.BeamDatabaseHolder
++import com.lz.beam.data.repository.BeamPersistenceMapper
++import com.lz.beam.data.repository.RoomBeamCalculationRepository
++import com.lz.beam.di.BeamEntryPoint
++import kotlinx.serialization.json.Json
++
++/**
++ * Builds BeamViewModel by hand.
++ *
++ * BeamViewModel isn't Hilt-managed (see its class doc / BeamEntryPoint for
++ * why). This factory pulls the four :app-hosted dependencies via
++ * BeamEntryPoint, constructs the one feature-local dependency
++ * (RoomBeamCalculationRepository, which needs BeamDatabase — a Room
++ * database that only exists inside this module) by hand, and wires them
++ * into BeamViewModel.
++ */
++class BeamViewModelFactory(context: Context) : ViewModelProvider.Factory {
++
++    private val entryPoint = BeamEntryPoint.from(context)
++    private val appContext = context.applicationContext
++
++    override fun <T : ViewModel> create(
++        modelClass: Class<T>,
++        extras: CreationExtras
++    ): T {
++        require(modelClass == BeamViewModel::class.java) {
++            "BeamViewModelFactory only creates BeamViewModel, got $modelClass"
++        }
++
++        val appDatabase = entryPoint.appDatabase()
++        val beamDatabase = BeamDatabaseHolder.get(appContext)
++
++        val beamRepository = RoomBeamCalculationRepository(
++            beamCalculationDao = beamDatabase.beamCalculationDao(),
++            calculationDao = appDatabase.calculationDao(),
++            projectRepository = entryPoint.projectRepository(),
++            calculationWriter = entryPoint.calculationWriter(),
++            beamMapper = BeamPersistenceMapper(Json { ignoreUnknownKeys = true })
++        )
++
++        @Suppress("UNCHECKED_CAST")
++        return BeamViewModel(
++            activeProjectProvider = entryPoint.activeProjectProvider(),
++            beamRepository = beamRepository,
++            structuralRepository = entryPoint.structuralCodeRepository(),
++            sectionRepository = entryPoint.sectionRepository(),
++            materialRepository = entryPoint.materialRepository()
++        ) as T
++    }
++}
+diff --git a/feature/beam/src/main/java/com/lz/beam/runtime/BeamScreenProvider.kt b/feature/beam/src/main/java/com/lz/beam/runtime/BeamScreenProvider.kt
+index fe2b98b..93f4c8e 100644
+--- a/feature/beam/src/main/java/com/lz/beam/runtime/BeamScreenProvider.kt
++++ b/feature/beam/src/main/java/com/lz/beam/runtime/BeamScreenProvider.kt
+@@ -2,8 +2,11 @@ package com.lz.beam.runtime
+ 
+ import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+ import androidx.compose.runtime.Composable
+-import androidx.hilt.navigation.compose.hiltViewModel
++import androidx.compose.runtime.remember
++import androidx.compose.ui.platform.LocalContext
++import androidx.lifecycle.viewmodel.compose.viewModel
+ import com.lz.beam.presentation.BeamViewModel
++import com.lz.beam.presentation.BeamViewModelFactory
+ import com.lz.beam.ui.BeamCalculatorScreen
+ import com.lz.domain.project.Project
+ import com.lz.runtime.compose.navigation.NavigationDestination
+@@ -50,8 +53,10 @@ class BeamScreenProvider : ScreenProvider {
+     @Composable
+     private fun BeamCalculator() {
+ 
++        val context = LocalContext.current
++        val factory = remember { BeamViewModelFactory(context) }
+         val viewModel: BeamViewModel =
+-            hiltViewModel()
++            viewModel(factory = factory)
+ 
+         val backDispatcher =
+             LocalOnBackPressedDispatcherOwner

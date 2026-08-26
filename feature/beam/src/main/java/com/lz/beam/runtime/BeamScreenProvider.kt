@@ -2,8 +2,11 @@ package com.lz.beam.runtime
 
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.Composable
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lz.beam.presentation.BeamViewModel
+import com.lz.beam.presentation.BeamViewModelFactory
 import com.lz.beam.ui.BeamCalculatorScreen
 import com.lz.domain.project.Project
 import com.lz.runtime.compose.navigation.NavigationDestination
@@ -50,8 +53,10 @@ class BeamScreenProvider : ScreenProvider {
     @Composable
     private fun BeamCalculator() {
 
+        val context = LocalContext.current
+        val factory = remember { BeamViewModelFactory(context) }
         val viewModel: BeamViewModel =
-            hiltViewModel()
+            viewModel(factory = factory)
 
         val backDispatcher =
             LocalOnBackPressedDispatcherOwner

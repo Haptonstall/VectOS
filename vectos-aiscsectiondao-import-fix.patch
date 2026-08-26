@@ -1,0 +1,12 @@
+diff --git a/core/data/src/main/java/com/lz/data/repository/RoomAiscSectionRepository.kt b/core/data/src/main/java/com/lz/data/repository/RoomAiscSectionRepository.kt
+index abe7b15..a472107 100644
+--- a/core/data/src/main/java/com/lz/data/repository/RoomAiscSectionRepository.kt
++++ b/core/data/src/main/java/com/lz/data/repository/RoomAiscSectionRepository.kt
+@@ -1,6 +1,6 @@
+ package com.lz.data.repository
+ 
+-import com.lz.data.persistence.room.dao.AiscSectionDao
++import com.lz.data.persistence.room.dao.catalog.AiscSectionDao
+ import com.lz.model.structural.MaterialType
+ import com.lz.model.structural.SectionAxisProperties
+ import com.lz.model.structural.SectionDatabaseMetadata

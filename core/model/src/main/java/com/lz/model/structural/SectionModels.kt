@@ -363,6 +363,7 @@ enum class ShapeType {
     ROUND_HSS,
     PIPE,
     SOLID_RECTANGULAR,
+    GLULAM,
     SOLID_ROUND,
     SINGLE_ANGLE,
     DOUBLE_ANGLE

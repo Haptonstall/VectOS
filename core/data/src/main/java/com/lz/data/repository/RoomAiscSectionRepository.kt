@@ -1,6 +1,6 @@
 package com.lz.data.repository
 
-import com.lz.data.persistence.room.dao.AiscSectionDao
+import com.lz.data.persistence.room.dao.catalog.AiscSectionDao
 import com.lz.model.structural.MaterialType
 import com.lz.model.structural.SectionAxisProperties
 import com.lz.model.structural.SectionDatabaseMetadata
