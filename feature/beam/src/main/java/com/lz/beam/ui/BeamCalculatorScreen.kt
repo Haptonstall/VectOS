@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -21,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
@@ -38,6 +40,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
@@ -146,8 +149,14 @@ fun BeamCalculatorScreen(
         .maxOfOrNull { it.utilizationRatio } ?: 0.0
     val maxDeflectionUtil = serviceabilityResults.maxOfOrNull { it.utilization } ?: 0.0
 
-    val overallMaxUtil = maxOf(maxFlexureUtil, maxShearUtil, maxAxialUtil, maxTorsionUtil, maxDeflectionUtil)
-    val isPassing = overallMaxUtil <= 1.0 && overallMaxUtil > 0
+    val hasResults = viewModel.calculationResult != null
+    val overallMaxUtil = if (hasResults) {
+        maxOf(
+            strengthDesignResults.maxOfOrNull { it.utilizationRatio } ?: 0.0,
+            maxDeflectionUtil
+        )
+    } else 0.0
+    val isPassing = overallMaxUtil <= 1.0
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -166,16 +175,18 @@ fun BeamCalculatorScreen(
                             // Status Dot and FAIL/PASS
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Surface(
-                                    color = if (isPassing) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                                    color = if (!hasResults) MaterialTheme.colorScheme.outline
+                                        else if (isPassing) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
                                     shape = CircleShape,
                                     modifier = Modifier.size(8.dp)
                                 ) {}
                                 Spacer(Modifier.width(4.dp))
                                 Text(
-                                    text = if (isPassing) "PASS" else "FAIL",
+                                    text = if (!hasResults) "NOT RUN" else if (isPassing) "PASS" else "FAIL",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isPassing) Color(0xFF4CAF50) else Color(0xFFF44336)
+                                    color = if (!hasResults) MaterialTheme.colorScheme.outline
+                                        else if (isPassing) Color(0xFF4CAF50) else Color(0xFFF44336)
                                 )
                             }
 
@@ -213,7 +224,14 @@ fun BeamCalculatorScreen(
                 }
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { viewModel.calculate() },
+                icon = { Icon(Icons.Default.Calculate, contentDescription = null) },
+                text = { Text("Calculate") }
+            )
+        }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
             // 1. Interactive Beam Plot (Always visible at top)
@@ -371,7 +389,8 @@ fun BeamSideView(
     }
     val loadColor = MaterialTheme.colorScheme.error
 
-    Box(modifier = modifier.padding(horizontal = 32.dp, vertical = 24.dp)) {
+    BoxWithConstraints(modifier = modifier.padding(horizontal = 32.dp, vertical = 24.dp)) {
+        val diagramWidthDp = maxWidth
         Canvas(modifier = Modifier.fillMaxSize()) {
             val width = size.width
             val height = size.height
@@ -549,13 +568,14 @@ fun BeamSideView(
             // End node of each span
             currentXInches += span.length.inInches
             val fraction = (currentXInches / totalLength).toFloat()
+            val nodeIndex = idx + 1
             Box(modifier = Modifier
                 .size(40.dp)
                 .align(Alignment.CenterStart)
-                .offset(x = (fraction * (totalLength * (totalLength / totalLength))).dp) // Rough simplification
+                .offset(x = (fraction * diagramWidthDp.value - 20f).dp)
                 .padding(8.dp)
             ) {
-                // Actually we just use a simplified approach for alignment in this demo
+                IconButton(onClick = { onNodeClicked(nodeIndex) }, modifier = Modifier.fillMaxSize()) { }
             }
         }
     }
