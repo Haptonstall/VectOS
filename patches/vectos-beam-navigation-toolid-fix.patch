@@ -1,0 +1,34 @@
+diff --git a/app/src/main/java/com/lz/vectos/ui/project/ProjectLibraryScreen.kt b/app/src/main/java/com/lz/vectos/ui/project/ProjectLibraryScreen.kt
+index 8c00b23..0615576 100644
+--- a/app/src/main/java/com/lz/vectos/ui/project/ProjectLibraryScreen.kt
++++ b/app/src/main/java/com/lz/vectos/ui/project/ProjectLibraryScreen.kt
+@@ -246,7 +246,7 @@ fun CalculationLibraryItem(
+         ) {
+             Icon(
+                 imageVector = when (calculation.toolId) {
+-                    "BEAM" -> Icons.Default.LinearScale
++                    "beam.calculator" -> Icons.Default.LinearScale
+                     else -> Icons.Default.Description
+                 },
+                 contentDescription = null,
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 4aa0161..e7d272c 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -47,6 +47,7 @@ import com.lz.solver.material.NdsWoodCapacityCalculator
+ import com.lz.solver.envelope.ServiceabilityEvaluationService
+ import com.lz.beam.solver.BeamAnalysisSolver
+ import com.lz.beam.solver.BeamAnalysisConfig
++import com.lz.beam.runtime.BeamNavigationDestination
+ import com.lz.domain.project.ActiveProjectProvider
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+@@ -277,7 +278,7 @@ class BeamViewModel @Inject constructor(
+ 
+                 val metadata = CalculationMetadata(
+                     id = currentCalculationId!!,
+-                    toolId = "BEAM",
++                    toolId = BeamNavigationDestination.id,
+                     name = "Beam Analysis",
+                     createdAt = LocalDateTime.now()
+                 )

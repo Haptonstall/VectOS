@@ -139,22 +139,18 @@ fun BeamCalculatorScreen(
     val strengthDesignResults = viewModel.governingCapacityResults
     val serviceabilityResults = viewModel.serviceabilityResults
 
-    val maxFlexureUtil = strengthDesignResults.filter { it.governingLimitState.contains("Flexure", ignoreCase = true) }
-        .maxOfOrNull { it.utilizationRatio } ?: 0.0
-    val maxShearUtil = strengthDesignResults.filter { it.governingLimitState.contains("Shear", ignoreCase = true) }
-        .maxOfOrNull { it.utilizationRatio } ?: 0.0
-    val maxAxialUtil = strengthDesignResults.filter { it.governingLimitState.contains("Axial", ignoreCase = true) || it.governingLimitState.contains("Buckling", ignoreCase = true) || it.governingLimitState.contains("Yielding", ignoreCase = true) && !it.governingLimitState.contains("Shear", ignoreCase = true) && !it.governingLimitState.contains("Flexure", ignoreCase = true) }
-        .maxOfOrNull { it.utilizationRatio } ?: 0.0
-    val maxTorsionUtil = strengthDesignResults.filter { it.governingLimitState.contains("Torsion", ignoreCase = true) }
-        .maxOfOrNull { it.utilizationRatio } ?: 0.0
+    // Per-category (Flexure/Shear/Axial/Torsion) breakdown removed — it
+    // filtered on governingLimitState, which calculate() still hardcodes
+    // to "See Report" for every point (Bug C, not yet fixed), so those
+    // filters could never match real data. governingStrengthUtil below
+    // uses the real overall utilizationRatio instead, which is correctly
+    // populated regardless of Bug C.
+    val governingStrengthUtil = strengthDesignResults.maxOfOrNull { it.utilizationRatio } ?: 0.0
     val maxDeflectionUtil = serviceabilityResults.maxOfOrNull { it.utilization } ?: 0.0
 
     val hasResults = viewModel.calculationResult != null
     val overallMaxUtil = if (hasResults) {
-        maxOf(
-            strengthDesignResults.maxOfOrNull { it.utilizationRatio } ?: 0.0,
-            maxDeflectionUtil
-        )
+        maxOf(governingStrengthUtil, maxDeflectionUtil)
     } else 0.0
     val isPassing = overallMaxUtil <= 1.0
 
@@ -190,11 +186,14 @@ fun BeamCalculatorScreen(
                                 )
                             }
 
-                            // Flexure Badge
+                            // Governing strength ratio (whichever limit state governs —
+                            // see Bug C notes: per-category FLEX/SHEAR/AXIAL/TORSION
+                            // breakdown needs governingLimitState routing to be
+                            // trustworthy, so this shows the real overall ratio instead)
                             StatusBadgeSmall(
-                                label = "FLEX",
-                                value = "${(maxFlexureUtil * 100).toInt()}%",
-                                isCritical = maxFlexureUtil > 1.0
+                                label = "GOV",
+                                value = "${(governingStrengthUtil * 100).toInt()}%",
+                                isCritical = governingStrengthUtil > 1.0
                             )
 
                             // Deflection Badge
@@ -213,11 +212,18 @@ fun BeamCalculatorScreen(
                 },
                 actions = {
                     IconButton(onClick = {
-                        viewModel.saveCalculation {
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Calculation saved successfully")
+                        viewModel.saveCalculation(
+                            onSaved = {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Calculation saved successfully")
+                                }
+                            },
+                            onError = { message ->
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Save failed: $message")
+                                }
                             }
-                        }
+                        )
                     }) {
                         Icon(Icons.Default.Save, contentDescription = "Save")
                     }

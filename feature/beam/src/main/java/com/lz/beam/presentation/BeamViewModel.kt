@@ -3,6 +3,7 @@ package com.lz.beam.presentation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lz.beam.domain.BeamCalculationRepository
@@ -47,9 +48,12 @@ import com.lz.solver.material.NdsWoodCapacityCalculator
 import com.lz.solver.envelope.ServiceabilityEvaluationService
 import com.lz.beam.solver.BeamAnalysisSolver
 import com.lz.beam.solver.BeamAnalysisConfig
+import com.lz.beam.runtime.BeamNavigationDestination
 import com.lz.domain.project.ActiveProjectProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
@@ -235,6 +239,11 @@ class BeamViewModel @Inject constructor(
     private fun loadDefaultBuildingCode() {
         viewModelScope.launch {
             try {
+                // Respect the active project's design methodology setting —
+                // this must happen before it's used below to pick the
+                // default LRFD/ASD combination set.
+                methodology = activeProjectProvider.activeProject.value.settings.designMethodology
+
                 // Use the active project's own selected building code — falling
                 // back to the app default only if that project hasn't set one
                 // or its id no longer resolves (e.g. seed data changed).
@@ -277,7 +286,7 @@ class BeamViewModel @Inject constructor(
 
                 val metadata = CalculationMetadata(
                     id = currentCalculationId!!,
-                    toolId = "BEAM",
+                    toolId = BeamNavigationDestination.id,
                     name = "Beam Analysis",
                     createdAt = LocalDateTime.now()
                 )
@@ -356,16 +365,19 @@ class BeamViewModel @Inject constructor(
      * Explicitly saves the current calculation state to the repository.
      */
     fun saveCalculation(
-        onSaved: (BeamCalculation) -> Unit
+        onSaved: (BeamCalculation) -> Unit,
+        onError: (String) -> Unit = {}
     ) {
 
         val calculation = calculationResult ?: return
 
         viewModelScope.launch {
-
-            beamRepository.saveBeamCalculation(calculation)
-
-            onSaved(calculation)
+            try {
+                beamRepository.saveBeamCalculation(calculation)
+                onSaved(calculation)
+            } catch (e: Exception) {
+                onError(e.message ?: "Failed to save calculation.")
+            }
         }
     }
     // --- UI Event Handlers ---
@@ -561,5 +573,57 @@ class BeamViewModel @Inject constructor(
     init {
         loadInitialGeometryData()
         loadDefaultBuildingCode()
+        observeInputsForAutoRecalculation()
     }
+
+    /**
+     * Automatically re-runs calculate() whenever any input it depends on
+     * changes, so the user never has to press a Calculate button. Reads
+     * every calculate()-relevant field inside snapshotFlow, which tracks
+     * Compose state reads and re-emits on any change to any of them.
+     * Debounced so rapid successive edits (e.g. typing a load value)
+     * collapse into a single recalculation instead of one per keystroke.
+     */
+    private fun observeInputsForAutoRecalculation() {
+        viewModelScope.launch {
+            snapshotFlow {
+                RecalculationInputs(
+                    structuralMember = structuralMember,
+                    spanBracingInputs = spanBracingInputs,
+                    loadCases = loadCases,
+                    includeSelfWeight = includeSelfWeight,
+                    selectedSection = selectedSection,
+                    selectedMaterial = selectedMaterial,
+                    activeMaterialGrade = activeMaterialGrade,
+                    selectedCombinationSet = selectedCombinationSet,
+                    enabledCombinations = enabledCombinations,
+                    methodology = methodology,
+                    activeBuildingCode = activeBuildingCode
+                )
+            }
+                .debounce(400)
+                .distinctUntilChanged()
+                .collect { calculate() }
+        }
+    }
+
+    /**
+     * Snapshot of every input calculate() reads. Equality here determines
+     * whether a recalculation is actually triggered — anything calculate()
+     * depends on must be included, or edits to it will silently not
+     * auto-recalculate.
+     */
+    private data class RecalculationInputs(
+        val structuralMember: StructuralMember,
+        val spanBracingInputs: Map<UUID, BracingInput>,
+        val loadCases: List<LoadCase>,
+        val includeSelfWeight: Boolean,
+        val selectedSection: SectionProfile?,
+        val selectedMaterial: MaterialType,
+        val activeMaterialGrade: MaterialGrade?,
+        val selectedCombinationSet: LoadCombinationSet?,
+        val enabledCombinations: Set<String>,
+        val methodology: DesignMethodology,
+        val activeBuildingCode: BuildingCode?
+    )
 }

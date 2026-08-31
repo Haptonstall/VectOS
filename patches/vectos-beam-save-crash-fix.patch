@@ -1,0 +1,88 @@
+diff --git a/feature/beam/src/main/java/com/lz/beam/data/persistence/room/BeamDatabase.kt b/feature/beam/src/main/java/com/lz/beam/data/persistence/room/BeamDatabase.kt
+index 72b148a..b4c9c89 100644
+--- a/feature/beam/src/main/java/com/lz/beam/data/persistence/room/BeamDatabase.kt
++++ b/feature/beam/src/main/java/com/lz/beam/data/persistence/room/BeamDatabase.kt
+@@ -13,8 +13,16 @@ import com.lz.beam.data.persistence.room.entity.BeamCalculationRoomEntity
+  * Room database for the Beam feature module.
+  * Owns beam calculation payload storage independently of the core AppDatabase.
+  *
+- * Uses the same physical database file ("vectos.db") as AppDatabase so that
+- * cross-database transactions via SQLite are possible when needed.
++ * Uses its own physical database file ("vectos_beam.db"), separate from
++ * AppDatabase's "vectos.db". Two independent RoomDatabase subclasses cannot
++ * safely share one physical file — each Room class tracks its own schema
++ * identity hash inside the file it opens, and AppDatabase (a different
++ * entity set, currently at version 2) was previously sharing this same
++ * "vectos.db" file, which caused Room's schema validation to fail
++ * intermittently depending on which database initialized its identity hash
++ * first. Cross-database writes are non-atomic as a result (see
++ * RoomBeamCalculationRepository's metadata-first-then-payload ordering for
++ * the mitigation), but each database's own internal consistency is now sound.
+  *
+  * Version history:
+  *   v1 — initial beam_calculations table
+@@ -35,7 +43,7 @@ abstract class BeamDatabase : RoomDatabase() {
+             return Room.databaseBuilder(
+                 context,
+                 BeamDatabase::class.java,
+-                "vectos.db"    // Same file as AppDatabase — intentional
++                "vectos_beam.db"
+             )
+                 .addCallback(CALLBACK)
+                 .build()
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index b1db261..4aa0161 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -356,16 +356,19 @@ class BeamViewModel @Inject constructor(
+      * Explicitly saves the current calculation state to the repository.
+      */
+     fun saveCalculation(
+-        onSaved: (BeamCalculation) -> Unit
++        onSaved: (BeamCalculation) -> Unit,
++        onError: (String) -> Unit = {}
+     ) {
+ 
+         val calculation = calculationResult ?: return
+ 
+         viewModelScope.launch {
+-
+-            beamRepository.saveBeamCalculation(calculation)
+-
+-            onSaved(calculation)
++            try {
++                beamRepository.saveBeamCalculation(calculation)
++                onSaved(calculation)
++            } catch (e: Exception) {
++                onError(e.message ?: "Failed to save calculation.")
++            }
+         }
+     }
+     // --- UI Event Handlers ---
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 8937bcd..5b539a6 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -213,11 +213,18 @@ fun BeamCalculatorScreen(
+                 },
+                 actions = {
+                     IconButton(onClick = {
+-                        viewModel.saveCalculation {
+-                            scope.launch {
+-                                snackbarHostState.showSnackbar("Calculation saved successfully")
++                        viewModel.saveCalculation(
++                            onSaved = {
++                                scope.launch {
++                                    snackbarHostState.showSnackbar("Calculation saved successfully")
++                                }
++                            },
++                            onError = { message ->
++                                scope.launch {
++                                    snackbarHostState.showSnackbar("Save failed: $message")
++                                }
+                             }
+-                        }
++                        )
+                     }) {
+                         Icon(Icons.Default.Save, contentDescription = "Save")
+                     }

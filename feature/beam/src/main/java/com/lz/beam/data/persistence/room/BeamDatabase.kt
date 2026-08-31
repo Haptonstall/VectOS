@@ -13,8 +13,16 @@ import com.lz.beam.data.persistence.room.entity.BeamCalculationRoomEntity
  * Room database for the Beam feature module.
  * Owns beam calculation payload storage independently of the core AppDatabase.
  *
- * Uses the same physical database file ("vectos.db") as AppDatabase so that
- * cross-database transactions via SQLite are possible when needed.
+ * Uses its own physical database file ("vectos_beam.db"), separate from
+ * AppDatabase's "vectos.db". Two independent RoomDatabase subclasses cannot
+ * safely share one physical file — each Room class tracks its own schema
+ * identity hash inside the file it opens, and AppDatabase (a different
+ * entity set, currently at version 2) was previously sharing this same
+ * "vectos.db" file, which caused Room's schema validation to fail
+ * intermittently depending on which database initialized its identity hash
+ * first. Cross-database writes are non-atomic as a result (see
+ * RoomBeamCalculationRepository's metadata-first-then-payload ordering for
+ * the mitigation), but each database's own internal consistency is now sound.
  *
  * Version history:
  *   v1 — initial beam_calculations table
@@ -35,7 +43,7 @@ abstract class BeamDatabase : RoomDatabase() {
             return Room.databaseBuilder(
                 context,
                 BeamDatabase::class.java,
-                "vectos.db"    // Same file as AppDatabase — intentional
+                "vectos_beam.db"
             )
                 .addCallback(CALLBACK)
                 .build()

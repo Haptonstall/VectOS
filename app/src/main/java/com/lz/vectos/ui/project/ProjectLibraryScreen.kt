@@ -20,6 +20,18 @@ import com.lz.domain.project.Project
 import com.lz.vectos.presentation.ProjectViewModel
 import java.util.UUID
 
+/**
+ * Maps a calculation's raw toolId (the runtime module's registered
+ * navigation route, e.g. "beam.calculator") to a human-readable label for
+ * display. :app can't reference feature module constants directly (dynamic
+ * feature modules build after :app), so this is a plain string lookup —
+ * add an entry here whenever a new tool module is registered.
+ */
+private fun toolDisplayName(toolId: String): String = when (toolId) {
+    "beam.calculator" -> "Beam"
+    else -> toolId
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProjectLibraryScreen(
@@ -115,7 +127,7 @@ fun ProjectLibraryScreen(
                 grouped.forEach { (toolId, toolCalcs) ->
                     item {
                         Text(
-                            text = toolId,
+                            text = toolDisplayName(toolId),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(vertical = 4.dp)
@@ -246,7 +258,7 @@ fun CalculationLibraryItem(
         ) {
             Icon(
                 imageVector = when (calculation.toolId) {
-                    "BEAM" -> Icons.Default.LinearScale
+                    "beam.calculator" -> Icons.Default.LinearScale
                     else -> Icons.Default.Description
                 },
                 contentDescription = null,

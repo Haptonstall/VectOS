@@ -1,9 +1,11 @@
 package com.lz.vectos.app.navigation
 
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -37,6 +39,8 @@ fun AppNavGraph(
     toolPickerViewModel: ToolPickerViewModel = hiltViewModel()
 
 ) {
+
+    val context = LocalContext.current
 
     /*
      * Observe navigation events emitted by the Tool Picker.
@@ -129,9 +133,17 @@ fun AppNavGraph(
 
                 onOpenCalculation = {
 
-                    navController.navigate(
-                        it.toolId
-                    )
+                    if (navController.graph.findNode(it.toolId) != null) {
+                        navController.navigate(
+                            it.toolId
+                        )
+                    } else {
+                        Toast.makeText(
+                            context,
+                            "This calculation was saved with an older app version and can no longer be opened. Please delete it and create a new one.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
 
                 },
 

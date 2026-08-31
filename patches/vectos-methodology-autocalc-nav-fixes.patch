@@ -1,0 +1,224 @@
+diff --git a/app/src/main/java/com/lz/vectos/app/navigation/AppNavGraph.kt b/app/src/main/java/com/lz/vectos/app/navigation/AppNavGraph.kt
+index 9cc9290..c41efd6 100644
+--- a/app/src/main/java/com/lz/vectos/app/navigation/AppNavGraph.kt
++++ b/app/src/main/java/com/lz/vectos/app/navigation/AppNavGraph.kt
+@@ -1,9 +1,11 @@
+ package com.lz.vectos.app.navigation
+ 
++import android.widget.Toast
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.collectAsState
+ import androidx.compose.runtime.getValue
++import androidx.compose.ui.platform.LocalContext
+ import androidx.hilt.navigation.compose.hiltViewModel
+ import androidx.navigation.NavHostController
+ import androidx.navigation.compose.NavHost
+@@ -38,6 +40,8 @@ fun AppNavGraph(
+ 
+ ) {
+ 
++    val context = LocalContext.current
++
+     /*
+      * Observe navigation events emitted by the Tool Picker.
+      */
+@@ -129,9 +133,17 @@ fun AppNavGraph(
+ 
+                 onOpenCalculation = {
+ 
+-                    navController.navigate(
+-                        it.toolId
+-                    )
++                    if (navController.graph.findNode(it.toolId) != null) {
++                        navController.navigate(
++                            it.toolId
++                        )
++                    } else {
++                        Toast.makeText(
++                            context,
++                            "This calculation was saved with an older app version and can no longer be opened. Please delete it and create a new one.",
++                            Toast.LENGTH_LONG
++                        ).show()
++                    }
+ 
+                 },
+ 
+diff --git a/app/src/main/java/com/lz/vectos/ui/project/ProjectLibraryScreen.kt b/app/src/main/java/com/lz/vectos/ui/project/ProjectLibraryScreen.kt
+index 0615576..83e572b 100644
+--- a/app/src/main/java/com/lz/vectos/ui/project/ProjectLibraryScreen.kt
++++ b/app/src/main/java/com/lz/vectos/ui/project/ProjectLibraryScreen.kt
+@@ -20,6 +20,18 @@ import com.lz.domain.project.Project
+ import com.lz.vectos.presentation.ProjectViewModel
+ import java.util.UUID
+ 
++/**
++ * Maps a calculation's raw toolId (the runtime module's registered
++ * navigation route, e.g. "beam.calculator") to a human-readable label for
++ * display. :app can't reference feature module constants directly (dynamic
++ * feature modules build after :app), so this is a plain string lookup —
++ * add an entry here whenever a new tool module is registered.
++ */
++private fun toolDisplayName(toolId: String): String = when (toolId) {
++    "beam.calculator" -> "Beam"
++    else -> toolId
++}
++
+ @OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+ fun ProjectLibraryScreen(
+@@ -115,7 +127,7 @@ fun ProjectLibraryScreen(
+                 grouped.forEach { (toolId, toolCalcs) ->
+                     item {
+                         Text(
+-                            text = toolId,
++                            text = toolDisplayName(toolId),
+                             style = MaterialTheme.typography.labelLarge,
+                             color = MaterialTheme.colorScheme.primary,
+                             modifier = Modifier.padding(vertical = 4.dp)
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 6e43abc..837ada1 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -3,6 +3,7 @@ package com.lz.beam.presentation
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.setValue
++import androidx.compose.runtime.snapshotFlow
+ import androidx.lifecycle.ViewModel
+ import androidx.lifecycle.viewModelScope
+ import com.lz.beam.domain.BeamCalculationRepository
+@@ -51,6 +52,8 @@ import com.lz.beam.runtime.BeamNavigationDestination
+ import com.lz.domain.project.ActiveProjectProvider
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
++import kotlinx.coroutines.flow.debounce
++import kotlinx.coroutines.flow.distinctUntilChanged
+ import kotlinx.coroutines.launch
+ import kotlinx.coroutines.withContext
+ import java.time.LocalDateTime
+@@ -236,6 +239,11 @@ class BeamViewModel @Inject constructor(
+     private fun loadDefaultBuildingCode() {
+         viewModelScope.launch {
+             try {
++                // Respect the active project's design methodology setting —
++                // this must happen before it's used below to pick the
++                // default LRFD/ASD combination set.
++                methodology = activeProjectProvider.activeProject.value.settings.designMethodology
++
+                 // Use the active project's own selected building code — falling
+                 // back to the app default only if that project hasn't set one
+                 // or its id no longer resolves (e.g. seed data changed).
+@@ -562,5 +570,57 @@ class BeamViewModel @Inject constructor(
+     init {
+         loadInitialGeometryData()
+         loadDefaultBuildingCode()
++        observeInputsForAutoRecalculation()
+     }
++
++    /**
++     * Automatically re-runs calculate() whenever any input it depends on
++     * changes, so the user never has to press a Calculate button. Reads
++     * every calculate()-relevant field inside snapshotFlow, which tracks
++     * Compose state reads and re-emits on any change to any of them.
++     * Debounced so rapid successive edits (e.g. typing a load value)
++     * collapse into a single recalculation instead of one per keystroke.
++     */
++    private fun observeInputsForAutoRecalculation() {
++        viewModelScope.launch {
++            snapshotFlow {
++                RecalculationInputs(
++                    structuralMember = structuralMember,
++                    spanBracingInputs = spanBracingInputs,
++                    loadCases = loadCases,
++                    includeSelfWeight = includeSelfWeight,
++                    selectedSection = selectedSection,
++                    selectedMaterial = selectedMaterial,
++                    activeMaterialGrade = activeMaterialGrade,
++                    selectedCombinationSet = selectedCombinationSet,
++                    enabledCombinations = enabledCombinations,
++                    methodology = methodology,
++                    activeBuildingCode = activeBuildingCode
++                )
++            }
++                .debounce(400)
++                .distinctUntilChanged()
++                .collect { calculate() }
++        }
++    }
++
++    /**
++     * Snapshot of every input calculate() reads. Equality here determines
++     * whether a recalculation is actually triggered — anything calculate()
++     * depends on must be included, or edits to it will silently not
++     * auto-recalculate.
++     */
++    private data class RecalculationInputs(
++        val structuralMember: StructuralMember,
++        val spanBracingInputs: Map<UUID, BracingInput>,
++        val loadCases: List<LoadCase>,
++        val includeSelfWeight: Boolean,
++        val selectedSection: SectionProfile?,
++        val selectedMaterial: MaterialType,
++        val activeMaterialGrade: MaterialGrade?,
++        val selectedCombinationSet: LoadCombinationSet?,
++        val enabledCombinations: Set<String>,
++        val methodology: DesignMethodology,
++        val activeBuildingCode: BuildingCode?
++    )
+ }
+\ No newline at end of file
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 8937bcd..2b6f15b 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -139,22 +139,18 @@ fun BeamCalculatorScreen(
+     val strengthDesignResults = viewModel.governingCapacityResults
+     val serviceabilityResults = viewModel.serviceabilityResults
+ 
+-    val maxFlexureUtil = strengthDesignResults.filter { it.governingLimitState.contains("Flexure", ignoreCase = true) }
+-        .maxOfOrNull { it.utilizationRatio } ?: 0.0
+-    val maxShearUtil = strengthDesignResults.filter { it.governingLimitState.contains("Shear", ignoreCase = true) }
+-        .maxOfOrNull { it.utilizationRatio } ?: 0.0
+-    val maxAxialUtil = strengthDesignResults.filter { it.governingLimitState.contains("Axial", ignoreCase = true) || it.governingLimitState.contains("Buckling", ignoreCase = true) || it.governingLimitState.contains("Yielding", ignoreCase = true) && !it.governingLimitState.contains("Shear", ignoreCase = true) && !it.governingLimitState.contains("Flexure", ignoreCase = true) }
+-        .maxOfOrNull { it.utilizationRatio } ?: 0.0
+-    val maxTorsionUtil = strengthDesignResults.filter { it.governingLimitState.contains("Torsion", ignoreCase = true) }
+-        .maxOfOrNull { it.utilizationRatio } ?: 0.0
++    // Per-category (Flexure/Shear/Axial/Torsion) breakdown removed — it
++    // filtered on governingLimitState, which calculate() still hardcodes
++    // to "See Report" for every point (Bug C, not yet fixed), so those
++    // filters could never match real data. governingStrengthUtil below
++    // uses the real overall utilizationRatio instead, which is correctly
++    // populated regardless of Bug C.
++    val governingStrengthUtil = strengthDesignResults.maxOfOrNull { it.utilizationRatio } ?: 0.0
+     val maxDeflectionUtil = serviceabilityResults.maxOfOrNull { it.utilization } ?: 0.0
+ 
+     val hasResults = viewModel.calculationResult != null
+     val overallMaxUtil = if (hasResults) {
+-        maxOf(
+-            strengthDesignResults.maxOfOrNull { it.utilizationRatio } ?: 0.0,
+-            maxDeflectionUtil
+-        )
++        maxOf(governingStrengthUtil, maxDeflectionUtil)
+     } else 0.0
+     val isPassing = overallMaxUtil <= 1.0
+ 
+@@ -190,11 +186,14 @@ fun BeamCalculatorScreen(
+                                 )
+                             }
+ 
+-                            // Flexure Badge
++                            // Governing strength ratio (whichever limit state governs —
++                            // see Bug C notes: per-category FLEX/SHEAR/AXIAL/TORSION
++                            // breakdown needs governingLimitState routing to be
++                            // trustworthy, so this shows the real overall ratio instead)
+                             StatusBadgeSmall(
+-                                label = "FLEX",
+-                                value = "${(maxFlexureUtil * 100).toInt()}%",
+-                                isCritical = maxFlexureUtil > 1.0
++                                label = "GOV",
++                                value = "${(governingStrengthUtil * 100).toInt()}%",
++                                isCritical = governingStrengthUtil > 1.0
+                             )
+ 
+                             // Deflection Badge
