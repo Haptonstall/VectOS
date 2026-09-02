@@ -8,7 +8,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lz.beam.domain.BeamCalculationRepository
 import com.lz.beam.model.BeamCalculation
+import com.lz.beam.model.BeamCalculationInputs
 import com.lz.beam.model.BeamCalculationResults
+import com.lz.beam.model.SpanBracingInput
 import com.lz.data.repository.CodeNotFoundException
 import com.lz.data.repository.IStructuralCodeRepository
 import com.lz.domain.calculation.CalculationMetadata
@@ -31,17 +33,19 @@ import com.lz.model.structural.PointCapacityResult
 import com.lz.model.structural.SectionProfile
 import com.lz.model.structural.SectionRepository
 import com.lz.model.structural.ShapeType
+import com.lz.model.structural.StationDemand
 import com.lz.model.structural.SpanGeometry
 import com.lz.model.structural.StandardLoadCases
 import com.lz.model.structural.StrengthDesignResult
 import com.lz.model.structural.StructuralMember
 import com.lz.model.structural.StructuralNode
 import com.lz.model.structural.NodeBoundaryCondition
-import com.lz.model.units.ForcePerLength
+import com.lz.solver.analysis.UtilizationPoint
 import com.lz.model.units.Length
 import com.lz.model.units.MomentOfInertia
 import com.lz.model.units.UnitSystem
 import com.lz.model.units.inches
+import com.lz.model.units.lbPerFt
 import com.lz.model.units.psiModulus
 import com.lz.solver.material.AiscSteelCapacityCalculator
 import com.lz.solver.material.NdsWoodCapacityCalculator
@@ -49,6 +53,7 @@ import com.lz.solver.envelope.ServiceabilityEvaluationService
 import com.lz.beam.solver.BeamAnalysisSolver
 import com.lz.beam.solver.BeamAnalysisConfig
 import com.lz.beam.runtime.BeamNavigationDestination
+import com.lz.data.persistence.room.seeder.DatabaseSeedingCoordinator
 import com.lz.domain.project.ActiveProjectProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -74,7 +79,8 @@ class BeamViewModel @Inject constructor(
     private val beamRepository: BeamCalculationRepository,
     private val structuralRepository: IStructuralCodeRepository,
     private val sectionRepository: SectionRepository,
-    private val materialRepository: MaterialRepository
+    private val materialRepository: MaterialRepository,
+    private val seedingCoordinator: DatabaseSeedingCoordinator
 ) : ViewModel() {
 
     // --- State: Geometry & Properties ---
@@ -90,7 +96,7 @@ class BeamViewModel @Inject constructor(
     var selectedCombinationSet by mutableStateOf<LoadCombinationSet?>(null)
 
     // --- State: Loads ---
-    var loadCases by mutableStateOf<List<LoadCase>>(
+    var loadCases by mutableStateOf(
         listOf(
             LoadCase(StandardLoadCases.DEAD, "Dead Load"),
             LoadCase(StandardLoadCases.LIVE, "Live Load"),
@@ -140,6 +146,7 @@ class BeamViewModel @Inject constructor(
     var showLoadsOnPlot by mutableStateOf(true)
 
     private var calculationJob: Job? = null
+    private var isLoadingSavedCalculation = false
 
     val governingCapacityResults: List<PointCapacityResult>
         get() {
@@ -159,7 +166,7 @@ class BeamViewModel @Inject constructor(
                             ?: return@flatMap emptyList<PointCapacityResult>(),
                         utilizationRatio = pt.ratio,
                         designCapacity = pt.capacity,
-                        governingLimitState = "See Report"
+                        governingLimitState = pt.governingLimitState
                     )
                 }
             }
@@ -168,24 +175,8 @@ class BeamViewModel @Inject constructor(
 
     val detailedStrengthResult: StrengthDesignResult?
         get() {
-            val result = calculationResult ?: return null
             val section = selectedSection ?: return null
-
-            val analysis = if (selectedAnalysisCombination != null) {
-                result.results.analysisResult.combinationResults[selectedAnalysisCombination!!.name]
-                    ?: result.results.analysisResult
-            } else {
-                result.results.analysisResult
-            }
-
-            // Find governing station by utilization ratio
-            val governingPoint = analysis.spanResults
-                .flatMap { it.utilizationDiagram }
-                .maxByOrNull { it.ratio } ?: return null
-
-            val governingDemand = analysis.spanResults
-                .flatMap { it.stationDemands }
-                .find { it.x == governingPoint.x } ?: return null
+            val governingDemand = governingDesignPoint()?.demand ?: return null
 
             val calculator = when (val mat = activeMaterialGrade) {
                 is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat)
@@ -196,8 +187,13 @@ class BeamViewModel @Inject constructor(
             return calculator.evaluateDetailed(governingDemand, methodology)
         }
 
+    val detailedStrengthCombinationName: String?
+        get() = governingDesignPoint()?.combinationName
+
     private fun loadInitialGeometryData() {
         viewModelScope.launch {
+            seedingCoordinator.awaitSeeded()
+            if (isLoadingSavedCalculation || currentCalculationId != null) return@launch
             availableMaterials = sectionRepository.getMaterials()
             if (availableMaterials.isNotEmpty()) {
                 onMaterialSelected(selectedMaterial)
@@ -239,6 +235,9 @@ class BeamViewModel @Inject constructor(
     private fun loadDefaultBuildingCode() {
         viewModelScope.launch {
             try {
+                seedingCoordinator.awaitSeeded()
+                if (isLoadingSavedCalculation || currentCalculationId != null) return@launch
+
                 // Respect the active project's design methodology setting —
                 // this must happen before it's used below to pick the
                 // default LRFD/ASD combination set.
@@ -273,81 +272,10 @@ class BeamViewModel @Inject constructor(
      * Orchestrates the full analysis and design pipeline.
      */
     fun calculate() {
-        val project = activeProjectProvider.activeProject.value
-        val code = activeBuildingCode ?: return
-        val combinationSet = selectedCombinationSet ?: return
-
         calculationJob?.cancel()
         calculationJob = viewModelScope.launch(Dispatchers.Default) {
             try {
-                if (currentCalculationId == null) {
-                    currentCalculationId = UUID.randomUUID()
-                }
-
-                val metadata = CalculationMetadata(
-                    id = currentCalculationId!!,
-                    toolId = BeamNavigationDestination.id,
-                    name = "Beam Analysis",
-                    createdAt = LocalDateTime.now()
-                )
-
-                // 1. Inject self weight if needed
-                val resolvedLoadCases = if (includeSelfWeight && selectedSection != null) {
-                    injectSelfWeight(loadCases, selectedSection!!)
-                } else {
-                    loadCases
-                }
-
-                val activeCombinations = combinationSet.combinations.filter { enabledCombinations.contains(it.name) }
-
-                val analysisResult = BeamAnalysisSolver.solve(
-                    BeamAnalysisConfig(
-                        member = structuralMember,
-                        loadCases = resolvedLoadCases,
-                        combinations = activeCombinations,
-                        modulusOfElasticity = (activeMaterialGrade?.modulusOfElasticity?.psi
-                            ?: selectedMaterial.defaultModulusOfElasticityPsi).psiModulus,
-                        momentOfInertiaX = (selectedSection?.propertiesStrongAxis?.i ?: MomentOfInertia(100.0)),
-                        momentOfInertiaY = (selectedSection?.propertiesWeakAxis?.i ?: MomentOfInertia(10.0)),
-                        braceState = getGlobalBraceState(),
-                        designMethodology = methodology,
-                        sectionProfile = selectedSection,
-                        material = activeMaterialGrade,
-                        buildingCode = code
-                    )
-                )
-
-                // 2. Serviceability Evaluation - separate concern, stays as-is
-                val serviceResults = ServiceabilityEvaluationService.evaluate(
-                    member = structuralMember,
-                    analysisResult = analysisResult,
-                    buildingCode = code
-                )
-
-                val results = BeamCalculationResults(
-                    analysisResult = analysisResult,
-                    strengthDesignResults = analysisResult.spanResults.flatMap { span ->
-                        span.utilizationDiagram.map { pt ->
-                            PointCapacityResult(
-                                demand = span.stationDemands.find { it.x == pt.x }
-                                    ?: span.stationDemands.firstOrNull()
-                                    ?: return@flatMap emptyList<PointCapacityResult>(),
-                                utilizationRatio = pt.ratio,
-                                designCapacity = pt.capacity,
-                                governingLimitState = "See Report"
-                            )
-                        }
-                    },
-                    serviceabilityResults = serviceResults
-                )
-
-                val result = BeamCalculation(
-                    metadata = metadata,
-                    project = project,
-                    member = structuralMember,
-                    results = results
-                )
-
+                val result = buildCurrentCalculation() ?: return@launch
                 withContext(Dispatchers.Main) {
                     calculationResult = result
                     calculationError = null
@@ -368,15 +296,21 @@ class BeamViewModel @Inject constructor(
         onSaved: (BeamCalculation) -> Unit,
         onError: (String) -> Unit = {}
     ) {
-
-        val calculation = calculationResult ?: return
-
-        viewModelScope.launch {
+        calculationJob?.cancel()
+        viewModelScope.launch(Dispatchers.Default) {
             try {
+                val calculation = buildCurrentCalculation()
+                    ?: throw IllegalStateException("Calculation inputs are incomplete.")
                 beamRepository.saveBeamCalculation(calculation)
-                onSaved(calculation)
+                withContext(Dispatchers.Main) {
+                    calculationResult = calculation
+                    calculationError = null
+                    onSaved(calculation)
+                }
             } catch (e: Exception) {
-                onError(e.message ?: "Failed to save calculation.")
+                withContext(Dispatchers.Main) {
+                    onError(e.message ?: "Failed to save calculation.")
+                }
             }
         }
     }
@@ -480,7 +414,7 @@ class BeamViewModel @Inject constructor(
             if (case.id == StandardLoadCases.DEAD) {
                 val selfWeightLoads = structuralMember.spans.map { span ->
                     Load.UniformDistributedLoad(
-                        value = ForcePerLength(weightValue),
+                        value = weightValue.lbPerFt,
                         spanId = span.id,
                         locationStart = 0.0.inches,
                         locationEnd = span.length,
@@ -496,11 +430,27 @@ class BeamViewModel @Inject constructor(
 
     fun loadCalculation(id: UUID) {
         viewModelScope.launch {
-            val result = beamRepository.getBeamCalculation(id)
-            if (result != null) {
-                currentCalculationId = id
-                calculationResult = result
-                structuralMember = result.member
+            isLoadingSavedCalculation = true
+            try {
+                val result = beamRepository.getBeamCalculation(id)
+                if (result != null) {
+                    seedingCoordinator.awaitSeeded()
+                    if (activeBuildingCode == null) {
+                        activeBuildingCode = try {
+                            structuralRepository.getBuildingCode(
+                                result.project.settings.buildingCodeId
+                            )
+                        } catch (e: CodeNotFoundException) {
+                            structuralRepository.getDefaultBuildingCode()
+                        }
+                    }
+                    currentCalculationId = id
+                    calculationResult = result
+                    structuralMember = result.member
+                    restoreInputs(result.inputs, result.member)
+                }
+            } finally {
+                isLoadingSavedCalculation = false
             }
         }
     }
@@ -562,6 +512,168 @@ class BeamViewModel @Inject constructor(
                 isBotBraced = braces.any { it.isBotBraced }
             )
         }.sortedBy { it.x.inches }
+    }
+
+    private fun governingDesignPoint(): GoverningDesignPoint? {
+        val result = calculationResult ?: return null
+        val combinationResults = result.results.analysisResult.combinationResults
+        val analysisOptions = if (combinationResults.isNotEmpty()) {
+            combinationResults.map { (name, analysis) -> name to analysis }
+        } else {
+            listOf((result.results.analysisResult.governingCombinationName ?: "Governing Envelope") to result.results.analysisResult)
+        }
+
+        return analysisOptions.mapNotNull { (combinationName, analysis) ->
+            analysis.spanResults.mapNotNull { span ->
+                val point = span.utilizationDiagram.maxByOrNull { it.ratio } ?: return@mapNotNull null
+                val demand = span.stationDemands.find { it.x == point.x } ?: return@mapNotNull null
+                GoverningDesignPoint(
+                    combinationName = combinationName,
+                    point = point,
+                    demand = demand
+                )
+            }.maxByOrNull { it.point.ratio }
+        }.maxByOrNull { it.point.ratio }
+    }
+
+    private data class GoverningDesignPoint(
+        val combinationName: String,
+        val point: UtilizationPoint,
+        val demand: StationDemand
+    )
+
+    private fun currentInputSnapshot(): BeamCalculationInputs {
+        return BeamCalculationInputs(
+            loadCases = loadCases,
+            selectedMaterial = selectedMaterial,
+            activeMaterialGrade = activeMaterialGrade,
+            selectedShapeType = selectedShapeType,
+            selectedSectionId = selectedSection?.id,
+            selectedCombinationSetId = selectedCombinationSet?.id,
+            enabledCombinationNames = enabledCombinations,
+            selectedAnalysisCombinationName = selectedAnalysisCombination?.name,
+            includeSelfWeight = includeSelfWeight,
+            methodology = methodology,
+            isStrongAxis = isStrongAxis,
+            spanBracingInputs = spanBracingInputs.map { (spanId, input) ->
+                SpanBracingInput(spanId, input)
+            }
+        )
+    }
+
+    private fun buildCurrentCalculation(): BeamCalculation? {
+        val project = activeProjectProvider.activeProject.value
+        val code = activeBuildingCode ?: return null
+        val combinationSet = selectedCombinationSet ?: return null
+
+        if (currentCalculationId == null) {
+            currentCalculationId = UUID.randomUUID()
+        }
+
+        val metadata = calculationResult?.metadata?.copy(
+            id = currentCalculationId!!,
+            createdAt = calculationResult?.metadata?.createdAt ?: LocalDateTime.now()
+        ) ?: CalculationMetadata(
+            id = currentCalculationId!!,
+            toolId = BeamNavigationDestination.id,
+            name = "Beam Analysis",
+            createdAt = LocalDateTime.now()
+        )
+
+        val memberSnapshot = structuralMember.copy(sectionProfileId = selectedSection?.id)
+        val inputs = currentInputSnapshot()
+        val resolvedLoadCases = if (includeSelfWeight && selectedSection != null) {
+            injectSelfWeight(loadCases, selectedSection!!)
+        } else {
+            loadCases
+        }
+        val activeCombinations = combinationSet.combinations.filter {
+            enabledCombinations.contains(it.name)
+        }
+
+        val analysisResult = BeamAnalysisSolver.solve(
+            BeamAnalysisConfig(
+                member = memberSnapshot,
+                loadCases = resolvedLoadCases,
+                combinations = activeCombinations,
+                modulusOfElasticity = (activeMaterialGrade?.modulusOfElasticity?.psi
+                    ?: selectedMaterial.defaultModulusOfElasticityPsi).psiModulus,
+                momentOfInertiaX = (selectedSection?.propertiesStrongAxis?.i ?: MomentOfInertia(100.0)),
+                momentOfInertiaY = (selectedSection?.propertiesWeakAxis?.i ?: MomentOfInertia(10.0)),
+                braceState = getGlobalBraceState(),
+                designMethodology = methodology,
+                sectionProfile = selectedSection,
+                material = activeMaterialGrade,
+                buildingCode = code
+            )
+        )
+
+        val serviceResults = ServiceabilityEvaluationService.evaluate(
+            member = memberSnapshot,
+            analysisResult = analysisResult,
+            buildingCode = code
+        )
+
+        val results = BeamCalculationResults(
+            analysisResult = analysisResult,
+            strengthDesignResults = analysisResult.spanResults.flatMap { span ->
+                span.utilizationDiagram.map { pt ->
+                    PointCapacityResult(
+                        demand = span.stationDemands.find { it.x == pt.x }
+                            ?: span.stationDemands.firstOrNull()
+                            ?: return@flatMap emptyList<PointCapacityResult>(),
+                        utilizationRatio = pt.ratio,
+                        designCapacity = pt.capacity,
+                        governingLimitState = pt.governingLimitState
+                    )
+                }
+            },
+            serviceabilityResults = serviceResults
+        )
+
+        return BeamCalculation(
+            metadata = metadata,
+            project = project,
+            member = memberSnapshot,
+            results = results,
+            inputs = inputs
+        )
+    }
+
+    private suspend fun restoreInputs(inputs: BeamCalculationInputs, member: StructuralMember) {
+        val savedLoadCases = inputs.loadCases.ifEmpty { loadCases }
+        loadCases = savedLoadCases
+        includeSelfWeight = inputs.includeSelfWeight
+        methodology = inputs.methodology
+        isStrongAxis = inputs.isStrongAxis
+        spanBracingInputs = inputs.spanBracingInputs
+            .filter { bracing -> member.spans.any { it.id == bracing.spanId } }
+            .associate { it.spanId to it.input }
+
+        selectedMaterial = inputs.selectedMaterial
+        availableGrades = materialRepository.getMaterialsByType(selectedMaterial)
+        activeMaterialGrade = inputs.activeMaterialGrade
+            ?: availableGrades.firstOrNull()
+
+        availableShapeTypes = sectionRepository.getShapeTypes(selectedMaterial)
+        selectedShapeType = inputs.selectedShapeType ?: availableShapeTypes.firstOrNull()
+        availableSections = selectedShapeType?.let {
+            sectionRepository.getSections(selectedMaterial, it)
+        } ?: emptyList()
+        selectedSection = inputs.selectedSectionId?.let { sectionId ->
+            sectionRepository.getSectionById(sectionId)
+                ?: availableSections.find { it.id == sectionId }
+        } ?: availableSections.firstOrNull()
+
+        selectedCombinationSet = inputs.selectedCombinationSetId?.let { setId ->
+            activeBuildingCode?.getCombinationSet(setId)
+        } ?: selectedCombinationSet
+        enabledCombinations = inputs.enabledCombinationNames.ifEmpty {
+            selectedCombinationSet?.combinations?.map { it.name }?.toSet() ?: emptySet()
+        }
+        selectedAnalysisCombination = inputs.selectedAnalysisCombinationName?.let { name ->
+            selectedCombinationSet?.combinations?.find { it.name == name }
+        }
     }
 
 

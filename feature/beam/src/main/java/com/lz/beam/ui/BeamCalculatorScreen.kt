@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
@@ -40,7 +39,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
@@ -62,6 +60,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -99,10 +100,12 @@ import com.lz.model.units.Moment
 import com.lz.model.units.UnitFormattingService
 import com.lz.model.units.UnitSystem
 import com.lz.model.units.inInches
+import com.lz.model.units.inFeet
 import com.lz.model.units.inKiloNewtons
 import com.lz.model.units.inKips
 import com.lz.model.units.inLbFt
 import com.lz.model.units.inLbIn
+import com.lz.model.units.inMeters
 import com.lz.model.units.inNewtonMeters
 import com.lz.model.units.inPoundsForce
 import com.lz.solver.analysis.AnalysisResult
@@ -117,6 +120,7 @@ import com.lz.ui.member.BracingPickerDialog
 import com.lz.ui.member.SpanEditor
 import kotlinx.coroutines.launch
 import java.util.UUID
+import java.util.Locale
 import kotlin.isFinite
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -230,14 +234,7 @@ fun BeamCalculatorScreen(
                 }
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { viewModel.calculate() },
-                icon = { Icon(Icons.Default.Calculate, contentDescription = null) },
-                text = { Text("Calculate") }
-            )
-        }
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
             // 1. Interactive Beam Plot (Always visible at top)
@@ -257,6 +254,7 @@ fun BeamCalculatorScreen(
                     showLoads = viewModel.showLoadsOnPlot,
                     loads = viewModel.loadCases.flatMap { it.loads }, // All loads by default
                     spanBracing = viewModel.spanBracingInputs,
+                    unitSystem = viewModel.unitSystem,
                     modifier = Modifier.fillMaxSize(),
                     onNodeClicked = { idx -> viewModel.editingSupportNodeIndex = idx }
                 )
@@ -384,6 +382,7 @@ fun BeamSideView(
     showLoads: Boolean,
     loads: List<Load>,
     spanBracing: Map<UUID, BracingInput>,
+    unitSystem: UnitSystem,
     modifier: Modifier = Modifier,
     onNodeClicked: (Int) -> Unit
 ) {
@@ -450,6 +449,54 @@ fun BeamSideView(
                 }
 
                 currentX += spanWidth
+            }
+
+            // Compact span dimensions near the bottom edge.
+            val dimensionY = height - 14.dp.toPx()
+            val tickHalfHeight = 6.dp.toPx()
+            val labelOffset = 7.dp.toPx()
+            val dimensionColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+            val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = dimensionColor.toArgb()
+                textAlign = android.graphics.Paint.Align.CENTER
+                textSize = 11.dp.toPx()
+                typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            }
+
+            currentX = 0f
+            member.spans.forEach { span ->
+                val spanLen = span.length.inInches.takeIf { it > 0 } ?: 1e-6
+                val spanWidth = (spanLen * scale).toFloat()
+                val endX = currentX + spanWidth
+
+                drawLine(
+                    color = dimensionColor,
+                    start = Offset(currentX, dimensionY),
+                    end = Offset(endX, dimensionY),
+                    strokeWidth = 1.dp.toPx()
+                )
+                drawLine(
+                    color = dimensionColor,
+                    start = Offset(currentX, dimensionY - tickHalfHeight),
+                    end = Offset(currentX, dimensionY + tickHalfHeight),
+                    strokeWidth = 1.dp.toPx()
+                )
+                drawLine(
+                    color = dimensionColor,
+                    start = Offset(endX, dimensionY - tickHalfHeight),
+                    end = Offset(endX, dimensionY + tickHalfHeight),
+                    strokeWidth = 1.dp.toPx()
+                )
+                drawIntoCanvas { canvas ->
+                    canvas.nativeCanvas.drawText(
+                        formatSpanDimension(span.length, unitSystem),
+                        currentX + spanWidth / 2f,
+                        dimensionY - labelOffset,
+                        textPaint
+                    )
+                }
+
+                currentX = endX
             }
 
             // 3. Draw Loads if enabled (Item 6)
@@ -596,6 +643,14 @@ internal fun getUtilizationColorInternal(ratio: Double): Color = when {
     else -> Color(0xFF4CAF50) // Green
 }
 
+private fun formatSpanDimension(length: Length, unitSystem: UnitSystem): String {
+    return if (unitSystem == UnitSystem.METRIC) {
+        "${String.format(Locale.US, "%.2f", length.inMeters)} m"
+    } else {
+        "${String.format(Locale.US, "%.2f", length.inFeet)} ft"
+    }
+}
+
 @Composable
 fun GeometryTab(viewModel: BeamViewModel) {
     var isWoodPickerVisible by remember { mutableStateOf(false) }
@@ -642,8 +697,17 @@ fun GeometryTab(viewModel: BeamViewModel) {
 
     viewModel.editingBracingSpanId?.let { spanId ->
         val span = viewModel.structuralMember.spans.find { it.id == spanId }
-        val bracing = viewModel.spanBracingInputs[spanId]
-        if (span != null && bracing != null) {
+        if (span != null) {
+            // spanBracingInputs only ever gets an entry via this dialog's own
+            // onConfirmed callback below — for any span that hasn't had bracing
+            // explicitly set yet (i.e. every span, always, on first open) the
+            // map lookup is null. Previously this block required bracing !=
+            // null to render at all, which meant the dialog could never open
+            // for a first-time edit. BracingPickerDialog already defaults
+            // safely per-material internally, so just feed it a sensible
+            // material-appropriate default here instead of blocking on null.
+            val bracing = viewModel.spanBracingInputs[spanId]
+                ?: defaultBracingInputFor(viewModel.selectedMaterial)
             BracingPickerDialog(
                 currentBracing = bracing,
                 materialType = viewModel.selectedMaterial,
@@ -656,6 +720,21 @@ fun GeometryTab(viewModel: BeamViewModel) {
             )
         }
     }
+}
+
+/**
+ * Mirrors BracingPickerDialog's own per-material `when` branch so the
+ * placeholder passed in before a span has an explicit bracing entry is
+ * already the right variant. For CONCRETE — which has no BracingInput
+ * variant at all — this value is never read: BracingPickerDialog's `else`
+ * branch renders "not applicable" regardless of what's passed.
+ */
+private fun defaultBracingInputFor(materialType: MaterialType): BracingInput = when (materialType) {
+    MaterialType.STEEL, MaterialType.COLDFORM -> BracingInput.Steel()
+    MaterialType.ALUMINUM -> BracingInput.Aluminum()
+    MaterialType.WOOD -> BracingInput.Wood()
+    MaterialType.MASONRY -> BracingInput.Masonry()
+    MaterialType.CONCRETE -> BracingInput.Steel()
 }
 
 @Composable
@@ -698,6 +777,7 @@ fun AnalysisTab(viewModel: BeamViewModel) {
 fun DesignTab(viewModel: BeamViewModel) {
     val results = viewModel.calculationResult?.results
     val detailedResult = viewModel.detailedStrengthResult
+    val detailedCombinationName = viewModel.detailedStrengthCombinationName
 
     if (results == null) {
         EmptyState("Run calculation to see design checks")
@@ -705,6 +785,7 @@ fun DesignTab(viewModel: BeamViewModel) {
         DesignSummary(
             pointResults = results.strengthDesignResults,
             detailedResult = detailedResult,
+            detailedCombinationName = detailedCombinationName,
             serviceabilityResults = results.serviceabilityResults,
             member = viewModel.structuralMember,
             unitSystem = viewModel.unitSystem
@@ -1084,6 +1165,9 @@ fun AnalysisSummary(
 
     if (analysis == null) return
 
+    val displayedCombinationName = selectedCombination?.name
+        ?: analysis.governingCombinationName
+        ?: "Governing Envelope"
     val momentUnitLabel = UnitFormattingService.getMomentUnitSymbol(unitSystem)
     val shearUnitLabel = UnitFormattingService.getForceUnitSymbol(unitSystem)
 
@@ -1111,6 +1195,11 @@ fun AnalysisSummary(
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Force Envelopes", style = MaterialTheme.typography.titleMedium)
+        InfoCard(
+            title = if (selectedCombination != null) "Selected Load Combination" else "Governing Load Combination",
+            value = displayedCombinationName,
+            description = selectedCombination?.equationText ?: "Envelope of enabled load combinations"
+        )
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatusBadge("Max Moment", "${String.format("%.1f", analysis.maxMoment.inLbIn / 12000.0)} k-ft", false)
@@ -1175,15 +1264,20 @@ fun AnalysisSummary(
 
         // Reaction Summary
         Text("Reactions", style = MaterialTheme.typography.titleSmall)
-        analysis.reactions.forEach { reaction ->
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Node ${reaction.nodeIndex} (${reaction.label})", fontWeight = FontWeight.Bold)
-                    Text("${String.format("%.1f", reaction.verticalForce.inPoundsForce)} lbs", color = MaterialTheme.colorScheme.primary)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            analysis.reactions.sortedBy { it.nodeIndex }.forEach { reaction ->
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Node ${reaction.nodeIndex + 1}", fontWeight = FontWeight.Bold)
+                        Text("${String.format("%.1f", reaction.verticalForce.inPoundsForce)} lbs", color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }
@@ -1194,6 +1288,7 @@ fun AnalysisSummary(
 fun DesignSummary(
     pointResults: List<PointCapacityResult>,
     detailedResult: StrengthDesignResult?,
+    detailedCombinationName: String?,
     serviceabilityResults: List<ServiceabilityResult>,
     member: StructuralMember,
     unitSystem: UnitSystem
@@ -1202,6 +1297,13 @@ fun DesignSummary(
         // 1. Critical Strength Check (Governing)
         if (detailedResult != null) {
             Text("Governing Strength Checks", style = MaterialTheme.typography.titleMedium)
+            detailedCombinationName?.let {
+                InfoCard(
+                    title = "Governing Load Combination",
+                    value = it,
+                    description = "Worst utilization location along the beam"
+                )
+            }
 
             DesignCard("Bending (Mx)", detailedResult.momentCheck, unitSystem)
             DesignCard("Shear (Vy)", detailedResult.shearCheck, unitSystem)

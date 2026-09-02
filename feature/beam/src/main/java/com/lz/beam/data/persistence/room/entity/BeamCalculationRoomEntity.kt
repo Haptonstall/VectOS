@@ -19,6 +19,7 @@ data class BeamCalculationRoomEntity(
     val memberJson: String,
     val resultsJson: String,
     val assumptionsJson: String,
+    val inputsJson: String = "{}",
 
     // Summary Results (for quick access/querying)
     val maxBendingMomentLbIn: Double,

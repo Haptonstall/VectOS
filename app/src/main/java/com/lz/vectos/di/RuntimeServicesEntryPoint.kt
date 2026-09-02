@@ -1,6 +1,7 @@
 package com.lz.vectos.di
 
 import com.lz.data.persistence.room.AppDatabase
+import com.lz.data.persistence.room.seeder.DatabaseSeedingCoordinator
 import com.lz.data.repository.CalculationWriter
 import com.lz.data.repository.IStructuralCodeRepository
 import com.lz.domain.material.MaterialRepository
@@ -49,6 +50,8 @@ interface RuntimeServicesEntryPoint {
     fun projectRepository(): ProjectRepository
 
     fun appDatabase(): AppDatabase
+
+    fun databaseSeedingCoordinator(): DatabaseSeedingCoordinator
 
     companion object {
         fun from(context: Context): RuntimeServicesEntryPoint =

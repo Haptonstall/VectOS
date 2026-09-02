@@ -1,0 +1,311 @@
+diff --git a/app/src/main/java/com/lz/vectos/app/VectosApplication.kt b/app/src/main/java/com/lz/vectos/app/VectosApplication.kt
+index 5a7803a..2c03707 100644
+--- a/app/src/main/java/com/lz/vectos/app/VectosApplication.kt
++++ b/app/src/main/java/com/lz/vectos/app/VectosApplication.kt
+@@ -6,6 +6,7 @@ import com.google.android.play.core.splitcompat.SplitCompat
+ import com.lz.data.persistence.room.AppDatabase
+ import com.lz.data.persistence.room.seeder.AiscSectionSeeder
+ import com.lz.data.persistence.room.seeder.BuildingCodeSeeder
++import com.lz.data.persistence.room.seeder.DatabaseSeedingCoordinator
+ import com.lz.data.persistence.room.seeder.MaterialSeeder
+ import com.lz.data.persistence.room.seeder.StructuralDataSeeder
+ import com.lz.domain.module.ModuleCatalogRepository
+@@ -35,6 +36,7 @@ class VectosApplication : Application() {
+ 
+     @Inject lateinit var subscriptionRepository: SubscriptionRepository
+     @Inject lateinit var moduleCatalogRepository: ModuleCatalogRepository
++    @Inject lateinit var databaseSeedingCoordinator: DatabaseSeedingCoordinator
+ 
+     // Application-scoped coroutine scope — cancelled only when the process dies
+     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+@@ -109,6 +111,12 @@ class VectosApplication : Application() {
+                 // Seeding failure is non-fatal — app can still run with empty catalog data.
+                 // Log here and surface in a diagnostics screen if needed.
+                 android.util.Log.e("VectosApplication", "Database seeding failed", e)
++            } finally {
++                // Release every current/future awaitSeeded() caller regardless of
++                // success or failure — a failed seed still means "seeding is done,
++                // stop waiting", not "wait forever". See DatabaseSeedingCoordinator
++                // kdoc for the race this closes.
++                databaseSeedingCoordinator.markSeeded()
+             }
+         }
+     }
+diff --git a/app/src/main/java/com/lz/vectos/di/RuntimeServicesEntryPoint.kt b/app/src/main/java/com/lz/vectos/di/RuntimeServicesEntryPoint.kt
+index 8b43368..d7d1d67 100644
+--- a/app/src/main/java/com/lz/vectos/di/RuntimeServicesEntryPoint.kt
++++ b/app/src/main/java/com/lz/vectos/di/RuntimeServicesEntryPoint.kt
+@@ -1,6 +1,7 @@
+ package com.lz.vectos.di
+ 
+ import com.lz.data.persistence.room.AppDatabase
++import com.lz.data.persistence.room.seeder.DatabaseSeedingCoordinator
+ import com.lz.data.repository.CalculationWriter
+ import com.lz.data.repository.IStructuralCodeRepository
+ import com.lz.domain.material.MaterialRepository
+@@ -50,6 +51,8 @@ interface RuntimeServicesEntryPoint {
+ 
+     fun appDatabase(): AppDatabase
+ 
++    fun databaseSeedingCoordinator(): DatabaseSeedingCoordinator
++
+     companion object {
+         fun from(context: Context): RuntimeServicesEntryPoint =
+             EntryPointAccessors.fromApplication(
+diff --git a/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt b/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt
+index 3cbd241..9f55c16 100644
+--- a/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt
++++ b/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt
+@@ -3,6 +3,7 @@ package com.lz.vectos.presentation
+ import androidx.lifecycle.ViewModel
+ import androidx.lifecycle.viewModelScope
+ import com.lz.data.repository.IStructuralCodeRepository
++import com.lz.data.persistence.room.seeder.DatabaseSeedingCoordinator
+ import com.lz.domain.calculation.CalculationMetadata
+ import com.lz.domain.project.ActiveProjectProvider
+ import com.lz.domain.project.GeographicCoordinates
+@@ -26,7 +27,8 @@ class ProjectViewModel @Inject constructor(
+     private val projectRepository: ProjectRepository,
+     private val calculationRepository: CalculationRepository,
+     private val activeProjectProvider: ActiveProjectProvider,
+-    private val structuralRepository: IStructuralCodeRepository
++    private val structuralRepository: IStructuralCodeRepository,
++    private val databaseSeedingCoordinator: DatabaseSeedingCoordinator
+ ) : ViewModel() {
+ 
+     // -------------------------------------------------------------------------
+@@ -71,6 +73,12 @@ class ProjectViewModel @Inject constructor(
+ 
+     private fun loadReferenceData() {
+         viewModelScope.launch {
++            // Wait for VectosApplication's fire-and-forget seed pass to finish
++            // before this one-shot read — otherwise a lost race on a cold
++            // launch leaves _buildingCodes permanently empty for the session
++            // (this is a one-shot suspend read, not an observed Flow, so it
++            // never self-heals). See DatabaseSeedingCoordinator kdoc.
++            databaseSeedingCoordinator.awaitSeeded()
+             _buildingCodes.value = structuralRepository.getAllBuildingCodes()
+         }
+     }
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/seeder/DatabaseSeedingCoordinator.kt b/core/data/src/main/java/com/lz/data/persistence/room/seeder/DatabaseSeedingCoordinator.kt
+new file mode 100644
+index 0000000..86fe049
+--- /dev/null
++++ b/core/data/src/main/java/com/lz/data/persistence/room/seeder/DatabaseSeedingCoordinator.kt
+@@ -0,0 +1,49 @@
++package com.lz.data.persistence.room.seeder
++
++import kotlinx.coroutines.CompletableDeferred
++import javax.inject.Inject
++import javax.inject.Singleton
++
++/**
++ * Lets any consumer `await()` for [VectosApplication]'s one-shot database
++ * seeding pass to finish before it does its own first one-shot read of
++ * seeded reference data (building codes, materials, sections, load
++ * combinations).
++ *
++ * Why this exists: [VectosApplication.seedDatabase] deliberately runs on a
++ * fire-and-forget `applicationScope.launch` — it's real disk I/O on a cold
++ * install, and blocking `Application.onCreate()` on it risks an ANR. But
++ * `MainActivity`/any ViewModel can start composing immediately after
++ * `Application.onCreate()` returns, with no guarantee seeding has finished.
++ * The reference-data reads on the consumer side (`getAllBuildingCodes()`,
++ * etc.) are one-shot suspend calls, not observed Flows, so losing this race
++ * doesn't self-heal — it leaves the relevant list empty for the rest of the
++ * app session.
++ *
++ * Invisible on the emulator: its seeders are idempotent and the emulator
++ * install is typically already seeded from many prior test runs. A genuine
++ * first/cold launch on real hardware is exactly when this race is most
++ * likely to actually be lost.
++ *
++ * Usage: [VectosApplication.seedDatabase] marks this complete (success OR
++ * failure — a failed seed still means "seeding is done, stop waiting") in a
++ * `finally` block. Any one-shot reader of seeded data calls
++ * `databaseSeedingCoordinator.awaitSeeded()` before its first read.
++ */
++@Singleton
++class DatabaseSeedingCoordinator @Inject constructor() {
++
++    private val seeded = CompletableDeferred<Unit>()
++
++    /** Suspends until seeding has finished (successfully or not). No-op if already complete. */
++    suspend fun awaitSeeded() {
++        seeded.await()
++    }
++
++    /** Marks seeding as finished, releasing every current/future [awaitSeeded] caller. Idempotent. */
++    fun markSeeded() {
++        if (!seeded.isCompleted) {
++            seeded.complete(Unit)
++        }
++    }
++}
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+index 43af6a2..c8c4ebd 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+@@ -58,7 +58,8 @@ data class UtilizationPoint(
+     val x: Length,
+     val demand: Double,
+     val capacity: Double,
+-    val ratio: Double
++    val ratio: Double,
++    val governingLimitState: String = "N/A"
+ )
+ 
+ /**
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index af37fb9..ab67a05 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
+ import com.lz.beam.domain.BeamCalculationRepository
+ import com.lz.beam.model.BeamCalculation
+ import com.lz.beam.model.BeamCalculationResults
++import com.lz.data.persistence.room.seeder.DatabaseSeedingCoordinator
+ import com.lz.data.repository.CodeNotFoundException
+ import com.lz.data.repository.IStructuralCodeRepository
+ import com.lz.domain.calculation.CalculationMetadata
+@@ -37,11 +38,11 @@ import com.lz.model.structural.StrengthDesignResult
+ import com.lz.model.structural.StructuralMember
+ import com.lz.model.structural.StructuralNode
+ import com.lz.model.structural.NodeBoundaryCondition
+-import com.lz.model.units.ForcePerLength
+ import com.lz.model.units.Length
+ import com.lz.model.units.MomentOfInertia
+ import com.lz.model.units.UnitSystem
+ import com.lz.model.units.inches
++import com.lz.model.units.lbPerFt
+ import com.lz.model.units.psiModulus
+ import com.lz.solver.material.AiscSteelCapacityCalculator
+ import com.lz.solver.material.NdsWoodCapacityCalculator
+@@ -74,7 +75,8 @@ class BeamViewModel @Inject constructor(
+     private val beamRepository: BeamCalculationRepository,
+     private val structuralRepository: IStructuralCodeRepository,
+     private val sectionRepository: SectionRepository,
+-    private val materialRepository: MaterialRepository
++    private val materialRepository: MaterialRepository,
++    private val databaseSeedingCoordinator: DatabaseSeedingCoordinator
+ ) : ViewModel() {
+ 
+     // --- State: Geometry & Properties ---
+@@ -159,7 +161,7 @@ class BeamViewModel @Inject constructor(
+                             ?: return@flatMap emptyList<PointCapacityResult>(),
+                         utilizationRatio = pt.ratio,
+                         designCapacity = pt.capacity,
+-                        governingLimitState = "See Report"
++                        governingLimitState = pt.governingLimitState
+                     )
+                 }
+             }
+@@ -198,6 +200,9 @@ class BeamViewModel @Inject constructor(
+ 
+     private fun loadInitialGeometryData() {
+         viewModelScope.launch {
++            // Same one-shot-read-loses-the-race problem as ProjectViewModel.
++            // loadReferenceData() — see DatabaseSeedingCoordinator kdoc.
++            databaseSeedingCoordinator.awaitSeeded()
+             availableMaterials = sectionRepository.getMaterials()
+             if (availableMaterials.isNotEmpty()) {
+                 onMaterialSelected(selectedMaterial)
+@@ -239,6 +244,10 @@ class BeamViewModel @Inject constructor(
+     private fun loadDefaultBuildingCode() {
+         viewModelScope.launch {
+             try {
++                // Same one-shot-read-loses-the-race problem as loadInitialGeometryData()
++                // — see DatabaseSeedingCoordinator kdoc.
++                databaseSeedingCoordinator.awaitSeeded()
++
+                 // Respect the active project's design methodology setting —
+                 // this must happen before it's used below to pick the
+                 // default LRFD/ASD combination set.
+@@ -334,7 +343,7 @@ class BeamViewModel @Inject constructor(
+                                     ?: return@flatMap emptyList<PointCapacityResult>(),
+                                 utilizationRatio = pt.ratio,
+                                 designCapacity = pt.capacity,
+-                                governingLimitState = "See Report"
++                                governingLimitState = pt.governingLimitState
+                             )
+                         }
+                     },
+@@ -480,7 +489,7 @@ class BeamViewModel @Inject constructor(
+             if (case.id == StandardLoadCases.DEAD) {
+                 val selfWeightLoads = structuralMember.spans.map { span ->
+                     Load.UniformDistributedLoad(
+-                        value = ForcePerLength(weightValue),
++                        value = weightValue.lbPerFt,
+                         spanId = span.id,
+                         locationStart = 0.0.inches,
+                         locationEnd = span.length,
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModelFactory.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModelFactory.kt
+index 879a1f4..447b9d5 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModelFactory.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModelFactory.kt
+@@ -50,7 +50,8 @@ class BeamViewModelFactory(context: Context) : ViewModelProvider.Factory {
+             beamRepository = beamRepository,
+             structuralRepository = entryPoint.structuralCodeRepository(),
+             sectionRepository = entryPoint.sectionRepository(),
+-            materialRepository = entryPoint.materialRepository()
++            materialRepository = entryPoint.materialRepository(),
++            databaseSeedingCoordinator = entryPoint.databaseSeedingCoordinator()
+         ) as T
+     }
+ }
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+index 1e9f104..6199b24 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+@@ -158,10 +158,11 @@ object BeamAnalysisSolver {
+         ) { demand -> calculator.evaluate(demand) }
+             .map { cap ->
+                 UtilizationPoint(
+-                    x        = cap.demand.x,
+-                    demand   = cap.utilizationRatio * cap.designCapacity,
+-                    capacity = cap.designCapacity,
+-                    ratio    = cap.utilizationRatio
++                    x                   = cap.demand.x,
++                    demand              = cap.utilizationRatio * cap.designCapacity,
++                    capacity            = cap.designCapacity,
++                    ratio               = cap.utilizationRatio,
++                    governingLimitState = cap.governingLimitState
+                 )
+             }
+     }
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 513b5e4..f7bc23f 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.foundation.verticalScroll
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.automirrored.filled.ArrowBack
+-import androidx.compose.material.icons.filled.Calculate
+ import androidx.compose.material.icons.filled.History
+ import androidx.compose.material.icons.filled.Info
+ import androidx.compose.material.icons.filled.Layers
+@@ -40,7 +39,6 @@ import androidx.compose.material3.HorizontalDivider
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
+ import androidx.compose.material3.MaterialTheme
+-import androidx.compose.material3.ExtendedFloatingActionButton
+ import androidx.compose.material3.Scaffold
+ import androidx.compose.material3.ScrollableTabRow
+ import androidx.compose.material3.SnackbarHost
+@@ -230,14 +228,7 @@ fun BeamCalculatorScreen(
+                 }
+             )
+         },
+-        snackbarHost = { SnackbarHost(snackbarHostState) },
+-        floatingActionButton = {
+-            ExtendedFloatingActionButton(
+-                onClick = { viewModel.calculate() },
+-                icon = { Icon(Icons.Default.Calculate, contentDescription = null) },
+-                text = { Text("Calculate") }
+-            )
+-        }
++        snackbarHost = { SnackbarHost(snackbarHostState) }
+     ) { padding ->
+         Column(modifier = Modifier.padding(padding)) {
+             // 1. Interactive Beam Plot (Always visible at top)

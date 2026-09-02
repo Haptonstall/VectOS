@@ -12,6 +12,7 @@ import com.lz.model.units.inIn2
 import com.lz.model.units.inIn3
 import com.lz.model.units.inIn4
 import com.lz.model.units.inches
+import kotlinx.serialization.Serializable
 import java.util.UUID
 import kotlin.math.max
 import kotlin.math.pow
@@ -354,6 +355,7 @@ fun SectionProfile.interpolateToCustom(other: SectionProfile, ratio: Double): Cu
 /**
  * Supported structural shape types.
  */
+@Serializable
 enum class ShapeType {
     WIDE_FLANGE,
     CHANNEL,

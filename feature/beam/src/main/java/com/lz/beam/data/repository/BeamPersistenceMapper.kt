@@ -17,7 +17,13 @@ import java.util.UUID
 /**
  * Maps between Beam domain models and Room entities.
  */
-class BeamPersistenceMapper(private val json: Json) {
+class BeamPersistenceMapper(
+    private val json: Json,
+    private val inputJson: Json = Json {
+        ignoreUnknownKeys = true
+        classDiscriminator = "_beamClass"
+    }
+) {
 
     fun toCoreMetadataRoomEntity(
         metadata: CalculationMetadata,
@@ -41,6 +47,7 @@ class BeamPersistenceMapper(private val json: Json) {
             memberJson = json.encodeToString(calculation.member),
             resultsJson = json.encodeToString(calculation.results),
             assumptionsJson = json.encodeToString(calculation.assumptions),
+            inputsJson = inputJson.encodeToString(calculation.inputs),
             maxBendingMomentLbIn = calculation.results.analysisResult.maxMoment.inLbIn,
             maxShearLbs = calculation.results.analysisResult.maxShear.inPoundsForce,
             maxDeflectionInches = calculation.results.analysisResult.maxDeflection.inInches
@@ -57,7 +64,8 @@ class BeamPersistenceMapper(private val json: Json) {
             project = project,
             member = json.decodeFromString(entity.memberJson),
             results = json.decodeFromString(entity.resultsJson),
-            assumptions = json.decodeFromString(entity.assumptionsJson)
+            assumptions = json.decodeFromString(entity.assumptionsJson),
+            inputs = inputJson.decodeFromString(entity.inputsJson)
         )
     }
 }

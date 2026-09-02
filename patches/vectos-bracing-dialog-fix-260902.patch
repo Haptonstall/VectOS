@@ -1,0 +1,46 @@
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 513b5e4..1fd99d3 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -642,8 +642,17 @@ fun GeometryTab(viewModel: BeamViewModel) {
+ 
+     viewModel.editingBracingSpanId?.let { spanId ->
+         val span = viewModel.structuralMember.spans.find { it.id == spanId }
+-        val bracing = viewModel.spanBracingInputs[spanId]
+-        if (span != null && bracing != null) {
++        if (span != null) {
++            // spanBracingInputs only ever gets an entry via this dialog's own
++            // onConfirmed callback below — for any span that hasn't had bracing
++            // explicitly set yet (i.e. every span, always, on first open) the
++            // map lookup is null. Previously this block required bracing !=
++            // null to render at all, which meant the dialog could never open
++            // for a first-time edit. BracingPickerDialog already defaults
++            // safely per-material internally, so just feed it a sensible
++            // material-appropriate default here instead of blocking on null.
++            val bracing = viewModel.spanBracingInputs[spanId]
++                ?: defaultBracingInputFor(viewModel.selectedMaterial)
+             BracingPickerDialog(
+                 currentBracing = bracing,
+                 materialType = viewModel.selectedMaterial,
+@@ -658,6 +667,21 @@ fun GeometryTab(viewModel: BeamViewModel) {
+     }
+ }
+ 
++/**
++ * Mirrors BracingPickerDialog's own per-material `when` branch so the
++ * placeholder passed in before a span has an explicit bracing entry is
++ * already the right variant. For CONCRETE — which has no BracingInput
++ * variant at all — this value is never read: BracingPickerDialog's `else`
++ * branch renders "not applicable" regardless of what's passed.
++ */
++private fun defaultBracingInputFor(materialType: MaterialType): BracingInput = when (materialType) {
++    MaterialType.STEEL, MaterialType.COLDFORM -> BracingInput.Steel()
++    MaterialType.ALUMINUM -> BracingInput.Aluminum()
++    MaterialType.WOOD -> BracingInput.Wood()
++    MaterialType.MASONRY -> BracingInput.Masonry()
++    MaterialType.CONCRETE -> BracingInput.Steel()
++}
++
+ @Composable
+ fun LoadsTab(viewModel: BeamViewModel) {
+     val selectedCombinationSet = viewModel.selectedCombinationSet

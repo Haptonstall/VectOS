@@ -1,9 +1,12 @@
 package com.lz.model.structural
 
+import kotlinx.serialization.Serializable
+
 /**
  * Categorizes materials for standard selection and design logic.
  * This is used to map building code requirements to specific design standards.
  */
+@Serializable
 enum class MaterialType(
     val defaultModulusOfElasticityPsi: Double,
     val defaultDensityPcf: Double

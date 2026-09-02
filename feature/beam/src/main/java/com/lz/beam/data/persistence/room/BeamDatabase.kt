@@ -5,6 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.lz.beam.data.persistence.room.dao.BeamCalculationDao
 import com.lz.beam.data.persistence.room.entity.BeamCalculationRoomEntity
@@ -26,10 +27,11 @@ import com.lz.beam.data.persistence.room.entity.BeamCalculationRoomEntity
  *
  * Version history:
  *   v1 — initial beam_calculations table
+ *   v2 — persisted editable beam input snapshot
  */
 @Database(
     entities = [BeamCalculationRoomEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(BeamTypeConverters::class)
@@ -45,8 +47,15 @@ abstract class BeamDatabase : RoomDatabase() {
                 BeamDatabase::class.java,
                 "vectos_beam.db"
             )
+                .addMigrations(MIGRATION_1_2)
                 .addCallback(CALLBACK)
                 .build()
+        }
+
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE beam_calculations ADD COLUMN inputsJson TEXT NOT NULL DEFAULT '{}'")
+            }
         }
 
         private val CALLBACK = object : RoomDatabase.Callback() {

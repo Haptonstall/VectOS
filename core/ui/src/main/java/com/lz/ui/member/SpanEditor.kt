@@ -180,6 +180,9 @@ fun SpanItem(
                         value = lengthText,
                         onValueChange = {
                             lengthText = it
+                            it.toDoubleOrNull()?.let { feet ->
+                                onUpdateLength(feet.feet)
+                            }
                         },
                         label = { Text("Length", style = MaterialTheme.typography.labelSmall) },
                         suffix = {

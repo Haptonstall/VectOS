@@ -135,7 +135,7 @@ fun AppNavGraph(
 
                     if (navController.graph.findNode(it.toolId) != null) {
                         navController.navigate(
-                            it.toolId
+                            "${it.toolId}?calculationId=${it.id}"
                         )
                     } else {
                         Toast.makeText(

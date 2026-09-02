@@ -58,7 +58,8 @@ data class UtilizationPoint(
     val x: Length,
     val demand: Double,
     val capacity: Double,
-    val ratio: Double
+    val ratio: Double,
+    val governingLimitState: String = "N/A"
 )
 
 /**

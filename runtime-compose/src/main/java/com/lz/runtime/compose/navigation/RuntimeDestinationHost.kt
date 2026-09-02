@@ -1,7 +1,12 @@
 package com.lz.runtime.compose.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
 import com.lz.runtime.compose.screen.api.ScreenProvider
+
+val LocalRuntimeNavigationArguments =
+    compositionLocalOf<Map<String, String>> { emptyMap() }
 
 /**
  * Resolves the correct ScreenProvider for a destination and delegates
@@ -12,7 +17,9 @@ fun RuntimeDestinationHost(
 
     destination: NavigationDestination,
 
-    providers: List<ScreenProvider>
+    providers: List<ScreenProvider>,
+
+    arguments: Map<String, String> = emptyMap()
 
 ) {
 
@@ -36,6 +43,8 @@ fun RuntimeDestinationHost(
 
             )
 
-    provider.Content(destination)
+    CompositionLocalProvider(LocalRuntimeNavigationArguments provides arguments) {
+        provider.Content(destination)
+    }
 
 }

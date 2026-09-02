@@ -1,0 +1,114 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+index 43af6a2..c8c4ebd 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+@@ -58,7 +58,8 @@ data class UtilizationPoint(
+     val x: Length,
+     val demand: Double,
+     val capacity: Double,
+-    val ratio: Double
++    val ratio: Double,
++    val governingLimitState: String = "N/A"
+ )
+ 
+ /**
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 25471b4..46d47f8 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -37,11 +37,11 @@ import com.lz.model.structural.StrengthDesignResult
+ import com.lz.model.structural.StructuralMember
+ import com.lz.model.structural.StructuralNode
+ import com.lz.model.structural.NodeBoundaryCondition
+-import com.lz.model.units.ForcePerLength
+ import com.lz.model.units.Length
+ import com.lz.model.units.MomentOfInertia
+ import com.lz.model.units.UnitSystem
+ import com.lz.model.units.inches
++import com.lz.model.units.lbPerFt
+ import com.lz.model.units.psiModulus
+ import com.lz.solver.material.AiscSteelCapacityCalculator
+ import com.lz.solver.material.NdsWoodCapacityCalculator
+@@ -161,7 +161,7 @@ class BeamViewModel @Inject constructor(
+                             ?: return@flatMap emptyList<PointCapacityResult>(),
+                         utilizationRatio = pt.ratio,
+                         designCapacity = pt.capacity,
+-                        governingLimitState = "See Report"
++                        governingLimitState = pt.governingLimitState
+                     )
+                 }
+             }
+@@ -339,7 +339,7 @@ class BeamViewModel @Inject constructor(
+                                     ?: return@flatMap emptyList<PointCapacityResult>(),
+                                 utilizationRatio = pt.ratio,
+                                 designCapacity = pt.capacity,
+-                                governingLimitState = "See Report"
++                                governingLimitState = pt.governingLimitState
+                             )
+                         }
+                     },
+@@ -485,7 +485,7 @@ class BeamViewModel @Inject constructor(
+             if (case.id == StandardLoadCases.DEAD) {
+                 val selfWeightLoads = structuralMember.spans.map { span ->
+                     Load.UniformDistributedLoad(
+-                        value = ForcePerLength(weightValue),
++                        value = weightValue.lbPerFt,
+                         spanId = span.id,
+                         locationStart = 0.0.inches,
+                         locationEnd = span.length,
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+index 1e9f104..6199b24 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+@@ -158,10 +158,11 @@ object BeamAnalysisSolver {
+         ) { demand -> calculator.evaluate(demand) }
+             .map { cap ->
+                 UtilizationPoint(
+-                    x        = cap.demand.x,
+-                    demand   = cap.utilizationRatio * cap.designCapacity,
+-                    capacity = cap.designCapacity,
+-                    ratio    = cap.utilizationRatio
++                    x                   = cap.demand.x,
++                    demand              = cap.utilizationRatio * cap.designCapacity,
++                    capacity            = cap.designCapacity,
++                    ratio               = cap.utilizationRatio,
++                    governingLimitState = cap.governingLimitState
+                 )
+             }
+     }
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 513b5e4..f7bc23f 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.foundation.verticalScroll
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.automirrored.filled.ArrowBack
+-import androidx.compose.material.icons.filled.Calculate
+ import androidx.compose.material.icons.filled.History
+ import androidx.compose.material.icons.filled.Info
+ import androidx.compose.material.icons.filled.Layers
+@@ -40,7 +39,6 @@ import androidx.compose.material3.HorizontalDivider
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
+ import androidx.compose.material3.MaterialTheme
+-import androidx.compose.material3.ExtendedFloatingActionButton
+ import androidx.compose.material3.Scaffold
+ import androidx.compose.material3.ScrollableTabRow
+ import androidx.compose.material3.SnackbarHost
+@@ -230,14 +228,7 @@ fun BeamCalculatorScreen(
+                 }
+             )
+         },
+-        snackbarHost = { SnackbarHost(snackbarHostState) },
+-        floatingActionButton = {
+-            ExtendedFloatingActionButton(
+-                onClick = { viewModel.calculate() },
+-                icon = { Icon(Icons.Default.Calculate, contentDescription = null) },
+-                text = { Text("Calculate") }
+-            )
+-        }
++        snackbarHost = { SnackbarHost(snackbarHostState) }
+     ) { padding ->
+         Column(modifier = Modifier.padding(padding)) {
+             // 1. Interactive Beam Plot (Always visible at top)

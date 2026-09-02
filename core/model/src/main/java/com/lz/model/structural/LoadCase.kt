@@ -1,8 +1,11 @@
 package com.lz.model.structural
 
+import kotlinx.serialization.Serializable
+
 /**
  * Categorizes loads into engineering-standard cases.
  */
+@Serializable
 data class LoadCase(
     val id: String,
     val name: String,

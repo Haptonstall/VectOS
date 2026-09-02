@@ -1,0 +1,186 @@
+diff --git a/app/src/main/java/com/lz/vectos/app/VectosApplication.kt b/app/src/main/java/com/lz/vectos/app/VectosApplication.kt
+index 5a7803a..0fa05dd 100644
+--- a/app/src/main/java/com/lz/vectos/app/VectosApplication.kt
++++ b/app/src/main/java/com/lz/vectos/app/VectosApplication.kt
+@@ -6,6 +6,7 @@ import com.google.android.play.core.splitcompat.SplitCompat
+ import com.lz.data.persistence.room.AppDatabase
+ import com.lz.data.persistence.room.seeder.AiscSectionSeeder
+ import com.lz.data.persistence.room.seeder.BuildingCodeSeeder
++import com.lz.data.persistence.room.seeder.DatabaseSeedingCoordinator
+ import com.lz.data.persistence.room.seeder.MaterialSeeder
+ import com.lz.data.persistence.room.seeder.StructuralDataSeeder
+ import com.lz.domain.module.ModuleCatalogRepository
+@@ -35,6 +36,7 @@ class VectosApplication : Application() {
+ 
+     @Inject lateinit var subscriptionRepository: SubscriptionRepository
+     @Inject lateinit var moduleCatalogRepository: ModuleCatalogRepository
++    @Inject lateinit var seedingCoordinator: DatabaseSeedingCoordinator
+ 
+     // Application-scoped coroutine scope — cancelled only when the process dies
+     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+@@ -109,6 +111,8 @@ class VectosApplication : Application() {
+                 // Seeding failure is non-fatal — app can still run with empty catalog data.
+                 // Log here and surface in a diagnostics screen if needed.
+                 android.util.Log.e("VectosApplication", "Database seeding failed", e)
++            } finally {
++                seedingCoordinator.markSeeded()
+             }
+         }
+     }
+diff --git a/app/src/main/java/com/lz/vectos/di/RuntimeServicesEntryPoint.kt b/app/src/main/java/com/lz/vectos/di/RuntimeServicesEntryPoint.kt
+index 8b43368..d7d1d67 100644
+--- a/app/src/main/java/com/lz/vectos/di/RuntimeServicesEntryPoint.kt
++++ b/app/src/main/java/com/lz/vectos/di/RuntimeServicesEntryPoint.kt
+@@ -1,6 +1,7 @@
+ package com.lz.vectos.di
+ 
+ import com.lz.data.persistence.room.AppDatabase
++import com.lz.data.persistence.room.seeder.DatabaseSeedingCoordinator
+ import com.lz.data.repository.CalculationWriter
+ import com.lz.data.repository.IStructuralCodeRepository
+ import com.lz.domain.material.MaterialRepository
+@@ -50,6 +51,8 @@ interface RuntimeServicesEntryPoint {
+ 
+     fun appDatabase(): AppDatabase
+ 
++    fun databaseSeedingCoordinator(): DatabaseSeedingCoordinator
++
+     companion object {
+         fun from(context: Context): RuntimeServicesEntryPoint =
+             EntryPointAccessors.fromApplication(
+diff --git a/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt b/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt
+index 3cbd241..9de9be5 100644
+--- a/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt
++++ b/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt
+@@ -2,6 +2,7 @@ package com.lz.vectos.presentation
+ 
+ import androidx.lifecycle.ViewModel
+ import androidx.lifecycle.viewModelScope
++import com.lz.data.persistence.room.seeder.DatabaseSeedingCoordinator
+ import com.lz.data.repository.IStructuralCodeRepository
+ import com.lz.domain.calculation.CalculationMetadata
+ import com.lz.domain.project.ActiveProjectProvider
+@@ -26,7 +27,8 @@ class ProjectViewModel @Inject constructor(
+     private val projectRepository: ProjectRepository,
+     private val calculationRepository: CalculationRepository,
+     private val activeProjectProvider: ActiveProjectProvider,
+-    private val structuralRepository: IStructuralCodeRepository
++    private val structuralRepository: IStructuralCodeRepository,
++    private val seedingCoordinator: DatabaseSeedingCoordinator
+ ) : ViewModel() {
+ 
+     // -------------------------------------------------------------------------
+@@ -71,6 +73,7 @@ class ProjectViewModel @Inject constructor(
+ 
+     private fun loadReferenceData() {
+         viewModelScope.launch {
++            seedingCoordinator.awaitSeeded()
+             _buildingCodes.value = structuralRepository.getAllBuildingCodes()
+         }
+     }
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/seeder/DatabaseSeedingCoordinator.kt b/core/data/src/main/java/com/lz/data/persistence/room/seeder/DatabaseSeedingCoordinator.kt
+new file mode 100644
+index 0000000..6ace187
+--- /dev/null
++++ b/core/data/src/main/java/com/lz/data/persistence/room/seeder/DatabaseSeedingCoordinator.kt
+@@ -0,0 +1,47 @@
++package com.lz.data.persistence.room.seeder
++
++import kotlinx.coroutines.CompletableDeferred
++import javax.inject.Inject
++import javax.inject.Singleton
++
++/**
++ * Signals when VectosApplication's one-time catalog seeding
++ * (BuildingCodeSeeder / StructuralDataSeeder / AiscSectionSeeder /
++ * MaterialSeeder) has finished, so consumers that read seeded reference
++ * data at startup can wait for it instead of racing it.
++ *
++ * VectosApplication.seedDatabase() runs on a fire-and-forget
++ * applicationScope coroutine — deliberately not runBlocking, since a full
++ * cold seed (building codes, load combinations, AISC section catalog,
++ * materials) is real disk I/O, not the "microseconds" a genuinely trivial
++ * startup check would cost; blocking Application.onCreate() on it would
++ * risk an ANR on slower devices. But MainActivity — and any ViewModel it
++ * constructs — can start composing essentially immediately after
++ * Application.onCreate() returns, with no guarantee seeding has finished
++ * by then. On a warm/previously-seeded install (seeders are idempotent —
++ * they no-op once their tables are non-empty) the race is invisible,
++ * which is why this went unnoticed on repeatedly-reused emulator installs.
++ * On a genuine first/cold launch on real device hardware, seeding can lose
++ * that race outright, and since the affected reads are one-shot
++ * (getAllBuildingCodes() etc. resolve a single suspend snapshot, not an
++ * observed Flow) a lost race isn't just briefly-empty — it stays empty for
++ * that app session.
++ *
++ * Any consumer reading seeded catalog data during startup should
++ * `awaitSeeded()` before its first read.
++ */
++@Singleton
++class DatabaseSeedingCoordinator @Inject constructor() {
++
++    private val completion = CompletableDeferred<Unit>()
++
++    suspend fun awaitSeeded() = completion.await()
++
++    /** Called once seeding has finished — successfully or not; see
++     * VectosApplication's seedDatabase(). Seeding failure is treated as
++     * non-fatal there (app can still run with an empty catalog), so this
++     * completes either way rather than leaving waiters hanging forever. */
++    fun markSeeded() {
++        if (!completion.isCompleted) completion.complete(Unit)
++    }
++}
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index af37fb9..25471b4 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -49,6 +49,7 @@ import com.lz.solver.envelope.ServiceabilityEvaluationService
+ import com.lz.beam.solver.BeamAnalysisSolver
+ import com.lz.beam.solver.BeamAnalysisConfig
+ import com.lz.beam.runtime.BeamNavigationDestination
++import com.lz.data.persistence.room.seeder.DatabaseSeedingCoordinator
+ import com.lz.domain.project.ActiveProjectProvider
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+@@ -74,7 +75,8 @@ class BeamViewModel @Inject constructor(
+     private val beamRepository: BeamCalculationRepository,
+     private val structuralRepository: IStructuralCodeRepository,
+     private val sectionRepository: SectionRepository,
+-    private val materialRepository: MaterialRepository
++    private val materialRepository: MaterialRepository,
++    private val seedingCoordinator: DatabaseSeedingCoordinator
+ ) : ViewModel() {
+ 
+     // --- State: Geometry & Properties ---
+@@ -198,6 +200,7 @@ class BeamViewModel @Inject constructor(
+ 
+     private fun loadInitialGeometryData() {
+         viewModelScope.launch {
++            seedingCoordinator.awaitSeeded()
+             availableMaterials = sectionRepository.getMaterials()
+             if (availableMaterials.isNotEmpty()) {
+                 onMaterialSelected(selectedMaterial)
+@@ -239,6 +242,8 @@ class BeamViewModel @Inject constructor(
+     private fun loadDefaultBuildingCode() {
+         viewModelScope.launch {
+             try {
++                seedingCoordinator.awaitSeeded()
++
+                 // Respect the active project's design methodology setting —
+                 // this must happen before it's used below to pick the
+                 // default LRFD/ASD combination set.
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModelFactory.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModelFactory.kt
+index 879a1f4..5be0ea1 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModelFactory.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModelFactory.kt
+@@ -50,7 +50,8 @@ class BeamViewModelFactory(context: Context) : ViewModelProvider.Factory {
+             beamRepository = beamRepository,
+             structuralRepository = entryPoint.structuralCodeRepository(),
+             sectionRepository = entryPoint.sectionRepository(),
+-            materialRepository = entryPoint.materialRepository()
++            materialRepository = entryPoint.materialRepository(),
++            seedingCoordinator = entryPoint.databaseSeedingCoordinator()
+         ) as T
+     }
+ }

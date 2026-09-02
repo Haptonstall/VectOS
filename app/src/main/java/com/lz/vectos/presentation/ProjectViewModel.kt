@@ -2,6 +2,7 @@ package com.lz.vectos.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lz.data.persistence.room.seeder.DatabaseSeedingCoordinator
 import com.lz.data.repository.IStructuralCodeRepository
 import com.lz.domain.calculation.CalculationMetadata
 import com.lz.domain.project.ActiveProjectProvider
@@ -26,7 +27,8 @@ class ProjectViewModel @Inject constructor(
     private val projectRepository: ProjectRepository,
     private val calculationRepository: CalculationRepository,
     private val activeProjectProvider: ActiveProjectProvider,
-    private val structuralRepository: IStructuralCodeRepository
+    private val structuralRepository: IStructuralCodeRepository,
+    private val seedingCoordinator: DatabaseSeedingCoordinator
 ) : ViewModel() {
 
     // -------------------------------------------------------------------------
@@ -71,6 +73,7 @@ class ProjectViewModel @Inject constructor(
 
     private fun loadReferenceData() {
         viewModelScope.launch {
+            seedingCoordinator.awaitSeeded()
             _buildingCodes.value = structuralRepository.getAllBuildingCodes()
         }
     }

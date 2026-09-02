@@ -6,6 +6,7 @@ import com.google.android.play.core.splitcompat.SplitCompat
 import com.lz.data.persistence.room.AppDatabase
 import com.lz.data.persistence.room.seeder.AiscSectionSeeder
 import com.lz.data.persistence.room.seeder.BuildingCodeSeeder
+import com.lz.data.persistence.room.seeder.DatabaseSeedingCoordinator
 import com.lz.data.persistence.room.seeder.MaterialSeeder
 import com.lz.data.persistence.room.seeder.StructuralDataSeeder
 import com.lz.domain.module.ModuleCatalogRepository
@@ -35,6 +36,7 @@ class VectosApplication : Application() {
 
     @Inject lateinit var subscriptionRepository: SubscriptionRepository
     @Inject lateinit var moduleCatalogRepository: ModuleCatalogRepository
+    @Inject lateinit var seedingCoordinator: DatabaseSeedingCoordinator
 
     // Application-scoped coroutine scope — cancelled only when the process dies
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -109,6 +111,8 @@ class VectosApplication : Application() {
                 // Seeding failure is non-fatal — app can still run with empty catalog data.
                 // Log here and surface in a diagnostics screen if needed.
                 android.util.Log.e("VectosApplication", "Database seeding failed", e)
+            } finally {
+                seedingCoordinator.markSeeded()
             }
         }
     }

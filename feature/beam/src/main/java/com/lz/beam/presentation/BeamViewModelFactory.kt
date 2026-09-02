@@ -50,7 +50,8 @@ class BeamViewModelFactory(context: Context) : ViewModelProvider.Factory {
             beamRepository = beamRepository,
             structuralRepository = entryPoint.structuralCodeRepository(),
             sectionRepository = entryPoint.sectionRepository(),
-            materialRepository = entryPoint.materialRepository()
+            materialRepository = entryPoint.materialRepository(),
+            seedingCoordinator = entryPoint.databaseSeedingCoordinator()
         ) as T
     }
 }

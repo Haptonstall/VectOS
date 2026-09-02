@@ -158,10 +158,11 @@ object BeamAnalysisSolver {
         ) { demand -> calculator.evaluate(demand) }
             .map { cap ->
                 UtilizationPoint(
-                    x        = cap.demand.x,
-                    demand   = cap.utilizationRatio * cap.designCapacity,
-                    capacity = cap.designCapacity,
-                    ratio    = cap.utilizationRatio
+                    x                   = cap.demand.x,
+                    demand              = cap.utilizationRatio * cap.designCapacity,
+                    capacity            = cap.designCapacity,
+                    ratio               = cap.utilizationRatio,
+                    governingLimitState = cap.governingLimitState
                 )
             }
     }

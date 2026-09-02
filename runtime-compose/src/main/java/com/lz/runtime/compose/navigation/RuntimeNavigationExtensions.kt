@@ -2,6 +2,8 @@ package com.lz.runtime.compose.navigation
 
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
+import androidx.navigation.NavType
 import com.lz.runtime.api.RuntimeEnvironment
 import com.lz.runtime.compose.api.ComposeRuntimeModule
 
@@ -46,6 +48,32 @@ fun NavGraphBuilder.installRuntimeRoutes(
                 destination = destination,
 
                 providers = providers
+
+            )
+
+        }
+
+        composable(
+            route = "${destination.id}?calculationId={calculationId}",
+            arguments = listOf(
+                navArgument("calculationId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+
+            RuntimeDestinationHost(
+
+                destination = destination,
+
+                providers = providers,
+
+                arguments = backStackEntry.arguments
+                    ?.getString("calculationId")
+                    ?.let { mapOf("calculationId" to it) }
+                    ?: emptyMap()
 
             )
 
