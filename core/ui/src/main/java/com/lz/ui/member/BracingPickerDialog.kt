@@ -676,7 +676,7 @@ private fun DialogActions(
 }
 
 @Composable
-private fun BracingOptionButton(
+internal fun BracingOptionButton(
     title: String,
     isSelected: Boolean,
     onClick: () -> Unit,

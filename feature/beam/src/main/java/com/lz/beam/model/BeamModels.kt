@@ -2,6 +2,7 @@ package com.lz.beam.model
 
 import com.lz.domain.calculation.CalculationMetadata
 import com.lz.domain.project.Project
+import com.lz.model.regulatory.codes.ServiceabilityCriterion
 import com.lz.model.structural.BracingInput
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.LoadCase
@@ -52,7 +53,8 @@ data class BeamCalculationInputs(
     val includeSelfWeight: Boolean = true,
     val methodology: DesignMethodology = DesignMethodology.LRFD,
     val isStrongAxis: Boolean = true,
-    val spanBracingInputs: List<SpanBracingInput> = emptyList()
+    val spanBracingInputs: List<SpanBracingInput> = emptyList(),
+    val spanDeflectionOverrides: List<SpanDeflectionOverride> = emptyList()
 )
 
 @Serializable
@@ -60,6 +62,13 @@ data class SpanBracingInput(
     @Serializable(with = UUIDSerializer::class)
     val spanId: UUID,
     val input: BracingInput
+)
+
+@Serializable
+data class SpanDeflectionOverride(
+    @Serializable(with = UUIDSerializer::class)
+    val spanId: UUID,
+    val criteria: List<ServiceabilityCriterion>
 )
 
 /**

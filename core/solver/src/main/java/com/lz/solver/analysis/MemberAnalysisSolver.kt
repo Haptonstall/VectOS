@@ -240,28 +240,17 @@ object MemberAnalysisSolver {
 
         return governingResult.copy(
             combinationResults = combinationResults,
+            // Source the reported name from the SAME data that produces the displayed
+            // envelope numbers (envelopeResult, above) rather than recomputing it
+            // independently. The previous approach compared each combo's own global
+            // max in isolation — a redundant, disconnected calculation that could
+            // (and did) disagree with which combo actually produced the displayed
+            // peak, e.g. reporting a dead-load-only combo as governing even when a
+            // combined dead+live combo produced the larger displayed moment/shear.
             governingCombinationName =
-                determineGoverningCombinationName(combinationResults)
+                envelopeResult.governingMaxMoment?.governingCombination?.name
+                    ?: envelopeResult.governingMaxShear?.governingCombination?.name
         )
-    }
-
-    private fun determineGoverningCombinationName(
-        combinationResults: Map<String, AnalysisResult>
-    ): String? {
-        if (combinationResults.isEmpty()) {
-            return null
-        }
-
-        return combinationResults.maxByOrNull { (_, result) ->
-            maxOf(
-                abs(result.maxMoment.lbIn),
-                abs(result.maxMomentY.lbIn),
-                abs(result.maxShear.pounds),
-                abs(result.maxShearY.pounds),
-                abs(result.maxAxial.pounds),
-                abs(result.maxTorsion.lbIn)
-            )
-        }?.key
     }
 
     private fun buildSpanResults(

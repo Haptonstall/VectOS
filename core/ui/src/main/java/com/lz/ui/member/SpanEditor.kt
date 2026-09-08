@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.lz.model.regulatory.codes.ServiceabilityCriterion
 import com.lz.model.structural.BracingInput
 import com.lz.model.structural.SpanGeometry
 import com.lz.model.units.Length
@@ -53,11 +54,13 @@ fun SpanEditor(
     spans: List<SpanGeometry>,
     activeSpanId: UUID?,
     spanBracing: Map<UUID, BracingInput> = emptyMap(),
+    spanDeflectionOverrides: Map<UUID, List<ServiceabilityCriterion>> = emptyMap(),
     onAddSpan: () -> Unit,
     onRemoveSpan: (UUID) -> Unit,
     onUpdateSpanLength: (UUID, Length) -> Unit,
     onSelectSpan: (UUID) -> Unit,
     onEditBracing: (UUID) -> Unit,
+    onEditDeflection: (UUID) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var spanToRemove by remember { mutableStateOf<UUID?>(null) }
@@ -91,12 +94,14 @@ fun SpanEditor(
                 index = index,
                 span = span,
                 bracing = spanBracing[span.id],
+                deflectionOverride = spanDeflectionOverrides[span.id],
                 isActive = span.id == activeSpanId,
                 canRemove = spans.size > 1,
                 onRemove = { spanToRemove = span.id },
                 onUpdateLength = { onUpdateSpanLength(span.id, it) },
                 onSelect = { onSelectSpan(span.id) },
-                onEditBracing = { onEditBracing(span.id) }
+                onEditBracing = { onEditBracing(span.id) },
+                onEditDeflection = { onEditDeflection(span.id) }
             )
         }
     }
@@ -131,12 +136,14 @@ fun SpanItem(
     index: Int,
     span: SpanGeometry,
     bracing: BracingInput?,
+    deflectionOverride: List<ServiceabilityCriterion>?,
     isActive: Boolean,
     canRemove: Boolean,
     onRemove: () -> Unit,
     onUpdateLength: (Length) -> Unit,
     onSelect: () -> Unit,
-    onEditBracing: () -> Unit
+    onEditBracing: () -> Unit,
+    onEditDeflection: () -> Unit
 ) {
     var lengthText by remember(span.id) { mutableStateOf(String.format(Locale.US, "%.2f", span.length.inFeet)) }
 
@@ -237,7 +244,7 @@ fun SpanItem(
 
                     // Deflection Button
                     Surface(
-                        onClick = { /* TODO: Deflection Dialog */ },
+                        onClick = onEditDeflection,
                         color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f).height(56.dp)
@@ -252,7 +259,7 @@ fun SpanItem(
                                 color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
                             )
                             Text(
-                                "floor",
+                                DeflectionPresets.labelFor(deflectionOverride),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer

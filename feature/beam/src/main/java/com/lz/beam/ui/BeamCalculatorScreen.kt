@@ -76,6 +76,7 @@ import com.lz.beam.model.BeamCalculationResults
 import com.lz.beam.presentation.BeamViewModel
 import com.lz.domain.project.Project
 import com.lz.model.regulatory.LoadCombination
+import com.lz.model.regulatory.codes.ServiceabilityCriterion
 import com.lz.model.structural.BracingInput
 import com.lz.model.structural.BracingMode
 import com.lz.model.structural.DesignEquationTrace
@@ -117,6 +118,7 @@ import com.lz.ui.boundary.BoundaryConditionPickerConfig
 import com.lz.ui.loads.LoadEditor
 import com.lz.ui.material.WoodMaterialPickerDialog
 import com.lz.ui.member.BracingPickerDialog
+import com.lz.ui.member.DeflectionCriteriaPickerDialog
 import com.lz.ui.member.SpanEditor
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -393,6 +395,7 @@ fun BeamSideView(
         else -> Color.DarkGray
     }
     val loadColor = MaterialTheme.colorScheme.error
+    val dimensionColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
 
     BoxWithConstraints(modifier = modifier.padding(horizontal = 32.dp, vertical = 24.dp)) {
         val diagramWidthDp = maxWidth
@@ -426,7 +429,7 @@ fun BeamSideView(
                     if (startNode != null) {
                         drawStructuralSupport(startNode.boundaryCondition, 0f, centerY + beamHeightPx / 2f, 30f, Color.Gray)
                     }
-                    drawStructuralJoint(0f, centerY + beamHeightPx / 2f, if (showJointLabels) "0" else null, Color.Gray, showJointLabels)
+                    drawStructuralJoint(0f, centerY + beamHeightPx / 2f, if (showJointLabels) "1" else null, Color.Gray, showJointLabels)
                 }
 
                 // Draw End Support
@@ -434,7 +437,7 @@ fun BeamSideView(
                 if (endNode != null) {
                     drawStructuralSupport(endNode.boundaryCondition, currentX + spanWidth, centerY + beamHeightPx / 2f, 30f, Color.Gray)
                 }
-                drawStructuralJoint(currentX + spanWidth, centerY + beamHeightPx / 2f, if (showJointLabels) "${idx + 1}" else null, Color.Gray, showJointLabels)
+                drawStructuralJoint(currentX + spanWidth, centerY + beamHeightPx / 2f, if (showJointLabels) "${idx + 2}" else null, Color.Gray, showJointLabels)
 
                 // Draw Span Dividers (Vertical ticks)
                 drawLine(Color.LightGray, Offset(currentX, centerY - 20f), Offset(currentX, centerY + 20f), 2f)
@@ -455,7 +458,6 @@ fun BeamSideView(
             val dimensionY = height - 14.dp.toPx()
             val tickHalfHeight = 6.dp.toPx()
             val labelOffset = 7.dp.toPx()
-            val dimensionColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
             val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                 color = dimensionColor.toArgb()
                 textAlign = android.graphics.Paint.Align.CENTER
@@ -681,7 +683,9 @@ fun GeometryTab(viewModel: BeamViewModel) {
         activeSpanId = viewModel.activeSpanId,
         onSelectSpan = { viewModel.activeSpanId = it },
         onEditBracing = { viewModel.editingBracingSpanId = it },
-        spanBracing = viewModel.spanBracingInputs
+        spanBracing = viewModel.spanBracingInputs,
+        onEditDeflection = { viewModel.editingDeflectionSpanId = it },
+        spanDeflectionOverrides = viewModel.spanDeflectionOverrides
     )
 
     if (isWoodPickerVisible) {
@@ -716,6 +720,20 @@ fun GeometryTab(viewModel: BeamViewModel) {
                 onConfirmed = {
                     viewModel.updateSpanBracing(spanId, it)
                     viewModel.editingBracingSpanId = null
+                }
+            )
+        }
+    }
+
+    viewModel.editingDeflectionSpanId?.let { spanId ->
+        val span = viewModel.structuralMember.spans.find { it.id == spanId }
+        if (span != null) {
+            DeflectionCriteriaPickerDialog(
+                currentCriteria = viewModel.spanDeflectionOverrides[spanId],
+                onDismiss = { viewModel.editingDeflectionSpanId = null },
+                onConfirmed = {
+                    viewModel.updateSpanDeflectionCriteria(spanId, it)
+                    viewModel.editingDeflectionSpanId = null
                 }
             )
         }
@@ -778,15 +796,24 @@ fun DesignTab(viewModel: BeamViewModel) {
     val results = viewModel.calculationResult?.results
     val detailedResult = viewModel.detailedStrengthResult
     val detailedCombinationName = viewModel.detailedStrengthCombinationName
+    val governingSpanId = viewModel.governingSpanId
 
     if (results == null) {
         EmptyState("Run calculation to see design checks")
     } else {
+        // Scope serviceability checks to the same span the governing strength
+        // check is on — consistent with the strength side of this tab, which
+        // already shows only the single worst-case location, not a per-span
+        // breakdown. Results without a spanId (older persisted calculations,
+        // from before per-span serviceability existed) are kept regardless.
+        val scopedServiceabilityResults = results.serviceabilityResults.filter {
+            it.spanId == null || it.spanId == governingSpanId
+        }
         DesignSummary(
             pointResults = results.strengthDesignResults,
             detailedResult = detailedResult,
             detailedCombinationName = detailedCombinationName,
-            serviceabilityResults = results.serviceabilityResults,
+            serviceabilityResults = scopedServiceabilityResults,
             member = viewModel.structuralMember,
             unitSystem = viewModel.unitSystem
         )
@@ -887,7 +914,9 @@ fun GeometryConfiguration(
     activeSpanId: UUID?,
     onSelectSpan: (UUID) -> Unit,
     onEditBracing: (UUID) -> Unit,
-    spanBracing: Map<UUID, BracingInput> = emptyMap()
+    spanBracing: Map<UUID, BracingInput> = emptyMap(),
+    onEditDeflection: (UUID) -> Unit,
+    spanDeflectionOverrides: Map<UUID, List<ServiceabilityCriterion>> = emptyMap()
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
         // 1. Span Management
@@ -895,11 +924,13 @@ fun GeometryConfiguration(
             spans = member.spans,
             activeSpanId = activeSpanId,
             spanBracing = spanBracing,
+            spanDeflectionOverrides = spanDeflectionOverrides,
             onAddSpan = onAddSpan,
             onRemoveSpan = onRemoveSpan,
             onUpdateSpanLength = onUpdateSpanLength,
             onSelectSpan = onSelectSpan,
-            onEditBracing = onEditBracing
+            onEditBracing = onEditBracing,
+            onEditDeflection = onEditDeflection
         )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))

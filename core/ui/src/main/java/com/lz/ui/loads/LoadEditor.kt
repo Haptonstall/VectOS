@@ -47,6 +47,8 @@ import com.lz.model.structural.LoadDirection
 import com.lz.model.structural.SpanGeometry
 import com.lz.model.units.UnitSystem
 import com.lz.model.units.feet
+import com.lz.model.units.inFeet
+import com.lz.model.units.inMeters
 import com.lz.model.units.kiloNewtons
 import com.lz.model.units.lbFt
 import com.lz.model.units.lbIn
@@ -105,6 +107,7 @@ fun LoadEditor(
                     load = load,
                     isSelected = selectedLoad == load,
                     formatter = formatter,
+                    spans = spans,
                     onSelect = { onLoadSelected(if (selectedLoad == load) null else load) },
                     onDelete = { onDeleteLoad(load) }
                 )
@@ -132,6 +135,7 @@ fun LoadItem(
     load: Load,
     isSelected: Boolean,
     formatter: UnitFormatter,
+    spans: List<SpanGeometry>,
     onSelect: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -174,6 +178,15 @@ fun LoadItem(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold
                 )
+
+                val spanIndex = spans.indexOfFirst { it.id == load.spanId }
+                if (spanIndex >= 0) {
+                    Text(
+                        "Span ${spanIndex + 1}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
 
                 val details = when (load) {
                     is Load.PointLoad -> "${formatter.force(load.value.pounds)} @ ${
@@ -234,6 +247,7 @@ fun AddLoadDialog(
 ) {
     var loadType by remember { mutableStateOf(0) } // 0: Point, 1: UDL, 2: Moment, 3: Axial
     var direction by remember { mutableStateOf(LoadDirection.VERTICAL_DOWN) }
+    var selectedSpanId by remember { mutableStateOf(spans.firstOrNull()?.id) }
     var value1 by remember { mutableStateOf("") }
     var value2 by remember { mutableStateOf("") }
     var pos1 by remember { mutableStateOf("") }
@@ -262,6 +276,30 @@ fun AddLoadDialog(
                     }
                 }
 
+                // Span selection — which span this load applies to. Position fields below
+                // are span-local (0 to this span's own length), not global beam position.
+                if (spans.size > 1) {
+                    Text("Span", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    ScrollableTabRow(
+                        selectedTabIndex = spans.indexOfFirst { it.id == selectedSpanId }.coerceAtLeast(0),
+                        edgePadding = 0.dp
+                    ) {
+                        spans.forEachIndexed { index, span ->
+                            Tab(
+                                selected = span.id == selectedSpanId,
+                                onClick = {
+                                    selectedSpanId = span.id
+                                    val newSpanLengthValue = if (unitSystem == UnitSystem.METRIC)
+                                        span.length.inMeters else span.length.inFeet
+                                    pos2 = newSpanLengthValue.toString()
+                                }
+                            ) {
+                                Text("Span ${index + 1}", modifier = Modifier.padding(vertical = 8.dp))
+                            }
+                        }
+                    }
+                }
+
                 // Direction Dropdown (Mocked for brevity, but should list relevant directions)
                 Text(
                     "Direction: ${direction.name.replace("_", " ")}",
@@ -285,6 +323,10 @@ fun AddLoadDialog(
                 )
 
                 if (loadType != 3) {
+                    val selectedSpan = spans.find { it.id == selectedSpanId }
+                    val spanLengthDisplay = selectedSpan?.let {
+                        if (unitSystem == UnitSystem.METRIC) it.length.inMeters else it.length.inFeet
+                    }
                     val posLabel = if (loadType == 1) {
                         if (unitSystem == UnitSystem.METRIC) "Start Position (m)" else "Start Position (ft)"
                     } else {
@@ -297,6 +339,13 @@ fun AddLoadDialog(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (spanLengthDisplay != null) {
+                        Text(
+                            "Measured from the start of this span (0 – ${"%.2f".format(spanLengthDisplay)})",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 if (loadType == 1) {
@@ -322,8 +371,9 @@ fun AddLoadDialog(
                     val p1 = if (unitSystem == UnitSystem.METRIC) p1raw.meters else p1raw.feet
                     val p2 = if (unitSystem == UnitSystem.METRIC) p2raw.meters else p2raw.feet
 
-                    // Use the first span as default if available
-                    val targetSpanId = spans.firstOrNull()?.id ?: UUID.randomUUID()
+                    // Use the currently selected span (defaults to the first if the
+                    // dialog was never shown a picker, e.g. a single-span beam).
+                    val targetSpanId = selectedSpanId ?: spans.firstOrNull()?.id ?: UUID.randomUUID()
 
                     val load = when (loadType) {
                         0 -> Load.PointLoad(

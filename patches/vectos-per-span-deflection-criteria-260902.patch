@@ -1,0 +1,738 @@
+diff --git a/core/model/src/main/java/com/lz/model/structural/ServiceabilityModels.kt b/core/model/src/main/java/com/lz/model/structural/ServiceabilityModels.kt
+index ec6f9eb..d37b093 100644
+--- a/core/model/src/main/java/com/lz/model/structural/ServiceabilityModels.kt
++++ b/core/model/src/main/java/com/lz/model/structural/ServiceabilityModels.kt
+@@ -2,15 +2,23 @@ package com.lz.model.structural
+ 
+ import com.lz.model.regulatory.codes.ServiceabilityCriterion
+ import com.lz.model.units.Length
++import com.lz.model.util.UUIDSerializer
+ import kotlinx.serialization.Serializable
++import java.util.UUID
+ 
+ /**
+  * The computed outcome of a serviceability check against a specific criterion.
++ *
++ * [spanId] is null for results computed before per-span evaluation existed
++ * (older persisted calculations) — treat null as "member-wide, not tied to
++ * one span" rather than an error.
+  */
+ @Serializable
+ data class ServiceabilityResult(
+     val actualDeflection: Length,
+     val allowableDeflection: Length,
+     val utilization: Double,
+-    val criterion: ServiceabilityCriterion
++    val criterion: ServiceabilityCriterion,
++    @Serializable(with = UUIDSerializer::class)
++    val spanId: UUID? = null
+ )
+\ No newline at end of file
+diff --git a/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt b/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
+index 4286f16..fe24ee8 100644
+--- a/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
++++ b/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
+@@ -2,6 +2,7 @@ package com.lz.solver.envelope
+ 
+ import com.lz.model.regulatory.LoadCategory
+ import com.lz.model.regulatory.codes.BuildingCode
++import com.lz.model.regulatory.codes.ServiceabilityCriterion
+ import com.lz.model.structural.ServiceabilityResult
+ import com.lz.model.structural.StationDemand
+ import com.lz.model.structural.StructuralMember
+@@ -21,53 +22,63 @@ import kotlin.math.abs
+ object ServiceabilityEvaluationService {
+ 
+     /**
+-     * Evaluates serviceability for a member based on building code criteria.
+-     * Uses the full analysis result which contains all load combination passes.
++     * Evaluates serviceability per span. Each span uses its own override
++     * criteria list if present in [spanOverrides], falling back to the
++     * building code's criteria otherwise — and, critically, uses that
++     * span's own length as the denominator base and that span's own
++     * governing deflection, not the whole member's. (Deflection limits like
++     * L/360 are defined per span; lumping a multi-span beam's total length
++     * into one L/360 check was never correct, independent of the override
++     * feature this enables.)
+      */
+     fun evaluate(
+         member: StructuralMember,
+         analysisResult: AnalysisResult,
+-        buildingCode: BuildingCode
++        buildingCode: BuildingCode,
++        spanOverrides: Map<UUID, List<ServiceabilityCriterion>> = emptyMap()
+     ): List<ServiceabilityResult> {
+-        val totalLength = member.spans.sumOf { it.length.inches }
++        return member.spans.flatMap { span ->
++            val criteria = spanOverrides[span.id] ?: buildingCode.serviceabilityCriteria
++            val spanLengthInches = span.length.inches
+ 
+-        return buildingCode.serviceabilityCriteria.map { criterion ->
+-            // 1. Resolve which combination or category result to use for this criterion
+-            // Serviceability checks are typically unfactored (Service Level)
++            criteria.map { criterion ->
++                val governingStationResult = if (criterion.loadCategory == null) {
++                    findMaxDeflectionAcrossCombinations(analysisResult, span.id)
++                } else {
++                    findMaxDeflectionForCategory(analysisResult, criterion.loadCategory!!, span.id)
++                }
+ 
+-            val governingStationResult = if (criterion.loadCategory == null) {
+-                // Total Deflection (Look for a combination that represents "D + L + S + ...")
+-                // For now, we'll find the max deflection across all Serviceability combinations
+-                findMaxDeflectionAcrossCombinations(analysisResult)
+-            } else {
+-                // Specific Category Deflection (e.g. LIVE only)
+-                // We find the result pass for that specific category
+-                findMaxDeflectionForCategory(analysisResult, criterion.loadCategory!!)
+-            }
+-
+-            val actualDeflection = governingStationResult.deflection
+-            val allowableDeflectionInches = if (criterion.spanDenominator > 0) totalLength / criterion.spanDenominator else 0.0
++                val actualDeflection = governingStationResult.deflection
++                val allowableDeflectionInches = if (criterion.spanDenominator > 0) spanLengthInches / criterion.spanDenominator else 0.0
+ 
+-            ServiceabilityResult(
+-                actualDeflection = actualDeflection,
+-                allowableDeflection = Length(allowableDeflectionInches),
+-                utilization = if (allowableDeflectionInches > 0) abs(actualDeflection.inInches) / allowableDeflectionInches else 0.0,
+-                criterion = criterion
+-            )
++                ServiceabilityResult(
++                    actualDeflection = actualDeflection,
++                    allowableDeflection = Length(allowableDeflectionInches),
++                    utilization = if (allowableDeflectionInches > 0) abs(actualDeflection.inInches) / allowableDeflectionInches else 0.0,
++                    criterion = criterion,
++                    spanId = span.id
++                )
++            }
+         }
+     }
+ 
+     private fun findMaxDeflectionAcrossCombinations(
+-        result: AnalysisResult
++        result: AnalysisResult,
++        spanId: UUID
+     ): StationDemand {
+         // In a real implementation, we would filter result.combinationResults by those tagged with the limitState.
+-        // For now, we'll look at all combinations and find the absolute maximum deflection.
++        // For now, we'll look at all combinations and find the absolute maximum deflection for this span.
+         return result.combinationResults.values
+             .flatMap { it.spanResults }
+             .flatMap { it.stationDemands }
++            .filter { it.spanId == spanId }
+             .maxByOrNull { abs(it.deflection.inInches) }
++            ?: result.spanResults
++                .flatMap { it.stationDemands }
++                .filter { it.spanId == spanId }
++                .maxByOrNull { abs(it.deflection.inInches) }
+             ?: StationDemand(
+-                spanId = UUID.randomUUID(),
++                spanId = spanId,
+                 x = 0.0.inches,
+                 moment = Moment(0.0),
+                 shear = Force(0.0)
+@@ -76,12 +87,25 @@ object ServiceabilityEvaluationService {
+ 
+     private fun findMaxDeflectionForCategory(
+         result: AnalysisResult,
+-        category: LoadCategory
++        category: LoadCategory,
++        spanId: UUID
+     ): StationDemand {
+         // Fallback: Look for a combination named after the category (e.g., "Live Load")
+         val categoryResult = result.combinationResults[category.label] ?: result.combinationResults[category.shortLabel]
+ 
+-        return categoryResult?.spanResults?.flatMap { it.stationDemands }?.maxByOrNull { abs(it.deflection.inInches) }
+-            ?: result.spanResults.flatMap { it.stationDemands }.maxByOrNull { abs(it.deflection.inInches) }!!
++        return categoryResult?.spanResults
++            ?.flatMap { it.stationDemands }
++            ?.filter { it.spanId == spanId }
++            ?.maxByOrNull { abs(it.deflection.inInches) }
++            ?: result.spanResults
++                .flatMap { it.stationDemands }
++                .filter { it.spanId == spanId }
++                .maxByOrNull { abs(it.deflection.inInches) }
++            ?: StationDemand(
++                spanId = spanId,
++                x = 0.0.inches,
++                moment = Moment(0.0),
++                shear = Force(0.0)
++            )
+     }
+ }
+\ No newline at end of file
+diff --git a/core/ui/src/main/java/com/lz/ui/member/BracingPickerDialog.kt b/core/ui/src/main/java/com/lz/ui/member/BracingPickerDialog.kt
+index db0e09f..7165226 100644
+--- a/core/ui/src/main/java/com/lz/ui/member/BracingPickerDialog.kt
++++ b/core/ui/src/main/java/com/lz/ui/member/BracingPickerDialog.kt
+@@ -676,7 +676,7 @@ private fun DialogActions(
+ }
+ 
+ @Composable
+-private fun BracingOptionButton(
++internal fun BracingOptionButton(
+     title: String,
+     isSelected: Boolean,
+     onClick: () -> Unit,
+diff --git a/core/ui/src/main/java/com/lz/ui/member/DeflectionCriteriaPickerDialog.kt b/core/ui/src/main/java/com/lz/ui/member/DeflectionCriteriaPickerDialog.kt
+new file mode 100644
+index 0000000..ffe4de7
+--- /dev/null
++++ b/core/ui/src/main/java/com/lz/ui/member/DeflectionCriteriaPickerDialog.kt
+@@ -0,0 +1,247 @@
++package com.lz.ui.member
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.foundation.text.KeyboardOptions
++import androidx.compose.material3.Button
++import androidx.compose.material3.ButtonDefaults
++import androidx.compose.material3.Card
++import androidx.compose.material3.CardDefaults
++import androidx.compose.material3.HorizontalDivider
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.OutlinedTextField
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.input.KeyboardType
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.window.Dialog
++import com.lz.model.regulatory.LoadCategory
++import com.lz.model.regulatory.codes.ServiceabilityCriterion
++import com.lz.model.regulatory.codes.ServiceabilityLimitType
++
++/**
++ * Standard preset criteria sets. Reused by both the picker below and
++ * anywhere else a sensible default is needed.
++ */
++object DeflectionPresets {
++
++    val floor = listOf(
++        ServiceabilityCriterion(
++            limitType = ServiceabilityLimitType.LIVE_LOAD_DEFLECTION,
++            name = "Live Load",
++            loadCategory = LoadCategory.LIVE,
++            spanDenominator = 360.0,
++            description = "L/360 live load — typical floor"
++        ),
++        ServiceabilityCriterion(
++            limitType = ServiceabilityLimitType.TOTAL_LOAD_DEFLECTION,
++            name = "Total Load",
++            loadCategory = null,
++            spanDenominator = 240.0,
++            description = "L/240 total load — typical floor"
++        )
++    )
++
++    val roof = listOf(
++        ServiceabilityCriterion(
++            limitType = ServiceabilityLimitType.LIVE_LOAD_DEFLECTION,
++            name = "Roof Live Load",
++            loadCategory = LoadCategory.ROOF_LIVE,
++            spanDenominator = 240.0,
++            description = "L/240 roof live load — typical roof"
++        ),
++        ServiceabilityCriterion(
++            limitType = ServiceabilityLimitType.TOTAL_LOAD_DEFLECTION,
++            name = "Total Load",
++            loadCategory = null,
++            spanDenominator = 180.0,
++            description = "L/180 total load — typical roof"
++        )
++    )
++
++    /** Short label for display on the span editor's Deflect button. */
++    fun labelFor(criteria: List<ServiceabilityCriterion>?): String = when {
++        criteria == null -> "Standard"
++        criteria == floor -> "Floor"
++        criteria == roof -> "Roof"
++        criteria.isEmpty() -> "Standard"
++        else -> criteria.joinToString("/") { "L/${it.spanDenominator.toInt()}" }
++    }
++}
++
++private enum class DeflectionPresetChoice { FLOOR, ROOF, CUSTOM, STANDARD }
++
++@Composable
++fun DeflectionCriteriaPickerDialog(
++    currentCriteria: List<ServiceabilityCriterion>?,
++    onDismiss: () -> Unit,
++    onConfirmed: (List<ServiceabilityCriterion>?) -> Unit
++) {
++    val initialChoice = when {
++        currentCriteria == null -> DeflectionPresetChoice.STANDARD
++        currentCriteria == DeflectionPresets.floor -> DeflectionPresetChoice.FLOOR
++        currentCriteria == DeflectionPresets.roof -> DeflectionPresetChoice.ROOF
++        else -> DeflectionPresetChoice.CUSTOM
++    }
++    var choice by remember { mutableStateOf(initialChoice) }
++
++    val existingLive = currentCriteria?.firstOrNull { it.loadCategory != null }
++    val existingTotal = currentCriteria?.firstOrNull { it.loadCategory == null }
++    var liveDenomText by remember {
++        mutableStateOf(existingLive?.spanDenominator?.let { "%.0f".format(it) } ?: "360")
++    }
++    var totalDenomText by remember {
++        mutableStateOf(existingTotal?.spanDenominator?.let { "%.0f".format(it) } ?: "240")
++    }
++
++    Dialog(onDismissRequest = onDismiss) {
++        Card(
++            modifier = Modifier.fillMaxWidth().padding(16.dp),
++            shape = RoundedCornerShape(24.dp),
++            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
++        ) {
++            Column(
++                modifier = Modifier.padding(24.dp).fillMaxWidth(),
++                verticalArrangement = Arrangement.spacedBy(16.dp)
++            ) {
++                Text(
++                    "Deflection Criteria",
++                    style = MaterialTheme.typography.headlineSmall,
++                    color = MaterialTheme.colorScheme.onSurface,
++                    fontWeight = FontWeight.Bold
++                )
++                Text(
++                    "Override the deflection limit checked for this span only. Leave on Standard to use the active building code's criteria.",
++                    style = MaterialTheme.typography.bodyMedium,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant
++                )
++                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
++
++                Row(
++                    modifier = Modifier.fillMaxWidth(),
++                    horizontalArrangement = Arrangement.spacedBy(8.dp)
++                ) {
++                    BracingOptionButton(
++                        title = "Standard\n(Code)",
++                        isSelected = choice == DeflectionPresetChoice.STANDARD,
++                        onClick = { choice = DeflectionPresetChoice.STANDARD },
++                        modifier = Modifier.weight(1f)
++                    )
++                    BracingOptionButton(
++                        title = "Floor\n(L/360, L/240)",
++                        isSelected = choice == DeflectionPresetChoice.FLOOR,
++                        onClick = { choice = DeflectionPresetChoice.FLOOR },
++                        modifier = Modifier.weight(1f)
++                    )
++                    BracingOptionButton(
++                        title = "Roof\n(L/240, L/180)",
++                        isSelected = choice == DeflectionPresetChoice.ROOF,
++                        onClick = { choice = DeflectionPresetChoice.ROOF },
++                        modifier = Modifier.weight(1f)
++                    )
++                    BracingOptionButton(
++                        title = "Custom",
++                        isSelected = choice == DeflectionPresetChoice.CUSTOM,
++                        onClick = { choice = DeflectionPresetChoice.CUSTOM },
++                        modifier = Modifier.weight(1f)
++                    )
++                }
++
++                if (choice == DeflectionPresetChoice.CUSTOM) {
++                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
++                    Row(
++                        modifier = Modifier.fillMaxWidth(),
++                        horizontalArrangement = Arrangement.spacedBy(8.dp)
++                    ) {
++                        OutlinedTextField(
++                            value = liveDenomText,
++                            onValueChange = { liveDenomText = it },
++                            label = { Text("Live Load: L /") },
++                            modifier = Modifier.weight(1f),
++                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
++                            shape = RoundedCornerShape(12.dp)
++                        )
++                        OutlinedTextField(
++                            value = totalDenomText,
++                            onValueChange = { totalDenomText = it },
++                            label = { Text("Total Load: L /") },
++                            modifier = Modifier.weight(1f),
++                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
++                            shape = RoundedCornerShape(12.dp)
++                        )
++                    }
++                    Text(
++                        "Leave a field blank to skip that check for this span.",
++                        style = MaterialTheme.typography.labelSmall,
++                        color = MaterialTheme.colorScheme.onSurfaceVariant
++                    )
++                }
++
++                Spacer(Modifier.height(4.dp))
++                Row(
++                    modifier = Modifier.fillMaxWidth(),
++                    horizontalArrangement = Arrangement.SpaceBetween
++                ) {
++                    TextButton(
++                        onClick = onDismiss,
++                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
++                    ) {
++                        Text("Cancel", fontWeight = FontWeight.Bold)
++                    }
++                    Button(
++                        onClick = {
++                            val result: List<ServiceabilityCriterion>? = when (choice) {
++                                DeflectionPresetChoice.STANDARD -> null
++                                DeflectionPresetChoice.FLOOR -> DeflectionPresets.floor
++                                DeflectionPresetChoice.ROOF -> DeflectionPresets.roof
++                                DeflectionPresetChoice.CUSTOM -> buildCustomCriteria(liveDenomText, totalDenomText)
++                            }
++                            onConfirmed(result)
++                        },
++                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
++                        shape = RoundedCornerShape(28.dp),
++                        modifier = Modifier.height(56.dp).padding(horizontal = 8.dp)
++                    ) {
++                        Text("Save", fontWeight = FontWeight.Bold)
++                    }
++                }
++            }
++        }
++    }
++}
++
++private fun buildCustomCriteria(liveDenomText: String, totalDenomText: String): List<ServiceabilityCriterion> {
++    val results = mutableListOf<ServiceabilityCriterion>()
++    liveDenomText.toDoubleOrNull()?.takeIf { it > 0 }?.let { denom ->
++        results += ServiceabilityCriterion(
++            limitType = ServiceabilityLimitType.LIVE_LOAD_DEFLECTION,
++            name = "Live Load",
++            loadCategory = LoadCategory.LIVE,
++            spanDenominator = denom,
++            description = "L/${denom.toInt()} live load — custom"
++        )
++    }
++    totalDenomText.toDoubleOrNull()?.takeIf { it > 0 }?.let { denom ->
++        results += ServiceabilityCriterion(
++            limitType = ServiceabilityLimitType.TOTAL_LOAD_DEFLECTION,
++            name = "Total Load",
++            loadCategory = null,
++            spanDenominator = denom,
++            description = "L/${denom.toInt()} total load — custom"
++        )
++    }
++    return results
++}
+diff --git a/core/ui/src/main/java/com/lz/ui/member/SpanEditor.kt b/core/ui/src/main/java/com/lz/ui/member/SpanEditor.kt
+index 4bfba83..b3b711c 100644
+--- a/core/ui/src/main/java/com/lz/ui/member/SpanEditor.kt
++++ b/core/ui/src/main/java/com/lz/ui/member/SpanEditor.kt
+@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.input.KeyboardType
+ import androidx.compose.ui.unit.dp
++import com.lz.model.regulatory.codes.ServiceabilityCriterion
+ import com.lz.model.structural.BracingInput
+ import com.lz.model.structural.SpanGeometry
+ import com.lz.model.units.Length
+@@ -53,11 +54,13 @@ fun SpanEditor(
+     spans: List<SpanGeometry>,
+     activeSpanId: UUID?,
+     spanBracing: Map<UUID, BracingInput> = emptyMap(),
++    spanDeflectionOverrides: Map<UUID, List<ServiceabilityCriterion>> = emptyMap(),
+     onAddSpan: () -> Unit,
+     onRemoveSpan: (UUID) -> Unit,
+     onUpdateSpanLength: (UUID, Length) -> Unit,
+     onSelectSpan: (UUID) -> Unit,
+     onEditBracing: (UUID) -> Unit,
++    onEditDeflection: (UUID) -> Unit,
+     modifier: Modifier = Modifier
+ ) {
+     var spanToRemove by remember { mutableStateOf<UUID?>(null) }
+@@ -91,12 +94,14 @@ fun SpanEditor(
+                 index = index,
+                 span = span,
+                 bracing = spanBracing[span.id],
++                deflectionOverride = spanDeflectionOverrides[span.id],
+                 isActive = span.id == activeSpanId,
+                 canRemove = spans.size > 1,
+                 onRemove = { spanToRemove = span.id },
+                 onUpdateLength = { onUpdateSpanLength(span.id, it) },
+                 onSelect = { onSelectSpan(span.id) },
+-                onEditBracing = { onEditBracing(span.id) }
++                onEditBracing = { onEditBracing(span.id) },
++                onEditDeflection = { onEditDeflection(span.id) }
+             )
+         }
+     }
+@@ -131,12 +136,14 @@ fun SpanItem(
+     index: Int,
+     span: SpanGeometry,
+     bracing: BracingInput?,
++    deflectionOverride: List<ServiceabilityCriterion>?,
+     isActive: Boolean,
+     canRemove: Boolean,
+     onRemove: () -> Unit,
+     onUpdateLength: (Length) -> Unit,
+     onSelect: () -> Unit,
+-    onEditBracing: () -> Unit
++    onEditBracing: () -> Unit,
++    onEditDeflection: () -> Unit
+ ) {
+     var lengthText by remember(span.id) { mutableStateOf(String.format(Locale.US, "%.2f", span.length.inFeet)) }
+ 
+@@ -237,7 +244,7 @@ fun SpanItem(
+ 
+                     // Deflection Button
+                     Surface(
+-                        onClick = { /* TODO: Deflection Dialog */ },
++                        onClick = onEditDeflection,
+                         color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                         shape = RoundedCornerShape(8.dp),
+                         modifier = Modifier.weight(1f).height(56.dp)
+@@ -252,7 +259,7 @@ fun SpanItem(
+                                 color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
+                             )
+                             Text(
+-                                "floor",
++                                DeflectionPresets.labelFor(deflectionOverride),
+                                 style = MaterialTheme.typography.labelMedium,
+                                 fontWeight = FontWeight.Bold,
+                                 color = MaterialTheme.colorScheme.onTertiaryContainer
+diff --git a/feature/beam/src/main/java/com/lz/beam/model/BeamModels.kt b/feature/beam/src/main/java/com/lz/beam/model/BeamModels.kt
+index c39b8da..6784f0a 100644
+--- a/feature/beam/src/main/java/com/lz/beam/model/BeamModels.kt
++++ b/feature/beam/src/main/java/com/lz/beam/model/BeamModels.kt
+@@ -2,6 +2,7 @@ package com.lz.beam.model
+ 
+ import com.lz.domain.calculation.CalculationMetadata
+ import com.lz.domain.project.Project
++import com.lz.model.regulatory.codes.ServiceabilityCriterion
+ import com.lz.model.structural.BracingInput
+ import com.lz.model.structural.DesignMethodology
+ import com.lz.model.structural.LoadCase
+@@ -52,7 +53,8 @@ data class BeamCalculationInputs(
+     val includeSelfWeight: Boolean = true,
+     val methodology: DesignMethodology = DesignMethodology.LRFD,
+     val isStrongAxis: Boolean = true,
+-    val spanBracingInputs: List<SpanBracingInput> = emptyList()
++    val spanBracingInputs: List<SpanBracingInput> = emptyList(),
++    val spanDeflectionOverrides: List<SpanDeflectionOverride> = emptyList()
+ )
+ 
+ @Serializable
+@@ -62,6 +64,13 @@ data class SpanBracingInput(
+     val input: BracingInput
+ )
+ 
++@Serializable
++data class SpanDeflectionOverride(
++    @Serializable(with = UUIDSerializer::class)
++    val spanId: UUID,
++    val criteria: List<ServiceabilityCriterion>
++)
++
+ /**
+  * The complete record of a beam calculation.
+  */
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 951316a..80da7a7 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -11,6 +11,7 @@ import com.lz.beam.model.BeamCalculation
+ import com.lz.beam.model.BeamCalculationInputs
+ import com.lz.beam.model.BeamCalculationResults
+ import com.lz.beam.model.SpanBracingInput
++import com.lz.beam.model.SpanDeflectionOverride
+ import com.lz.data.repository.CodeNotFoundException
+ import com.lz.data.repository.IStructuralCodeRepository
+ import com.lz.domain.calculation.CalculationMetadata
+@@ -19,6 +20,7 @@ import com.lz.model.regulatory.LoadCategory
+ import com.lz.model.regulatory.LoadCombination
+ import com.lz.model.regulatory.LoadCombinationSet
+ import com.lz.model.regulatory.codes.BuildingCode
++import com.lz.model.regulatory.codes.ServiceabilityCriterion
+ import com.lz.model.structural.BracingInput
+ import com.lz.model.structural.BracingResolver
+ import com.lz.model.structural.DesignMethodology
+@@ -129,6 +131,7 @@ class BeamViewModel @Inject constructor(
+         private set
+ 
+     var editingBracingSpanId by mutableStateOf<UUID?>(null)
++    var editingDeflectionSpanId by mutableStateOf<UUID?>(null)
+ 
+     var currentCalculationId: UUID? = null
+ 
+@@ -190,6 +193,11 @@ class BeamViewModel @Inject constructor(
+     val detailedStrengthCombinationName: String?
+         get() = governingDesignPoint()?.combinationName
+ 
++    /** Span the governing (worst-case) strength check point falls in — used to
++     *  scope the Design tab's serviceability section to that same span. */
++    val governingSpanId: UUID?
++        get() = governingDesignPoint()?.demand?.spanId
++
+     private fun loadInitialGeometryData() {
+         viewModelScope.launch {
+             seedingCoordinator.awaitSeeded()
+@@ -355,6 +363,21 @@ class BeamViewModel @Inject constructor(
+ 
+     var spanBracingInputs by mutableStateOf<Map<UUID, BracingInput>>(emptyMap())
+ 
++    /**
++     * Per-span deflection criteria override. Absent entry (null lookup) means
++     * "use the active building code's serviceabilityCriteria for this span",
++     * matching ServiceabilityEvaluationService's fallback.
++     */
++    var spanDeflectionOverrides by mutableStateOf<Map<UUID, List<ServiceabilityCriterion>>>(emptyMap())
++
++    fun updateSpanDeflectionCriteria(id: UUID, criteria: List<ServiceabilityCriterion>?) {
++        spanDeflectionOverrides = if (criteria == null) {
++            spanDeflectionOverrides - id
++        } else {
++            spanDeflectionOverrides + (id to criteria)
++        }
++    }
++
+     fun updateSpanBracing(id: UUID, input: BracingInput) {
+         spanBracingInputs = spanBracingInputs + (id to input)
+         // Resolve segments and update SpanGeometry.unbracedSegments
+@@ -557,6 +580,9 @@ class BeamViewModel @Inject constructor(
+             isStrongAxis = isStrongAxis,
+             spanBracingInputs = spanBracingInputs.map { (spanId, input) ->
+                 SpanBracingInput(spanId, input)
++            },
++            spanDeflectionOverrides = spanDeflectionOverrides.map { (spanId, criteria) ->
++                SpanDeflectionOverride(spanId, criteria)
+             }
+         )
+     }
+@@ -611,7 +637,8 @@ class BeamViewModel @Inject constructor(
+         val serviceResults = ServiceabilityEvaluationService.evaluate(
+             member = memberSnapshot,
+             analysisResult = analysisResult,
+-            buildingCode = code
++            buildingCode = code,
++            spanOverrides = spanDeflectionOverrides
+         )
+ 
+         val results = BeamCalculationResults(
+@@ -649,6 +676,9 @@ class BeamViewModel @Inject constructor(
+         spanBracingInputs = inputs.spanBracingInputs
+             .filter { bracing -> member.spans.any { it.id == bracing.spanId } }
+             .associate { it.spanId to it.input }
++        spanDeflectionOverrides = inputs.spanDeflectionOverrides
++            .filter { override -> member.spans.any { it.id == override.spanId } }
++            .associate { it.spanId to it.criteria }
+ 
+         selectedMaterial = inputs.selectedMaterial
+         availableGrades = materialRepository.getMaterialsByType(selectedMaterial)
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index d584d66..ade06e1 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -76,6 +76,7 @@ import com.lz.beam.model.BeamCalculationResults
+ import com.lz.beam.presentation.BeamViewModel
+ import com.lz.domain.project.Project
+ import com.lz.model.regulatory.LoadCombination
++import com.lz.model.regulatory.codes.ServiceabilityCriterion
+ import com.lz.model.structural.BracingInput
+ import com.lz.model.structural.BracingMode
+ import com.lz.model.structural.DesignEquationTrace
+@@ -117,6 +118,7 @@ import com.lz.ui.boundary.BoundaryConditionPickerConfig
+ import com.lz.ui.loads.LoadEditor
+ import com.lz.ui.material.WoodMaterialPickerDialog
+ import com.lz.ui.member.BracingPickerDialog
++import com.lz.ui.member.DeflectionCriteriaPickerDialog
+ import com.lz.ui.member.SpanEditor
+ import kotlinx.coroutines.launch
+ import java.util.UUID
+@@ -681,7 +683,9 @@ fun GeometryTab(viewModel: BeamViewModel) {
+         activeSpanId = viewModel.activeSpanId,
+         onSelectSpan = { viewModel.activeSpanId = it },
+         onEditBracing = { viewModel.editingBracingSpanId = it },
+-        spanBracing = viewModel.spanBracingInputs
++        spanBracing = viewModel.spanBracingInputs,
++        onEditDeflection = { viewModel.editingDeflectionSpanId = it },
++        spanDeflectionOverrides = viewModel.spanDeflectionOverrides
+     )
+ 
+     if (isWoodPickerVisible) {
+@@ -720,6 +724,20 @@ fun GeometryTab(viewModel: BeamViewModel) {
+             )
+         }
+     }
++
++    viewModel.editingDeflectionSpanId?.let { spanId ->
++        val span = viewModel.structuralMember.spans.find { it.id == spanId }
++        if (span != null) {
++            DeflectionCriteriaPickerDialog(
++                currentCriteria = viewModel.spanDeflectionOverrides[spanId],
++                onDismiss = { viewModel.editingDeflectionSpanId = null },
++                onConfirmed = {
++                    viewModel.updateSpanDeflectionCriteria(spanId, it)
++                    viewModel.editingDeflectionSpanId = null
++                }
++            )
++        }
++    }
+ }
+ 
+ /**
+@@ -778,15 +796,24 @@ fun DesignTab(viewModel: BeamViewModel) {
+     val results = viewModel.calculationResult?.results
+     val detailedResult = viewModel.detailedStrengthResult
+     val detailedCombinationName = viewModel.detailedStrengthCombinationName
++    val governingSpanId = viewModel.governingSpanId
+ 
+     if (results == null) {
+         EmptyState("Run calculation to see design checks")
+     } else {
++        // Scope serviceability checks to the same span the governing strength
++        // check is on — consistent with the strength side of this tab, which
++        // already shows only the single worst-case location, not a per-span
++        // breakdown. Results without a spanId (older persisted calculations,
++        // from before per-span serviceability existed) are kept regardless.
++        val scopedServiceabilityResults = results.serviceabilityResults.filter {
++            it.spanId == null || it.spanId == governingSpanId
++        }
+         DesignSummary(
+             pointResults = results.strengthDesignResults,
+             detailedResult = detailedResult,
+             detailedCombinationName = detailedCombinationName,
+-            serviceabilityResults = results.serviceabilityResults,
++            serviceabilityResults = scopedServiceabilityResults,
+             member = viewModel.structuralMember,
+             unitSystem = viewModel.unitSystem
+         )
+@@ -887,7 +914,9 @@ fun GeometryConfiguration(
+     activeSpanId: UUID?,
+     onSelectSpan: (UUID) -> Unit,
+     onEditBracing: (UUID) -> Unit,
+-    spanBracing: Map<UUID, BracingInput> = emptyMap()
++    spanBracing: Map<UUID, BracingInput> = emptyMap(),
++    onEditDeflection: (UUID) -> Unit,
++    spanDeflectionOverrides: Map<UUID, List<ServiceabilityCriterion>> = emptyMap()
+ ) {
+     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+         // 1. Span Management
+@@ -895,11 +924,13 @@ fun GeometryConfiguration(
+             spans = member.spans,
+             activeSpanId = activeSpanId,
+             spanBracing = spanBracing,
++            spanDeflectionOverrides = spanDeflectionOverrides,
+             onAddSpan = onAddSpan,
+             onRemoveSpan = onRemoveSpan,
+             onUpdateSpanLength = onUpdateSpanLength,
+             onSelectSpan = onSelectSpan,
+-            onEditBracing = onEditBracing
++            onEditBracing = onEditBracing,
++            onEditDeflection = onEditDeflection
+         )
+ 
+         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))

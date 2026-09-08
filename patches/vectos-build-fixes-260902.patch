@@ -1,0 +1,35 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
+index b18a3bc..1ac8b8b 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
+@@ -494,9 +494,7 @@ class AiscSteelCapacityCalculator(
+ 
+             ShapeType.TEE -> {
+                 // G5 — Tee stem shear
+-                val aw = if (profile is SteelProfile)
+-                    profile.depth.inInches * profile.webThickness.inInches
+-                else profile.area.inIn2 * 0.5
++                val aw = profile.depth.inInches * profile.webThickness.inInches
+                 LimitStateResult(0.6 * Fy * aw, "Tee Stem Shear Yielding")
+             }
+ 
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index d584d66..1505a05 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -393,6 +393,7 @@ fun BeamSideView(
+         else -> Color.DarkGray
+     }
+     val loadColor = MaterialTheme.colorScheme.error
++    val dimensionColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+ 
+     BoxWithConstraints(modifier = modifier.padding(horizontal = 32.dp, vertical = 24.dp)) {
+         val diagramWidthDp = maxWidth
+@@ -455,7 +456,6 @@ fun BeamSideView(
+             val dimensionY = height - 14.dp.toPx()
+             val tickHalfHeight = 6.dp.toPx()
+             val labelOffset = 7.dp.toPx()
+-            val dimensionColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+             val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                 color = dimensionColor.toArgb()
+                 textAlign = android.graphics.Paint.Align.CENTER

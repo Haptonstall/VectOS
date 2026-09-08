@@ -11,6 +11,7 @@ import com.lz.beam.model.BeamCalculation
 import com.lz.beam.model.BeamCalculationInputs
 import com.lz.beam.model.BeamCalculationResults
 import com.lz.beam.model.SpanBracingInput
+import com.lz.beam.model.SpanDeflectionOverride
 import com.lz.data.repository.CodeNotFoundException
 import com.lz.data.repository.IStructuralCodeRepository
 import com.lz.domain.calculation.CalculationMetadata
@@ -19,6 +20,7 @@ import com.lz.model.regulatory.LoadCategory
 import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.LoadCombinationSet
 import com.lz.model.regulatory.codes.BuildingCode
+import com.lz.model.regulatory.codes.ServiceabilityCriterion
 import com.lz.model.structural.BracingInput
 import com.lz.model.structural.BracingResolver
 import com.lz.model.structural.DesignMethodology
@@ -129,6 +131,7 @@ class BeamViewModel @Inject constructor(
         private set
 
     var editingBracingSpanId by mutableStateOf<UUID?>(null)
+    var editingDeflectionSpanId by mutableStateOf<UUID?>(null)
 
     var currentCalculationId: UUID? = null
 
@@ -189,6 +192,11 @@ class BeamViewModel @Inject constructor(
 
     val detailedStrengthCombinationName: String?
         get() = governingDesignPoint()?.combinationName
+
+    /** Span the governing (worst-case) strength check point falls in — used to
+     *  scope the Design tab's serviceability section to that same span. */
+    val governingSpanId: UUID?
+        get() = governingDesignPoint()?.demand?.spanId
 
     private fun loadInitialGeometryData() {
         viewModelScope.launch {
@@ -354,6 +362,21 @@ class BeamViewModel @Inject constructor(
     }
 
     var spanBracingInputs by mutableStateOf<Map<UUID, BracingInput>>(emptyMap())
+
+    /**
+     * Per-span deflection criteria override. Absent entry (null lookup) means
+     * "use the active building code's serviceabilityCriteria for this span",
+     * matching ServiceabilityEvaluationService's fallback.
+     */
+    var spanDeflectionOverrides by mutableStateOf<Map<UUID, List<ServiceabilityCriterion>>>(emptyMap())
+
+    fun updateSpanDeflectionCriteria(id: UUID, criteria: List<ServiceabilityCriterion>?) {
+        spanDeflectionOverrides = if (criteria == null) {
+            spanDeflectionOverrides - id
+        } else {
+            spanDeflectionOverrides + (id to criteria)
+        }
+    }
 
     fun updateSpanBracing(id: UUID, input: BracingInput) {
         spanBracingInputs = spanBracingInputs + (id to input)
@@ -557,6 +580,9 @@ class BeamViewModel @Inject constructor(
             isStrongAxis = isStrongAxis,
             spanBracingInputs = spanBracingInputs.map { (spanId, input) ->
                 SpanBracingInput(spanId, input)
+            },
+            spanDeflectionOverrides = spanDeflectionOverrides.map { (spanId, criteria) ->
+                SpanDeflectionOverride(spanId, criteria)
             }
         )
     }
@@ -611,7 +637,8 @@ class BeamViewModel @Inject constructor(
         val serviceResults = ServiceabilityEvaluationService.evaluate(
             member = memberSnapshot,
             analysisResult = analysisResult,
-            buildingCode = code
+            buildingCode = code,
+            spanOverrides = spanDeflectionOverrides
         )
 
         val results = BeamCalculationResults(
@@ -649,6 +676,9 @@ class BeamViewModel @Inject constructor(
         spanBracingInputs = inputs.spanBracingInputs
             .filter { bracing -> member.spans.any { it.id == bracing.spanId } }
             .associate { it.spanId to it.input }
+        spanDeflectionOverrides = inputs.spanDeflectionOverrides
+            .filter { override -> member.spans.any { it.id == override.spanId } }
+            .associate { it.spanId to it.criteria }
 
         selectedMaterial = inputs.selectedMaterial
         availableGrades = materialRepository.getMaterialsByType(selectedMaterial)

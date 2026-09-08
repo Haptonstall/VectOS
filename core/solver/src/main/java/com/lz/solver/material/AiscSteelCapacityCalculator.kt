@@ -494,9 +494,7 @@ class AiscSteelCapacityCalculator(
 
             ShapeType.TEE -> {
                 // G5 — Tee stem shear
-                val aw = if (profile is SteelProfile)
-                    profile.depth.inInches * profile.webThickness.inInches
-                else profile.area.inIn2 * 0.5
+                val aw = profile.depth.inInches * profile.webThickness.inInches
                 LimitStateResult(0.6 * Fy * aw, "Tee Stem Shear Yielding")
             }
 
