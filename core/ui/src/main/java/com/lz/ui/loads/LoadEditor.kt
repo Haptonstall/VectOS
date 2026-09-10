@@ -22,6 +22,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,12 +43,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.lz.model.regulatory.LoadCategory
 import com.lz.model.structural.Load
 import com.lz.model.structural.LoadDirection
 import com.lz.model.structural.SpanGeometry
+import com.lz.model.structural.toLoadCategory
 import com.lz.model.units.UnitSystem
 import com.lz.model.units.feet
 import com.lz.model.units.inFeet
+import com.lz.model.units.inches
 import com.lz.model.units.inMeters
 import com.lz.model.units.kiloNewtons
 import com.lz.model.units.lbFt
@@ -120,6 +124,10 @@ fun LoadEditor(
         AddLoadDialog(
             memberLength = memberLength,
             unitSystem = unitSystem,
+            // The load being added always belongs to whichever case tab is
+            // currently open — that's the whole meaning of "Loads in
+            // $activeCaseId" above it.
+            category = activeCaseId.toLoadCategory(),
             onDismiss = { showAddDialog = false },
             onConfirm = {
                 onAddLoad(it)
@@ -243,7 +251,8 @@ fun AddLoadDialog(
     unitSystem: UnitSystem,
     onDismiss: () -> Unit,
     onConfirm: (Load) -> Unit,
-    spans: List<SpanGeometry> = emptyList()
+    spans: List<SpanGeometry> = emptyList(),
+    category: LoadCategory = LoadCategory.DEAD
 ) {
     var loadType by remember { mutableStateOf(0) } // 0: Point, 1: UDL, 2: Moment, 3: Axial
     var direction by remember { mutableStateOf(LoadDirection.VERTICAL_DOWN) }
@@ -251,7 +260,23 @@ fun AddLoadDialog(
     var value1 by remember { mutableStateOf("") }
     var value2 by remember { mutableStateOf("") }
     var pos1 by remember { mutableStateOf("") }
-    var pos2 by remember { mutableStateOf((memberLength / 12.0).toString()) }
+    // Default end-position for a UDL defaults to the *selected* span's own length
+    // (same conversion the span-tab onClick handler uses below), not the beam's
+    // total length across all spans — a span-local field defaulting from a
+    // member-wide value was wrong for any span after the first.
+    var pos2 by remember {
+        val initialSpan = spans.firstOrNull()
+        val initialValue = if (initialSpan != null) {
+            if (unitSystem == UnitSystem.METRIC) initialSpan.length.inMeters else initialSpan.length.inFeet
+        } else {
+            memberLength / 12.0
+        }
+        mutableStateOf(initialValue.toString())
+    }
+    // "Apply to all spans" — only meaningful for UDLs on a multi-span beam. When
+    // checked, one full-length UDL (0 to each span's own length) is created per
+    // span instead of forcing the user to repeat the same input per span.
+    var applyToAllSpans by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -276,9 +301,19 @@ fun AddLoadDialog(
                     }
                 }
 
+                // Apply-to-all option — UDL only, and only meaningful with 2+ spans.
+                if (loadType == 1 && spans.size > 1) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = applyToAllSpans, onCheckedChange = { applyToAllSpans = it })
+                        Text("Apply to all spans (full length of each)")
+                    }
+                }
+
                 // Span selection — which span this load applies to. Position fields below
                 // are span-local (0 to this span's own length), not global beam position.
-                if (spans.size > 1) {
+                // Hidden when applying a UDL to every span at once, since span choice
+                // and per-span position are moot in that case.
+                if (spans.size > 1 && !(loadType == 1 && applyToAllSpans)) {
                     Text("Span", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     ScrollableTabRow(
                         selectedTabIndex = spans.indexOfFirst { it.id == selectedSpanId }.coerceAtLeast(0),
@@ -322,42 +357,50 @@ fun AddLoadDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                if (loadType != 3) {
-                    val selectedSpan = spans.find { it.id == selectedSpanId }
-                    val spanLengthDisplay = selectedSpan?.let {
-                        if (unitSystem == UnitSystem.METRIC) it.length.inMeters else it.length.inFeet
-                    }
-                    val posLabel = if (loadType == 1) {
-                        if (unitSystem == UnitSystem.METRIC) "Start Position (m)" else "Start Position (ft)"
-                    } else {
-                        if (unitSystem == UnitSystem.METRIC) "Location (m)" else "Location (ft)"
-                    }
-                    OutlinedTextField(
-                        value = pos1,
-                        onValueChange = { pos1 = it },
-                        label = { Text(posLabel) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth()
+                if (loadType == 1 && applyToAllSpans) {
+                    Text(
+                        "This load will span the full length of every span (0 to each span's own length).",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (spanLengthDisplay != null) {
-                        Text(
-                            "Measured from the start of this span (0 – ${"%.2f".format(spanLengthDisplay)})",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    if (loadType != 3) {
+                        val selectedSpan = spans.find { it.id == selectedSpanId }
+                        val spanLengthDisplay = selectedSpan?.let {
+                            if (unitSystem == UnitSystem.METRIC) it.length.inMeters else it.length.inFeet
+                        }
+                        val posLabel = if (loadType == 1) {
+                            if (unitSystem == UnitSystem.METRIC) "Start Position (m)" else "Start Position (ft)"
+                        } else {
+                            if (unitSystem == UnitSystem.METRIC) "Location (m)" else "Location (ft)"
+                        }
+                        OutlinedTextField(
+                            value = pos1,
+                            onValueChange = { pos1 = it },
+                            label = { Text(posLabel) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (spanLengthDisplay != null) {
+                            Text(
+                                "Measured from the start of this span (0 – ${"%.2f".format(spanLengthDisplay)})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    if (loadType == 1) {
+                        val endPosLabel =
+                            if (unitSystem == UnitSystem.METRIC) "End Position (m)" else "End Position (ft)"
+                        OutlinedTextField(
+                            value = pos2,
+                            onValueChange = { pos2 = it },
+                            label = { Text(endPosLabel) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
-                }
-
-                if (loadType == 1) {
-                    val endPosLabel =
-                        if (unitSystem == UnitSystem.METRIC) "End Position (m)" else "End Position (ft)"
-                    OutlinedTextField(
-                        value = pos2,
-                        onValueChange = { pos2 = it },
-                        label = { Text(endPosLabel) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             }
         },
@@ -365,6 +408,27 @@ fun AddLoadDialog(
             Button(
                 onClick = {
                     val v1 = value1.toDoubleOrNull() ?: 0.0
+
+                    if (loadType == 1 && applyToAllSpans && spans.size > 1) {
+                        // One full-length UDL per span, same magnitude/direction —
+                        // the underlying model is still N ordinary per-span loads,
+                        // nothing downstream needs to know about "all spans".
+                        val udlValue = if (unitSystem == UnitSystem.METRIC) (v1 / 4.4482216).lbPerIn else v1.lbPerFt
+                        spans.forEach { span ->
+                            onConfirm(
+                                Load.UniformDistributedLoad(
+                                    udlValue,
+                                    span.id,
+                                    0.0.inches,
+                                    span.length,
+                                    category = category,
+                                    direction = direction
+                                )
+                            )
+                        }
+                        return@Button
+                    }
+
                     val p1raw = pos1.toDoubleOrNull() ?: 0.0
                     val p2raw = pos2.toDoubleOrNull() ?: (memberLength / 12.0)
 
@@ -378,29 +442,30 @@ fun AddLoadDialog(
                     val load = when (loadType) {
                         0 -> Load.PointLoad(
                             if (unitSystem == UnitSystem.METRIC) v1.kiloNewtons else v1.poundsForce,
-                            targetSpanId, p1, direction = direction
+                            targetSpanId, p1, category = category, direction = direction
                         )
 
                         1 -> Load.UniformDistributedLoad(
                             if (unitSystem == UnitSystem.METRIC) (v1 / 4.4482216).lbPerIn else v1.lbPerFt,
-                            targetSpanId, p1, p2, direction = direction
+                            targetSpanId, p1, p2, category = category, direction = direction
                         )
 
                         2 -> Load.PointMoment(
                             if (unitSystem == UnitSystem.METRIC) (v1 * 8.8507).lbIn else v1.lbFt,
-                            targetSpanId, p1, direction = direction
+                            targetSpanId, p1, category = category, direction = direction
                         )
 
                         3 -> Load.AxialLoad(
                             if (unitSystem == UnitSystem.METRIC) v1.kiloNewtons else v1.poundsForce,
-                            targetSpanId, direction = direction
+                            targetSpanId, category = category, direction = direction
                         )
 
-                        else -> Load.PointLoad(v1.poundsForce, targetSpanId, p1)
+                        else -> Load.PointLoad(v1.poundsForce, targetSpanId, p1, category = category)
                     }
                     onConfirm(load)
                 },
-                enabled = value1.isNotEmpty() && (loadType == 3 || pos1.isNotEmpty())
+                enabled = value1.isNotEmpty() &&
+                    (loadType == 3 || (loadType == 1 && applyToAllSpans) || pos1.isNotEmpty())
             ) {
                 Text("Add")
             }

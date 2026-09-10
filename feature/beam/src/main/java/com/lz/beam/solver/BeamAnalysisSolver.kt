@@ -117,7 +117,11 @@ object BeamAnalysisSolver {
         // and enriched combination map
         return createSummaryResult(enrichedSpanResults, genericResult.reactions).copy(
             combinationResults       = enrichedCombinationResults,
-            governingCombinationName = genericResult.governingCombinationName
+            governingCombinationName = genericResult.governingCombinationName,
+            // Passed through unenriched (no bracing/Cb/utilization data) — the only
+            // thing serviceability checks read off these is .deflection per station,
+            // which bracing enrichment never touches.
+            categoryResults          = genericResult.categoryResults
         )
     }
 

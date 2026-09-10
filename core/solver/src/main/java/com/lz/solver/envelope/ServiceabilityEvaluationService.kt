@@ -90,17 +90,25 @@ object ServiceabilityEvaluationService {
         category: LoadCategory,
         spanId: UUID
     ): StationDemand {
-        // Fallback: Look for a combination named after the category (e.g., "Live Load")
-        val categoryResult = result.combinationResults[category.label] ?: result.combinationResults[category.shortLabel]
+        // Was: looked for a *combination* literally named after the category
+        // (e.g. "Live Load" or "LL") — but combos are named things like
+        // "1.2D + 1.6L", so that lookup essentially never matched anything,
+        // and silently fell through to the same governing-envelope fallback
+        // used when there's no category filter at all. That's why a "Live
+        // Load" deflection check and the "Total Load" check reported the
+        // same number. What "Live Load deflection" actually means is the
+        // unfactored, live-only demand — exactly what categoryResults holds.
+        val categoryResult = result.categoryResults[category.name]
 
+        // No entry for this category means no loads of that category were ever
+        // applied to the member — the correct live/snow/wind-alone deflection
+        // in that case really is zero, not "whatever the governing envelope
+        // happens to show" (that envelope is dominated by whichever categories
+        // ARE present, and has nothing to do with this one).
         return categoryResult?.spanResults
             ?.flatMap { it.stationDemands }
             ?.filter { it.spanId == spanId }
             ?.maxByOrNull { abs(it.deflection.inInches) }
-            ?: result.spanResults
-                .flatMap { it.stationDemands }
-                .filter { it.spanId == spanId }
-                .maxByOrNull { abs(it.deflection.inInches) }
             ?: StationDemand(
                 spanId = spanId,
                 x = 0.0.inches,

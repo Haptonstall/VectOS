@@ -1,0 +1,277 @@
+diff --git a/core/model/src/main/java/com/lz/model/structural/LoadCase.kt b/core/model/src/main/java/com/lz/model/structural/LoadCase.kt
+index a1e9c61..33e9f5c 100644
+--- a/core/model/src/main/java/com/lz/model/structural/LoadCase.kt
++++ b/core/model/src/main/java/com/lz/model/structural/LoadCase.kt
+@@ -1,5 +1,6 @@
+ package com.lz.model.structural
+ 
++import com.lz.model.regulatory.LoadCategory
+ import kotlinx.serialization.Serializable
+ 
+ /**
+@@ -21,3 +22,22 @@ object StandardLoadCases {
+     const val SEISMIC = "EL"
+     const val RAIN = "RL"
+ }
++
++/**
++ * Maps a [StandardLoadCases] id (the tab/case a load was entered under) to the
++ * [LoadCategory] the solver actually groups loads by. Every load previously
++ * defaulted to [LoadCategory.DEAD] regardless of which case tab it was added
++ * under (nothing ever called this) — that silently folded Live/Snow/Wind/etc.
++ * loads into Dead, which is why combos that should differ (e.g. "D" vs "D+L")
++ * came out numerically identical.
++ */
++fun String.toLoadCategory(): LoadCategory = when (this) {
++    StandardLoadCases.DEAD -> LoadCategory.DEAD
++    StandardLoadCases.LIVE -> LoadCategory.LIVE
++    StandardLoadCases.ROOF_LIVE -> LoadCategory.ROOF_LIVE
++    StandardLoadCases.SNOW -> LoadCategory.SNOW
++    StandardLoadCases.WIND -> LoadCategory.WIND
++    StandardLoadCases.SEISMIC -> LoadCategory.SEISMIC
++    StandardLoadCases.RAIN -> LoadCategory.RAIN
++    else -> LoadCategory.DEAD
++}
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+index 966d9ac..49acdc5 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+@@ -104,7 +104,13 @@ data class AnalysisResult(
+     val spanResults: List<SpanAnalysisResult>,
+     val reactions: List<ReactionResult> = emptyList(),
+     val combinationResults: Map<String, AnalysisResult> = emptyMap(),
+-    val governingCombinationName: String? = null
++    val governingCombinationName: String? = null,
++    // Per-category, UNFACTORED results (e.g. "LIVE" -> live loads alone, at
++    // factor 1.0) — keyed by LoadCategory.name. This is what a serviceability
++    // check like "Live Load deflection" actually means (the live-only demand),
++    // as distinct from combinationResults (factored combos like "1.2D + 1.6L",
++    // keyed by combo name/equation text, not category).
++    val categoryResults: Map<String, AnalysisResult> = emptyMap()
+ )
+ 
+ @Serializable
+@@ -249,7 +255,10 @@ object MemberAnalysisSolver {
+             // combined dead+live combo produced the larger displayed moment/shear.
+             governingCombinationName =
+                 envelopeResult.governingMaxMoment?.governingCombination?.name
+-                    ?: envelopeResult.governingMaxShear?.governingCombination?.name
++                    ?: envelopeResult.governingMaxShear?.governingCombination?.name,
++            // resultsByCategory (step 3, above) already holds exactly this —
++            // one unfactored AnalysisResult per active category — just surface it.
++            categoryResults = resultsByCategory.mapKeys { it.key.name }
+         )
+     }
+ 
+diff --git a/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt b/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
+index fe24ee8..92ce5b6 100644
+--- a/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
++++ b/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
+@@ -90,17 +90,25 @@ object ServiceabilityEvaluationService {
+         category: LoadCategory,
+         spanId: UUID
+     ): StationDemand {
+-        // Fallback: Look for a combination named after the category (e.g., "Live Load")
+-        val categoryResult = result.combinationResults[category.label] ?: result.combinationResults[category.shortLabel]
++        // Was: looked for a *combination* literally named after the category
++        // (e.g. "Live Load" or "LL") — but combos are named things like
++        // "1.2D + 1.6L", so that lookup essentially never matched anything,
++        // and silently fell through to the same governing-envelope fallback
++        // used when there's no category filter at all. That's why a "Live
++        // Load" deflection check and the "Total Load" check reported the
++        // same number. What "Live Load deflection" actually means is the
++        // unfactored, live-only demand — exactly what categoryResults holds.
++        val categoryResult = result.categoryResults[category.name]
+ 
++        // No entry for this category means no loads of that category were ever
++        // applied to the member — the correct live/snow/wind-alone deflection
++        // in that case really is zero, not "whatever the governing envelope
++        // happens to show" (that envelope is dominated by whichever categories
++        // ARE present, and has nothing to do with this one).
+         return categoryResult?.spanResults
+             ?.flatMap { it.stationDemands }
+             ?.filter { it.spanId == spanId }
+             ?.maxByOrNull { abs(it.deflection.inInches) }
+-            ?: result.spanResults
+-                .flatMap { it.stationDemands }
+-                .filter { it.spanId == spanId }
+-                .maxByOrNull { abs(it.deflection.inInches) }
+             ?: StationDemand(
+                 spanId = spanId,
+                 x = 0.0.inches,
+diff --git a/core/ui/src/main/java/com/lz/ui/loads/LoadEditor.kt b/core/ui/src/main/java/com/lz/ui/loads/LoadEditor.kt
+index 7b3873d..166cb0d 100644
+--- a/core/ui/src/main/java/com/lz/ui/loads/LoadEditor.kt
++++ b/core/ui/src/main/java/com/lz/ui/loads/LoadEditor.kt
+@@ -43,9 +43,11 @@ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.input.KeyboardType
+ import androidx.compose.ui.unit.dp
++import com.lz.model.regulatory.LoadCategory
+ import com.lz.model.structural.Load
+ import com.lz.model.structural.LoadDirection
+ import com.lz.model.structural.SpanGeometry
++import com.lz.model.structural.toLoadCategory
+ import com.lz.model.units.UnitSystem
+ import com.lz.model.units.feet
+ import com.lz.model.units.inFeet
+@@ -122,6 +124,10 @@ fun LoadEditor(
+         AddLoadDialog(
+             memberLength = memberLength,
+             unitSystem = unitSystem,
++            // The load being added always belongs to whichever case tab is
++            // currently open — that's the whole meaning of "Loads in
++            // $activeCaseId" above it.
++            category = activeCaseId.toLoadCategory(),
+             onDismiss = { showAddDialog = false },
+             onConfirm = {
+                 onAddLoad(it)
+@@ -245,7 +251,8 @@ fun AddLoadDialog(
+     unitSystem: UnitSystem,
+     onDismiss: () -> Unit,
+     onConfirm: (Load) -> Unit,
+-    spans: List<SpanGeometry> = emptyList()
++    spans: List<SpanGeometry> = emptyList(),
++    category: LoadCategory = LoadCategory.DEAD
+ ) {
+     var loadType by remember { mutableStateOf(0) } // 0: Point, 1: UDL, 2: Moment, 3: Axial
+     var direction by remember { mutableStateOf(LoadDirection.VERTICAL_DOWN) }
+@@ -414,6 +421,7 @@ fun AddLoadDialog(
+                                     span.id,
+                                     0.0.inches,
+                                     span.length,
++                                    category = category,
+                                     direction = direction
+                                 )
+                             )
+@@ -434,25 +442,25 @@ fun AddLoadDialog(
+                     val load = when (loadType) {
+                         0 -> Load.PointLoad(
+                             if (unitSystem == UnitSystem.METRIC) v1.kiloNewtons else v1.poundsForce,
+-                            targetSpanId, p1, direction = direction
++                            targetSpanId, p1, category = category, direction = direction
+                         )
+ 
+                         1 -> Load.UniformDistributedLoad(
+                             if (unitSystem == UnitSystem.METRIC) (v1 / 4.4482216).lbPerIn else v1.lbPerFt,
+-                            targetSpanId, p1, p2, direction = direction
++                            targetSpanId, p1, p2, category = category, direction = direction
+                         )
+ 
+                         2 -> Load.PointMoment(
+                             if (unitSystem == UnitSystem.METRIC) (v1 * 8.8507).lbIn else v1.lbFt,
+-                            targetSpanId, p1, direction = direction
++                            targetSpanId, p1, category = category, direction = direction
+                         )
+ 
+                         3 -> Load.AxialLoad(
+                             if (unitSystem == UnitSystem.METRIC) v1.kiloNewtons else v1.poundsForce,
+-                            targetSpanId, direction = direction
++                            targetSpanId, category = category, direction = direction
+                         )
+ 
+-                        else -> Load.PointLoad(v1.poundsForce, targetSpanId, p1)
++                        else -> Load.PointLoad(v1.poundsForce, targetSpanId, p1, category = category)
+                     }
+                     onConfirm(load)
+                 },
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+index 6199b24..630e964 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+@@ -117,7 +117,11 @@ object BeamAnalysisSolver {
+         // and enriched combination map
+         return createSummaryResult(enrichedSpanResults, genericResult.reactions).copy(
+             combinationResults       = enrichedCombinationResults,
+-            governingCombinationName = genericResult.governingCombinationName
++            governingCombinationName = genericResult.governingCombinationName,
++            // Passed through unenriched (no bracing/Cb/utilization data) — the only
++            // thing serviceability checks read off these is .deflection per station,
++            // which bracing enrichment never touches.
++            categoryResults          = genericResult.categoryResults
+         )
+     }
+ 
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index c7d64be..43adf35 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -1,5 +1,7 @@
+ package com.lz.beam.ui
+ 
++import kotlin.math.abs
++import kotlin.math.roundToInt
+ import androidx.compose.foundation.Canvas
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.layout.Arrangement
+@@ -152,7 +154,15 @@ fun BeamCalculatorScreen(
+     // uses the real overall utilizationRatio instead, which is correctly
+     // populated regardless of Bug C.
+     val governingStrengthUtil = strengthDesignResults.maxOfOrNull { it.utilizationRatio } ?: 0.0
+-    val maxDeflectionUtil = serviceabilityResults.maxOfOrNull { it.utilization } ?: 0.0
++    // Worst-case across every serviceability criterion AND every span — e.g. a
++    // "Total Load" check itself is already the worst deflection across every
++    // active combination for that span/criterion (see
++    // ServiceabilityEvaluationService.findMaxDeflectionAcrossCombinations), not
++    // specifically the strength-governing combination. So this header number
++    // can legitimately differ from any single Design tab card below it — it's
++    // the worst of all of them, not one of them.
++    val worstServiceabilityResult = serviceabilityResults.maxByOrNull { it.utilization }
++    val maxDeflectionUtil = worstServiceabilityResult?.utilization ?: 0.0
+ 
+     val hasResults = viewModel.calculationResult != null
+     val overallMaxUtil = if (hasResults) {
+@@ -202,10 +212,13 @@ fun BeamCalculatorScreen(
+                                 isCritical = governingStrengthUtil > 1.0
+                             )
+ 
+-                            // Deflection Badge
++                            // Deflection Badge — L/value of the single worst
++                            // serviceability result, not a percentage (an
++                            // engineer reads "L/280" directly; the ratio to
++                            // the code limit is secondary to the shape of it).
+                             StatusBadgeSmall(
+                                 label = "DEF",
+-                                value = "${(maxDeflectionUtil * 100).toInt()}%",
++                                value = worstServiceabilityResult?.lOverValueLabel() ?: "—",
+                                 isCritical = maxDeflectionUtil > 1.0
+                             )
+                         }
+@@ -1398,6 +1411,26 @@ fun PointCapacityCard(label: String, result: PointCapacityResult, unitSystem: Un
+     // Legacy - replaced by DesignSummary/DesignCard
+ }
+ 
++/**
++ * The calculated L/value for a serviceability result — e.g. an actual
++ * deflection that works out to L/420 against an allowable of L/360.
++ * [ServiceabilityResult] doesn't store the span length directly, but it's
++ * recoverable from allowableDeflection and the criterion's own denominator
++ * (allowableDeflection = spanLength / spanDenominator), so no model change
++ * is needed to add this. Null for an (effectively) zero actual deflection,
++ * shown as L/∞ rather than a meaningless huge number.
++ */
++fun ServiceabilityResult.calculatedLOverValue(): Int? {
++    val denominator = criterion.spanDenominator
++    val actualInches = abs(actualDeflection.inInches)
++    if (denominator <= 0 || actualInches <= 1e-9) return null
++    val spanLengthInches = allowableDeflection.inInches * denominator
++    return (spanLengthInches / actualInches).roundToInt()
++}
++
++private fun ServiceabilityResult.lOverValueLabel(): String =
++    calculatedLOverValue()?.let { "L/$it" } ?: "L/\u221E"
++
+ @Composable
+ fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem) {
+     val isFail = result.utilization > 1.0
+@@ -1424,6 +1457,10 @@ fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem) {
+                     Text("Actual", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                     Text("${String.format("%.3f", result.actualDeflection.inInches)} in", style = MaterialTheme.typography.bodyMedium)
+                 }
++                Column {
++                    Text("Calculated", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
++                    Text(result.lOverValueLabel(), style = MaterialTheme.typography.bodyMedium)
++                }
+                 Column(horizontalAlignment = Alignment.End) {
+                     Text("Allowable", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                     Text("${String.format("%.3f", result.allowableDeflection.inInches)} in", style = MaterialTheme.typography.bodyMedium)

@@ -1,0 +1,75 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+index 49acdc5..4b50dba 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+@@ -524,18 +524,6 @@ object MemberAnalysisSolver {
+             result
+         }
+ 
+-        println("=== REACTION DEBUG ===")
+-        nodeIndices.forEachIndexed { idx, nodeIdx ->
+-            val rxn = structuralResult.reactions[nodeIdx] ?: emptyMap()
+-            println(
+-                "Node $idx: " +
+-                        "UY=${rxn[DofType.UY]} " +
+-                        "RZ=${rxn[DofType.RZ]} " +
+-                        "UX=${rxn[DofType.UX]}"
+-            )
+-        }
+-        println("=== END REACTION DEBUG ===")
+-
+         val reactions = nodeIndices.mapIndexed { idx, nodeIdx ->
+             val rxn = structuralResult.reactions[nodeIdx] ?: emptyMap()
+             ReactionResult(
+@@ -913,12 +901,6 @@ object MemberAnalysisSolver {
+     ): SpanAnalysisResult {
+         val elForces = result.elementEndForces[ctx.index] ?: List(12) { 0.0 }
+ 
+-        println("=== ELEMENT FORCE DEBUG span=${ctx.span.id} ===")
+-        elForces.forEachIndexed { index, value ->
+-            println("dof[$index] = $value")
+-        }
+-        println("=== END ELEMENT FORCE DEBUG ===")
+-
+         val v1 = result.displacements[ctx.startNode to DofType.UY] ?: 0.0
+         val v2 = result.displacements[ctx.endNode to DofType.UY] ?: 0.0
+         val theta1 = result.displacements[ctx.startNode to DofType.RZ] ?: 0.0
+@@ -997,12 +979,6 @@ object MemberAnalysisSolver {
+             )
+         }
+ 
+-        println("=== MOMENT DEBUG span=${ctx.span.id} ===")
+-        momentPoints.forEach {
+-            println("x=${it.x.inches}  M=${it.value}")
+-        }
+-        println("=== END MOMENT DEBUG ===")
+-
+         val maxMomentPoint =
+             momentPoints.maxByOrNull { abs(it.value) }
+                 ?: AnalysisPoint(0.0.inches, 0.0)
+@@ -1173,12 +1149,19 @@ object MemberAnalysisSolver {
+                             val total = (w1 + wEndAtX) / 2.0 * loadX
+                             val arm = x - (start + (loadX / 3.0) * (w1 + 2 * wEndAtX) / (w1 + wEndAtX))
+                             when (load.direction) {
+-                                LoadDirection.VERTICAL_DOWN -> { vy -= total; mz -= total * arm }
+-                                LoadDirection.VERTICAL_UP -> { vy += total; mz += total * arm }
+-                                LoadDirection.LATERAL_LEFT -> { vz -= total; my += total * arm }
+-                                LoadDirection.LATERAL_RIGHT -> { vz += total; my -= total * arm }
+-                                LoadDirection.AXIAL_COMPRESSION -> { fx -= total }
+-                                LoadDirection.AXIAL_TENSION -> { fx += total }
++                                // Was VERTICAL_DOWN -> vy -= total; mz -= total * arm — the
++                                // opposite sign from the otherwise-identical UniformDistributedLoad
++                                // branch above (vy += total; mz += total * arm). Both represent the
++                                // same physical convention (downward load increases shear moving
++                                // left to right), so a Trapezoidal load was internally inconsistent
++                                // with a UDL covering the same region — same load, different sign,
++                                // depending only on which Load subtype it happened to be.
++                                LoadDirection.VERTICAL_DOWN -> { vy += total; mz += total * arm }
++                                LoadDirection.VERTICAL_UP -> { vy -= total; mz -= total * arm }
++                                LoadDirection.LATERAL_LEFT -> { vz += total; my -= total * arm }
++                                LoadDirection.LATERAL_RIGHT -> { vz -= total; my += total * arm }
++                                LoadDirection.AXIAL_COMPRESSION -> { fx += total }
++                                LoadDirection.AXIAL_TENSION -> { fx -= total }
+                                 LoadDirection.TORSION_CLOCKWISE -> { tx += total }
+                                 LoadDirection.TORSION_COUNTER_CLOCKWISE -> { tx -= total }
+                                 else -> {}

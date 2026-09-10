@@ -104,7 +104,13 @@ data class AnalysisResult(
     val spanResults: List<SpanAnalysisResult>,
     val reactions: List<ReactionResult> = emptyList(),
     val combinationResults: Map<String, AnalysisResult> = emptyMap(),
-    val governingCombinationName: String? = null
+    val governingCombinationName: String? = null,
+    // Per-category, UNFACTORED results (e.g. "LIVE" -> live loads alone, at
+    // factor 1.0) — keyed by LoadCategory.name. This is what a serviceability
+    // check like "Live Load deflection" actually means (the live-only demand),
+    // as distinct from combinationResults (factored combos like "1.2D + 1.6L",
+    // keyed by combo name/equation text, not category).
+    val categoryResults: Map<String, AnalysisResult> = emptyMap()
 )
 
 @Serializable
@@ -200,8 +206,6 @@ object MemberAnalysisSolver {
             result.spanResults.flatMap { it.stationDemands }
         }
 
-        val envelopeStations = DemandEnvelopeResolver.resolveMemberEnvelopes(demandsByCategory, config.combinations)
-
         // 5. Build Individual Combination Results
         val combinationResults = config.combinations.associate { combo ->
             // Factor each category's station demands by this combo's load factors
@@ -214,9 +218,27 @@ object MemberAnalysisSolver {
                 .let { spanResults -> createSummaryResult(spanResults, comboReactions) }
         }
 
-        // 6. Build Final Governing Result from the strength envelope
+        // 6. Build Final Governing Result — from the SINGLE identified governing
+        // combination's own consistent station-by-station results, not the raw
+        // per-station envelope. The envelope resolver picks whichever combo has
+        // the larger |moment| or |shear| INDEPENDENTLY AT EACH STATION — near a
+        // support, two combos' magnitudes can be close enough that this pick
+        // flips from one station to the next and back, splicing different
+        // combinations' shear/moment/deflection together at the seam. That
+        // produces a real, visible discontinuity (a "notch") right at the
+        // splice — not a solver error, a diagram stitched from two different
+        // load cases. Deflection is especially exposed since it isn't even
+        // part of the per-station ranking criteria (moment/shear only) but
+        // still gets swapped in wholesale with whichever combo won.
+        // Everything the beam "looks like" — shear, moment, deflection alike —
+        // needs to come from ONE combination held fixed across every station,
+        // which is exactly what combinationResults[governingComboName] already
+        // is (built by buildFactoredDemands, a straight linear combination of
+        // the same two categories at every single station, hence smooth).
         val envelopeResult = DemandEnvelopeResolver.resolveMemberEnvelopes(demandsByCategory, config.combinations)
-        val governingDemands = envelopeResult.strengthEnvelope.map { it.combinedDemand }
+        val governingComboName =
+            envelopeResult.governingMaxMoment?.governingCombination?.name
+                ?: envelopeResult.governingMaxShear?.governingCombination?.name
 
         // Compute Governing Reactions - pick max absolute vertical per node across all combos
         val governingReactions = mutableMapOf<Int, ReactionResult>()
@@ -229,27 +251,23 @@ object MemberAnalysisSolver {
             }
         }
 
-        val governingSpanResults =
-            buildSpanResults(config, governingDemands, "Governing Envelope")
-
-        val governingResult =
-            createSummaryResult(
-                governingSpanResults,
-                governingReactions.values.toList()
-            )
+        // Fallback only covers the pathological case of no strength combos matching
+        // anything (config.combinations non-empty but none typed STRENGTH) — normal
+        // configurations always resolve governingComboName and hit the map lookup.
+        val governingResult = governingComboName?.let { combinationResults[it] } ?: run {
+            val governingDemands = envelopeResult.strengthEnvelope.map { it.combinedDemand }
+            createSummaryResult(buildSpanResults(config, governingDemands, "Governing Envelope"), governingReactions.values.toList())
+        }
 
         return governingResult.copy(
+            reactions = governingReactions.values.toList(),
             combinationResults = combinationResults,
-            // Source the reported name from the SAME data that produces the displayed
-            // envelope numbers (envelopeResult, above) rather than recomputing it
-            // independently. The previous approach compared each combo's own global
-            // max in isolation — a redundant, disconnected calculation that could
-            // (and did) disagree with which combo actually produced the displayed
-            // peak, e.g. reporting a dead-load-only combo as governing even when a
-            // combined dead+live combo produced the larger displayed moment/shear.
-            governingCombinationName =
-                envelopeResult.governingMaxMoment?.governingCombination?.name
-                    ?: envelopeResult.governingMaxShear?.governingCombination?.name
+            // Same value already resolved above (governingComboName) — kept as a
+            // named field here since it's part of the public AnalysisResult shape.
+            governingCombinationName = governingComboName,
+            // resultsByCategory (step 3, above) already holds exactly this —
+            // one unfactored AnalysisResult per active category — just surface it.
+            categoryResults = resultsByCategory.mapKeys { it.key.name }
         )
     }
 
@@ -514,18 +532,6 @@ object MemberAnalysisSolver {
             globalXOffset += ctx.lengthInches
             result
         }
-
-        println("=== REACTION DEBUG ===")
-        nodeIndices.forEachIndexed { idx, nodeIdx ->
-            val rxn = structuralResult.reactions[nodeIdx] ?: emptyMap()
-            println(
-                "Node $idx: " +
-                        "UY=${rxn[DofType.UY]} " +
-                        "RZ=${rxn[DofType.RZ]} " +
-                        "UX=${rxn[DofType.UX]}"
-            )
-        }
-        println("=== END REACTION DEBUG ===")
 
         val reactions = nodeIndices.mapIndexed { idx, nodeIdx ->
             val rxn = structuralResult.reactions[nodeIdx] ?: emptyMap()
@@ -904,12 +910,6 @@ object MemberAnalysisSolver {
     ): SpanAnalysisResult {
         val elForces = result.elementEndForces[ctx.index] ?: List(12) { 0.0 }
 
-        println("=== ELEMENT FORCE DEBUG span=${ctx.span.id} ===")
-        elForces.forEachIndexed { index, value ->
-            println("dof[$index] = $value")
-        }
-        println("=== END ELEMENT FORCE DEBUG ===")
-
         val v1 = result.displacements[ctx.startNode to DofType.UY] ?: 0.0
         val v2 = result.displacements[ctx.endNode to DofType.UY] ?: 0.0
         val theta1 = result.displacements[ctx.startNode to DofType.RZ] ?: 0.0
@@ -987,12 +987,6 @@ object MemberAnalysisSolver {
                 )
             )
         }
-
-        println("=== MOMENT DEBUG span=${ctx.span.id} ===")
-        momentPoints.forEach {
-            println("x=${it.x.inches}  M=${it.value}")
-        }
-        println("=== END MOMENT DEBUG ===")
 
         val maxMomentPoint =
             momentPoints.maxByOrNull { abs(it.value) }
@@ -1164,12 +1158,19 @@ object MemberAnalysisSolver {
                             val total = (w1 + wEndAtX) / 2.0 * loadX
                             val arm = x - (start + (loadX / 3.0) * (w1 + 2 * wEndAtX) / (w1 + wEndAtX))
                             when (load.direction) {
-                                LoadDirection.VERTICAL_DOWN -> { vy -= total; mz -= total * arm }
-                                LoadDirection.VERTICAL_UP -> { vy += total; mz += total * arm }
-                                LoadDirection.LATERAL_LEFT -> { vz -= total; my += total * arm }
-                                LoadDirection.LATERAL_RIGHT -> { vz += total; my -= total * arm }
-                                LoadDirection.AXIAL_COMPRESSION -> { fx -= total }
-                                LoadDirection.AXIAL_TENSION -> { fx += total }
+                                // Was VERTICAL_DOWN -> vy -= total; mz -= total * arm — the
+                                // opposite sign from the otherwise-identical UniformDistributedLoad
+                                // branch above (vy += total; mz += total * arm). Both represent the
+                                // same physical convention (downward load increases shear moving
+                                // left to right), so a Trapezoidal load was internally inconsistent
+                                // with a UDL covering the same region — same load, different sign,
+                                // depending only on which Load subtype it happened to be.
+                                LoadDirection.VERTICAL_DOWN -> { vy += total; mz += total * arm }
+                                LoadDirection.VERTICAL_UP -> { vy -= total; mz -= total * arm }
+                                LoadDirection.LATERAL_LEFT -> { vz += total; my -= total * arm }
+                                LoadDirection.LATERAL_RIGHT -> { vz -= total; my += total * arm }
+                                LoadDirection.AXIAL_COMPRESSION -> { fx += total }
+                                LoadDirection.AXIAL_TENSION -> { fx -= total }
                                 LoadDirection.TORSION_CLOCKWISE -> { tx += total }
                                 LoadDirection.TORSION_COUNTER_CLOCKWISE -> { tx -= total }
                                 else -> {}

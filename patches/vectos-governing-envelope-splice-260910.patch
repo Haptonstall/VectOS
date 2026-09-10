@@ -1,0 +1,82 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+index 4b50dba..e984688 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+@@ -206,8 +206,6 @@ object MemberAnalysisSolver {
+             result.spanResults.flatMap { it.stationDemands }
+         }
+ 
+-        val envelopeStations = DemandEnvelopeResolver.resolveMemberEnvelopes(demandsByCategory, config.combinations)
+-
+         // 5. Build Individual Combination Results
+         val combinationResults = config.combinations.associate { combo ->
+             // Factor each category's station demands by this combo's load factors
+@@ -220,9 +218,27 @@ object MemberAnalysisSolver {
+                 .let { spanResults -> createSummaryResult(spanResults, comboReactions) }
+         }
+ 
+-        // 6. Build Final Governing Result from the strength envelope
++        // 6. Build Final Governing Result — from the SINGLE identified governing
++        // combination's own consistent station-by-station results, not the raw
++        // per-station envelope. The envelope resolver picks whichever combo has
++        // the larger |moment| or |shear| INDEPENDENTLY AT EACH STATION — near a
++        // support, two combos' magnitudes can be close enough that this pick
++        // flips from one station to the next and back, splicing different
++        // combinations' shear/moment/deflection together at the seam. That
++        // produces a real, visible discontinuity (a "notch") right at the
++        // splice — not a solver error, a diagram stitched from two different
++        // load cases. Deflection is especially exposed since it isn't even
++        // part of the per-station ranking criteria (moment/shear only) but
++        // still gets swapped in wholesale with whichever combo won.
++        // Everything the beam "looks like" — shear, moment, deflection alike —
++        // needs to come from ONE combination held fixed across every station,
++        // which is exactly what combinationResults[governingComboName] already
++        // is (built by buildFactoredDemands, a straight linear combination of
++        // the same two categories at every single station, hence smooth).
+         val envelopeResult = DemandEnvelopeResolver.resolveMemberEnvelopes(demandsByCategory, config.combinations)
+-        val governingDemands = envelopeResult.strengthEnvelope.map { it.combinedDemand }
++        val governingComboName =
++            envelopeResult.governingMaxMoment?.governingCombination?.name
++                ?: envelopeResult.governingMaxShear?.governingCombination?.name
+ 
+         // Compute Governing Reactions - pick max absolute vertical per node across all combos
+         val governingReactions = mutableMapOf<Int, ReactionResult>()
+@@ -235,27 +251,20 @@ object MemberAnalysisSolver {
+             }
+         }
+ 
+-        val governingSpanResults =
+-            buildSpanResults(config, governingDemands, "Governing Envelope")
+-
+-        val governingResult =
+-            createSummaryResult(
+-                governingSpanResults,
+-                governingReactions.values.toList()
+-            )
++        // Fallback only covers the pathological case of no strength combos matching
++        // anything (config.combinations non-empty but none typed STRENGTH) — normal
++        // configurations always resolve governingComboName and hit the map lookup.
++        val governingResult = governingComboName?.let { combinationResults[it] } ?: run {
++            val governingDemands = envelopeResult.strengthEnvelope.map { it.combinedDemand }
++            createSummaryResult(buildSpanResults(config, governingDemands, "Governing Envelope"), governingReactions.values.toList())
++        }
+ 
+         return governingResult.copy(
++            reactions = governingReactions.values.toList(),
+             combinationResults = combinationResults,
+-            // Source the reported name from the SAME data that produces the displayed
+-            // envelope numbers (envelopeResult, above) rather than recomputing it
+-            // independently. The previous approach compared each combo's own global
+-            // max in isolation — a redundant, disconnected calculation that could
+-            // (and did) disagree with which combo actually produced the displayed
+-            // peak, e.g. reporting a dead-load-only combo as governing even when a
+-            // combined dead+live combo produced the larger displayed moment/shear.
+-            governingCombinationName =
+-                envelopeResult.governingMaxMoment?.governingCombination?.name
+-                    ?: envelopeResult.governingMaxShear?.governingCombination?.name,
++            // Same value already resolved above (governingComboName) — kept as a
++            // named field here since it's part of the public AnalysisResult shape.
++            governingCombinationName = governingComboName,
+             // resultsByCategory (step 3, above) already holds exactly this —
+             // one unfactored AnalysisResult per active category — just surface it.
+             categoryResults = resultsByCategory.mapKeys { it.key.name }

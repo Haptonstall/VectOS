@@ -1,5 +1,7 @@
 package com.lz.beam.ui
 
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -152,7 +154,15 @@ fun BeamCalculatorScreen(
     // uses the real overall utilizationRatio instead, which is correctly
     // populated regardless of Bug C.
     val governingStrengthUtil = strengthDesignResults.maxOfOrNull { it.utilizationRatio } ?: 0.0
-    val maxDeflectionUtil = serviceabilityResults.maxOfOrNull { it.utilization } ?: 0.0
+    // Worst-case across every serviceability criterion AND every span — e.g. a
+    // "Total Load" check itself is already the worst deflection across every
+    // active combination for that span/criterion (see
+    // ServiceabilityEvaluationService.findMaxDeflectionAcrossCombinations), not
+    // specifically the strength-governing combination. So this header number
+    // can legitimately differ from any single Design tab card below it — it's
+    // the worst of all of them, not one of them.
+    val worstServiceabilityResult = serviceabilityResults.maxByOrNull { it.utilization }
+    val maxDeflectionUtil = worstServiceabilityResult?.utilization ?: 0.0
 
     val hasResults = viewModel.calculationResult != null
     val overallMaxUtil = if (hasResults) {
@@ -202,10 +212,13 @@ fun BeamCalculatorScreen(
                                 isCritical = governingStrengthUtil > 1.0
                             )
 
-                            // Deflection Badge
+                            // Deflection Badge — L/value of the single worst
+                            // serviceability result, not a percentage (an
+                            // engineer reads "L/280" directly; the ratio to
+                            // the code limit is secondary to the shape of it).
                             StatusBadgeSmall(
                                 label = "DEF",
-                                value = "${(maxDeflectionUtil * 100).toInt()}%",
+                                value = worstServiceabilityResult?.lOverValueLabel() ?: "—",
                                 isCritical = maxDeflectionUtil > 1.0
                             )
                         }
@@ -1224,6 +1237,13 @@ fun AnalysisSummary(
         }
     }
 
+    // deflectionDiagram values are already stored in inches (raw base-unit double,
+    // same as the other diagrams) — no unit conversion, same as the "Max Deflection"
+    // summary row above, which also always displays inches regardless of unit system.
+    val deflectionPoints = remember(analysis) {
+        analysis.spanResults.flatMap { it.deflectionDiagram }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Force Envelopes", style = MaterialTheme.typography.titleMedium)
         InfoCard(
@@ -1251,7 +1271,7 @@ fun AnalysisSummary(
         }
 
         // Diagrams Card
-        if (shearPoints.isNotEmpty() || momentPoints.isNotEmpty()) {
+        if (shearPoints.isNotEmpty() || momentPoints.isNotEmpty() || deflectionPoints.isNotEmpty()) {
             Text("Analysis Diagrams", style = MaterialTheme.typography.titleMedium)
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1287,6 +1307,24 @@ fun AnalysisSummary(
                             lineColor = MaterialTheme.colorScheme.primary, // Theme-aware primary
                             modifier = Modifier.fillMaxWidth(),
                             invertY = true // Standard convention (tension side down)
+                        )
+                    }
+
+                    if ((shearPoints.isNotEmpty() || momentPoints.isNotEmpty()) && deflectionPoints.isNotEmpty()) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                    }
+
+                    if (deflectionPoints.isNotEmpty()) {
+                        AnalysisChart(
+                            title = "Deflection (in)",
+                            points = deflectionPoints,
+                            unitLabel = "in",
+                            lineColor = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.fillMaxWidth(),
+                            // Downward loads solve to negative deflection values (y-up
+                            // convention); no inversion needed so the diagram naturally
+                            // dips down on screen for a beam sagging under gravity loads.
+                            invertY = false
                         )
                     }
                 }
@@ -1373,6 +1411,26 @@ fun PointCapacityCard(label: String, result: PointCapacityResult, unitSystem: Un
     // Legacy - replaced by DesignSummary/DesignCard
 }
 
+/**
+ * The calculated L/value for a serviceability result — e.g. an actual
+ * deflection that works out to L/420 against an allowable of L/360.
+ * [ServiceabilityResult] doesn't store the span length directly, but it's
+ * recoverable from allowableDeflection and the criterion's own denominator
+ * (allowableDeflection = spanLength / spanDenominator), so no model change
+ * is needed to add this. Null for an (effectively) zero actual deflection,
+ * shown as L/∞ rather than a meaningless huge number.
+ */
+fun ServiceabilityResult.calculatedLOverValue(): Int? {
+    val denominator = criterion.spanDenominator
+    val actualInches = abs(actualDeflection.inInches)
+    if (denominator <= 0 || actualInches <= 1e-9) return null
+    val spanLengthInches = allowableDeflection.inInches * denominator
+    return (spanLengthInches / actualInches).roundToInt()
+}
+
+private fun ServiceabilityResult.lOverValueLabel(): String =
+    calculatedLOverValue()?.let { "L/$it" } ?: "L/\u221E"
+
 @Composable
 fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem) {
     val isFail = result.utilization > 1.0
@@ -1398,6 +1456,10 @@ fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem) {
                 Column {
                     Text("Actual", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                     Text("${String.format("%.3f", result.actualDeflection.inInches)} in", style = MaterialTheme.typography.bodyMedium)
+                }
+                Column {
+                    Text("Calculated", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    Text(result.lOverValueLabel(), style = MaterialTheme.typography.bodyMedium)
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text("Allowable", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
