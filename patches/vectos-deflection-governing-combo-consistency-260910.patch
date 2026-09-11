@@ -1,0 +1,76 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt b/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
+index 92ce5b6..b893b85 100644
+--- a/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
++++ b/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
+@@ -43,7 +43,7 @@ object ServiceabilityEvaluationService {
+ 
+             criteria.map { criterion ->
+                 val governingStationResult = if (criterion.loadCategory == null) {
+-                    findMaxDeflectionAcrossCombinations(analysisResult, span.id)
++                    findMaxDeflectionForGoverningCombination(analysisResult, span.id)
+                 } else {
+                     findMaxDeflectionForCategory(analysisResult, criterion.loadCategory!!, span.id)
+                 }
+@@ -62,21 +62,26 @@ object ServiceabilityEvaluationService {
+         }
+     }
+ 
+-    private fun findMaxDeflectionAcrossCombinations(
++    private fun findMaxDeflectionForGoverningCombination(
+         result: AnalysisResult,
+         spanId: UUID
+     ): StationDemand {
+-        // In a real implementation, we would filter result.combinationResults by those tagged with the limitState.
+-        // For now, we'll look at all combinations and find the absolute maximum deflection for this span.
+-        return result.combinationResults.values
+-            .flatMap { it.spanResults }
++        // "Total Load" deflection now means "under the same governing
++        // combination already shown everywhere else on this screen"
++        // (result.spanResults comes from combinationResults[governingCombination-
++        // Name], one single combo held consistent at every station — see the
++        // MemberAnalysisSolver fix), not the worst deflection independently
++        // found under ANY factored strength combo scanned across
++        // combinationResults. The old approach had no consistent engineering
++        // meaning: it could report the worst deflection from a dead-only combo
++        // at one span/station and a dead+live combo at another, with nothing
++        // tying it to the same governing case the Analysis tab and the GOV%
++        // badge were already built around — hence the header/Design-tab
++        // mismatch even with only Dead + Live active.
++        return result.spanResults
+             .flatMap { it.stationDemands }
+             .filter { it.spanId == spanId }
+             .maxByOrNull { abs(it.deflection.inInches) }
+-            ?: result.spanResults
+-                .flatMap { it.stationDemands }
+-                .filter { it.spanId == spanId }
+-                .maxByOrNull { abs(it.deflection.inInches) }
+             ?: StationDemand(
+                 spanId = spanId,
+                 x = 0.0.inches,
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 12b3757..68e35cd 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -154,13 +154,15 @@ fun BeamCalculatorScreen(
+     // uses the real overall utilizationRatio instead, which is correctly
+     // populated regardless of Bug C.
+     val governingStrengthUtil = strengthDesignResults.maxOfOrNull { it.utilizationRatio } ?: 0.0
+-    // Worst-case across every serviceability criterion AND every span — e.g. a
+-    // "Total Load" check itself is already the worst deflection across every
+-    // active combination for that span/criterion (see
+-    // ServiceabilityEvaluationService.findMaxDeflectionAcrossCombinations), not
+-    // specifically the strength-governing combination. So this header number
+-    // can legitimately differ from any single Design tab card below it — it's
+-    // the worst of all of them, not one of them.
++    // Worst-case across every serviceability criterion AND every span. Each
++    // individual criterion (Live Load, Total Load) is now tied to ONE
++    // consistent combination throughout — Live Load to the unfactored live-only
++    // demand, Total Load to the same governing combination the Analysis tab and
++    // GOV% badge already use (see ServiceabilityEvaluationService) — so for a
++    // single-span beam this header number will match one of the Design tab's
++    // own criterion cards exactly. It can still differ on a multi-span member:
++    // this picks the worst span AND worst criterion together, which may not be
++    // the specific span/criterion currently in view on the Design tab.
+     val worstServiceabilityResult = serviceabilityResults.maxByOrNull { it.utilization }
+     val maxDeflectionUtil = worstServiceabilityResult?.utilization ?: 0.0
+ 

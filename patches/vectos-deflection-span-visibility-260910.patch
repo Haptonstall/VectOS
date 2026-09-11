@@ -1,0 +1,76 @@
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 68e35cd..7b8c3c6 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -816,13 +816,20 @@ fun DesignTab(viewModel: BeamViewModel) {
+     if (results == null) {
+         EmptyState("Run calculation to see design checks")
+     } else {
+-        // Scope serviceability checks to the same span the governing strength
+-        // check is on — consistent with the strength side of this tab, which
+-        // already shows only the single worst-case location, not a per-span
+-        // breakdown. Results without a spanId (older persisted calculations,
+-        // from before per-span serviceability existed) are kept regardless.
++        // Scope serviceability checks to the strength-governing span, PLUS
++        // whichever span actually has the worst deflection — these are often
++        // the same span, but not always (a short cantilever, for instance, can
++        // easily have the worst deflection while a longer adjacent span governs
++        // strength). Scoping to strength alone meant a failing deflection check
++        // on any other span was completely invisible here — no card anywhere on
++        // this tab — even though the header FAIL/DEF badge above was correctly
++        // reporting it. The header must always point to something visible below
++        // it. Results without a spanId (older persisted calculations, from
++        // before per-span serviceability existed) are kept regardless.
++        val deflectionGoverningSpanId =
++            results.serviceabilityResults.maxByOrNull { it.utilization }?.spanId
+         val scopedServiceabilityResults = results.serviceabilityResults.filter {
+-            it.spanId == null || it.spanId == governingSpanId
++            it.spanId == null || it.spanId == governingSpanId || it.spanId == deflectionGoverningSpanId
+         }
+         DesignSummary(
+             pointResults = results.strengthDesignResults,
+@@ -1401,8 +1408,18 @@ fun DesignSummary(
+         // 2. Serviceability Checks
+         if (serviceabilityResults.isNotEmpty()) {
+             Text("Serviceability Checks", style = MaterialTheme.typography.titleMedium)
++            // Only label which span a card belongs to when more than one span is
++            // actually represented (e.g. strength governs on one span, deflection
++            // on another) — a single-span beam, or a multi-span one where both
++            // happen to coincide, doesn't need the extra label cluttering it.
++            val distinctSpanIds = serviceabilityResults.mapNotNull { it.spanId }.distinct()
++            val showSpanLabel = distinctSpanIds.size > 1
+             serviceabilityResults.forEach { res ->
+-                ServiceabilityCard(res, unitSystem)
++                val spanLabel = res.spanId
++                    ?.let { id -> member.spans.indexOfFirst { it.id == id } }
++                    ?.takeIf { it >= 0 }
++                    ?.let { "Span ${it + 1}" }
++                ServiceabilityCard(res, unitSystem, spanLabel = spanLabel.takeIf { showSpanLabel })
+             }
+         }
+     }
+@@ -1434,7 +1451,7 @@ private fun ServiceabilityResult.lOverValueLabel(): String =
+     calculatedLOverValue()?.let { "L/$it" } ?: "L/\u221E"
+ 
+ @Composable
+-fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem) {
++fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem, spanLabel: String? = null) {
+     val isFail = result.utilization > 1.0
+ 
+     Surface(
+@@ -1443,6 +1460,15 @@ fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem) {
+         border = androidx.compose.foundation.BorderStroke(1.dp, if (isFail) MaterialTheme.colorScheme.error.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+     ) {
+         Column(modifier = Modifier.padding(16.dp)) {
++            if (spanLabel != null) {
++                Text(
++                    spanLabel,
++                    style = MaterialTheme.typography.labelSmall,
++                    fontWeight = FontWeight.Bold,
++                    color = MaterialTheme.colorScheme.primary,
++                    modifier = Modifier.padding(bottom = 2.dp)
++                )
++            }
+             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                 Text(result.criterion.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                 StatusBadgeSmall(

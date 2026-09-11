@@ -53,10 +53,22 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
 
         /*
+         * onDestroy() fires on every configuration change too (e.g. rotation) —
+         * Android destroys this Activity instance and immediately creates a new
+         * one, in the SAME process. RuntimeEnvironment is a process-wide
+         * singleton (see RuntimeInitializer), so shutting it down here
+         * unconditionally used to stop/null it out on every rotation, then the
+         * freshly recreated Activity (and everything under it — Compose tree,
+         * ViewModels, navigation) came back up against a dead runtime. isFinishing
+         * is false during a config-change destroy and true when the Activity is
+         * actually going away for good — only shut down in the latter case.
+         *
          * Eventually this will move to the Application
          * lifecycle when background execution is added.
          */
-        RuntimeInitializer.shutdown()
+        if (isFinishing) {
+            RuntimeInitializer.shutdown()
+        }
 
     }
 

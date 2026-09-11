@@ -1,0 +1,151 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt b/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
+index b893b85..a8d8c11 100644
+--- a/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
++++ b/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
+@@ -25,11 +25,11 @@ object ServiceabilityEvaluationService {
+      * Evaluates serviceability per span. Each span uses its own override
+      * criteria list if present in [spanOverrides], falling back to the
+      * building code's criteria otherwise — and, critically, uses that
+-     * span's own length as the denominator base and that span's own
+-     * governing deflection, not the whole member's. (Deflection limits like
+-     * L/360 are defined per span; lumping a multi-span beam's total length
+-     * into one L/360 check was never correct, independent of the override
+-     * feature this enables.)
++     * span's own length as the denominator base (doubled for a cantilever,
++     * per IBC 1604.3) and that span's own governing deflection, not the
++     * whole member's. (Deflection limits like L/360 are defined per span;
++     * lumping a multi-span beam's total length into one L/360 check was
++     * never correct, independent of the override feature this enables.)
+      */
+     fun evaluate(
+         member: StructuralMember,
+@@ -37,9 +37,26 @@ object ServiceabilityEvaluationService {
+         buildingCode: BuildingCode,
+         spanOverrides: Map<UUID, List<ServiceabilityCriterion>> = emptyMap()
+     ): List<ServiceabilityResult> {
++        val nodesById = member.nodes.associateBy { it.id }
++
+         return member.spans.flatMap { span ->
+             val criteria = spanOverrides[span.id] ?: buildingCode.serviceabilityCriteria
+-            val spanLengthInches = span.length.inches
++
++            // Per IBC 1604.3 (and matching convention elsewhere), a cantilever's
++            // deflection-limit length is taken as TWICE its actual physical
++            // length — same denominators (L/360, L/240, etc.) as any other span,
++            // just against double the L. Net effect: a cantilever's allowable
++            // deflection in absolute inches is double what using its raw physical
++            // length would give. A span counts as a cantilever here if either end
++            // node is genuinely unsupported (NodeBoundaryCondition.free() — no
++            // restraint on any DOF), regardless of which end of the span that
++            // node happens to be, and independent of whether default or
++            // per-span-override criteria are in use — this is a property of the
++            // span's own structural condition, not of which criteria set applies.
++            val isCantilever = listOf(span.startNodeId, span.endNodeId).any { nodeId ->
++                nodesById[nodeId]?.boundaryCondition?.isConstrained() == false
++            }
++            val spanLengthInches = span.length.inches * if (isCantilever) 2.0 else 1.0
+ 
+             criteria.map { criterion ->
+                 val governingStationResult = if (criterion.loadCategory == null) {
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 7b8c3c6..b2727b8 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -836,6 +836,7 @@ fun DesignTab(viewModel: BeamViewModel) {
+             detailedResult = detailedResult,
+             detailedCombinationName = detailedCombinationName,
+             serviceabilityResults = scopedServiceabilityResults,
++            allServiceabilityResults = results.serviceabilityResults,
+             member = viewModel.structuralMember,
+             unitSystem = viewModel.unitSystem
+         )
+@@ -1368,6 +1369,7 @@ fun DesignSummary(
+     detailedResult: StrengthDesignResult?,
+     detailedCombinationName: String?,
+     serviceabilityResults: List<ServiceabilityResult>,
++    allServiceabilityResults: List<ServiceabilityResult>,
+     member: StructuralMember,
+     unitSystem: UnitSystem
+ ) {
+@@ -1408,6 +1410,19 @@ fun DesignSummary(
+         // 2. Serviceability Checks
+         if (serviceabilityResults.isNotEmpty()) {
+             Text("Serviceability Checks", style = MaterialTheme.typography.titleMedium)
++
++            // Clean per-span overview — one row per span, its OWN worst
++            // (governing) criterion only, regardless of which span(s) the
++            // detailed cards below happen to be scoped to. This is the only
++            // place a beam with 3+ spans can see every span's deflection
++            // status at once; the detailed cards further down only ever
++            // show the strength-governing span plus whichever single span
++            // has the single worst deflection member-wide.
++            if (member.spans.size > 1) {
++                SpanDeflectionSummaryList(allServiceabilityResults, member)
++                Spacer(modifier = Modifier.height(12.dp))
++            }
++
+             // Only label which span a card belongs to when more than one span is
+             // actually represented (e.g. strength governs on one span, deflection
+             // on another) — a single-span beam, or a multi-span one where both
+@@ -1425,6 +1440,61 @@ fun DesignSummary(
+     }
+ }
+ 
++/**
++ * A compact, one-row-per-span overview of which serviceability criterion
++ * governs each span and by how much — the "clean list" view for beams with
++ * more spans than the two detailed cards below can show at once. Each row
++ * uses that span's OWN worst criterion (its own highest utilization among
++ * whatever criteria apply to it), independent of what governs the member
++ * as a whole.
++ */
++@Composable
++private fun SpanDeflectionSummaryList(
++    allServiceabilityResults: List<ServiceabilityResult>,
++    member: StructuralMember
++) {
++    val bySpanId = allServiceabilityResults.filter { it.spanId != null }.groupBy { it.spanId }
++
++    Surface(
++        shape = RoundedCornerShape(12.dp),
++        color = MaterialTheme.colorScheme.surface,
++        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
++    ) {
++        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
++            member.spans.forEachIndexed { index, span ->
++                val governing = bySpanId[span.id]?.maxByOrNull { it.utilization } ?: return@forEachIndexed
++                val isFail = governing.utilization > 1.0
++
++                Row(
++                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
++                    horizontalArrangement = Arrangement.SpaceBetween,
++                    verticalAlignment = Alignment.CenterVertically
++                ) {
++                    Column(modifier = Modifier.weight(1f)) {
++                        Text("Span ${index + 1}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
++                        Text(governing.criterion.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
++                    }
++                    Text(
++                        governing.lOverValueLabel(),
++                        style = MaterialTheme.typography.bodyMedium,
++                        color = if (isFail) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
++                        modifier = Modifier.padding(end = 12.dp)
++                    )
++                    Text(
++                        String.format("%.2f", governing.utilization),
++                        style = MaterialTheme.typography.bodyMedium,
++                        fontWeight = FontWeight.Bold,
++                        color = if (isFail) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
++                    )
++                }
++                if (index < member.spans.lastIndex) {
++                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
++                }
++            }
++        }
++    }
++}
++
+ @Composable
+ fun PointCapacityCard(label: String, result: PointCapacityResult, unitSystem: UnitSystem) {
+     // Legacy - replaced by DesignSummary/DesignCard

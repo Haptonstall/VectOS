@@ -154,13 +154,15 @@ fun BeamCalculatorScreen(
     // uses the real overall utilizationRatio instead, which is correctly
     // populated regardless of Bug C.
     val governingStrengthUtil = strengthDesignResults.maxOfOrNull { it.utilizationRatio } ?: 0.0
-    // Worst-case across every serviceability criterion AND every span — e.g. a
-    // "Total Load" check itself is already the worst deflection across every
-    // active combination for that span/criterion (see
-    // ServiceabilityEvaluationService.findMaxDeflectionAcrossCombinations), not
-    // specifically the strength-governing combination. So this header number
-    // can legitimately differ from any single Design tab card below it — it's
-    // the worst of all of them, not one of them.
+    // Worst-case across every serviceability criterion AND every span. Each
+    // individual criterion (Live Load, Total Load) is now tied to ONE
+    // consistent combination throughout — Live Load to the unfactored live-only
+    // demand, Total Load to the same governing combination the Analysis tab and
+    // GOV% badge already use (see ServiceabilityEvaluationService) — so for a
+    // single-span beam this header number will match one of the Design tab's
+    // own criterion cards exactly. It can still differ on a multi-span member:
+    // this picks the worst span AND worst criterion together, which may not be
+    // the specific span/criterion currently in view on the Design tab.
     val worstServiceabilityResult = serviceabilityResults.maxByOrNull { it.utilization }
     val maxDeflectionUtil = worstServiceabilityResult?.utilization ?: 0.0
 
@@ -814,19 +816,27 @@ fun DesignTab(viewModel: BeamViewModel) {
     if (results == null) {
         EmptyState("Run calculation to see design checks")
     } else {
-        // Scope serviceability checks to the same span the governing strength
-        // check is on — consistent with the strength side of this tab, which
-        // already shows only the single worst-case location, not a per-span
-        // breakdown. Results without a spanId (older persisted calculations,
-        // from before per-span serviceability existed) are kept regardless.
+        // Scope serviceability checks to the strength-governing span, PLUS
+        // whichever span actually has the worst deflection — these are often
+        // the same span, but not always (a short cantilever, for instance, can
+        // easily have the worst deflection while a longer adjacent span governs
+        // strength). Scoping to strength alone meant a failing deflection check
+        // on any other span was completely invisible here — no card anywhere on
+        // this tab — even though the header FAIL/DEF badge above was correctly
+        // reporting it. The header must always point to something visible below
+        // it. Results without a spanId (older persisted calculations, from
+        // before per-span serviceability existed) are kept regardless.
+        val deflectionGoverningSpanId =
+            results.serviceabilityResults.maxByOrNull { it.utilization }?.spanId
         val scopedServiceabilityResults = results.serviceabilityResults.filter {
-            it.spanId == null || it.spanId == governingSpanId
+            it.spanId == null || it.spanId == governingSpanId || it.spanId == deflectionGoverningSpanId
         }
         DesignSummary(
             pointResults = results.strengthDesignResults,
             detailedResult = detailedResult,
             detailedCombinationName = detailedCombinationName,
             serviceabilityResults = scopedServiceabilityResults,
+            allServiceabilityResults = results.serviceabilityResults,
             member = viewModel.structuralMember,
             unitSystem = viewModel.unitSystem
         )
@@ -1359,6 +1369,7 @@ fun DesignSummary(
     detailedResult: StrengthDesignResult?,
     detailedCombinationName: String?,
     serviceabilityResults: List<ServiceabilityResult>,
+    allServiceabilityResults: List<ServiceabilityResult>,
     member: StructuralMember,
     unitSystem: UnitSystem
 ) {
@@ -1399,8 +1410,86 @@ fun DesignSummary(
         // 2. Serviceability Checks
         if (serviceabilityResults.isNotEmpty()) {
             Text("Serviceability Checks", style = MaterialTheme.typography.titleMedium)
+
+            // Clean per-span overview — one row per span, its OWN worst
+            // (governing) criterion only, regardless of which span(s) the
+            // detailed cards below happen to be scoped to. This is the only
+            // place a beam with 3+ spans can see every span's deflection
+            // status at once; the detailed cards further down only ever
+            // show the strength-governing span plus whichever single span
+            // has the single worst deflection member-wide.
+            if (member.spans.size > 1) {
+                SpanDeflectionSummaryList(allServiceabilityResults, member)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Only label which span a card belongs to when more than one span is
+            // actually represented (e.g. strength governs on one span, deflection
+            // on another) — a single-span beam, or a multi-span one where both
+            // happen to coincide, doesn't need the extra label cluttering it.
+            val distinctSpanIds = serviceabilityResults.mapNotNull { it.spanId }.distinct()
+            val showSpanLabel = distinctSpanIds.size > 1
             serviceabilityResults.forEach { res ->
-                ServiceabilityCard(res, unitSystem)
+                val spanLabel = res.spanId
+                    ?.let { id -> member.spans.indexOfFirst { it.id == id } }
+                    ?.takeIf { it >= 0 }
+                    ?.let { "Span ${it + 1}" }
+                ServiceabilityCard(res, unitSystem, spanLabel = spanLabel.takeIf { showSpanLabel })
+            }
+        }
+    }
+}
+
+/**
+ * A compact, one-row-per-span overview of which serviceability criterion
+ * governs each span and by how much — the "clean list" view for beams with
+ * more spans than the two detailed cards below can show at once. Each row
+ * uses that span's OWN worst criterion (its own highest utilization among
+ * whatever criteria apply to it), independent of what governs the member
+ * as a whole.
+ */
+@Composable
+private fun SpanDeflectionSummaryList(
+    allServiceabilityResults: List<ServiceabilityResult>,
+    member: StructuralMember
+) {
+    val bySpanId = allServiceabilityResults.filter { it.spanId != null }.groupBy { it.spanId }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+            member.spans.forEachIndexed { index, span ->
+                val governing = bySpanId[span.id]?.maxByOrNull { it.utilization } ?: return@forEachIndexed
+                val isFail = governing.utilization > 1.0
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Span ${index + 1}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text(governing.criterion.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    }
+                    Text(
+                        governing.lOverValueLabel(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isFail) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(end = 12.dp)
+                    )
+                    Text(
+                        String.format("%.2f", governing.utilization),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isFail) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (index < member.spans.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                }
             }
         }
     }
@@ -1432,7 +1521,7 @@ private fun ServiceabilityResult.lOverValueLabel(): String =
     calculatedLOverValue()?.let { "L/$it" } ?: "L/\u221E"
 
 @Composable
-fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem) {
+fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem, spanLabel: String? = null) {
     val isFail = result.utilization > 1.0
 
     Surface(
@@ -1441,6 +1530,15 @@ fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem) {
         border = androidx.compose.foundation.BorderStroke(1.dp, if (isFail) MaterialTheme.colorScheme.error.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+            if (spanLabel != null) {
+                Text(
+                    spanLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(result.criterion.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 StatusBadgeSmall(
@@ -1600,14 +1698,74 @@ fun DesignParameterSummary(result: StrengthDesignResult, unitSystem: UnitSystem)
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EquationTraceItem(trace: DesignEquationTrace) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(trace.symbolicEquation, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Text(trace.codeReference, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+    // The old layout crammed the full substituted equation into one
+    // monospace line with no wrap-point awareness — fine for something
+    // short, but a multi-term AISC formula (e.g. the elastic-LTB case)
+    // easily runs 100+ characters and wraps mid-token into an unreadable
+    // jumble on a phone-width screen, which is what prompted the rotation
+    // in the first place. Leading with a wrapping "given" list of each
+    // variable's substituted value (short, self-contained chips that each
+    // wrap cleanly on their own) gives a readable trace at any width; the
+    // full substituted-equation string is kept below for anyone who wants
+    // the literal audit trail, but it's no longer the only way to read it.
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Text(trace.codeReference, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+        Text(
+            trace.symbolicEquation,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+
+        if (trace.variables.isNotEmpty()) {
+            FlowRow(
+                modifier = Modifier.padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                trace.variables.forEach { (name, value) ->
+                    Text(
+                        "$name = ${formatTraceVariable(value)}",
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            fontSize = 12.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
-        Text(trace.substitutedEquation, style = androidx.compose.ui.text.TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 11.sp))
-        Text("${trace.result} ${trace.units}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+
+        Text(
+            trace.substitutedEquation,
+            style = androidx.compose.ui.text.TextStyle(
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                fontSize = 11.sp,
+                lineHeight = 15.sp
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            modifier = Modifier.padding(top = 6.dp)
+        )
+        Text(
+            "= ${trace.result} ${trace.units}",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+/** Trims a substituted-variable value to a compact, readable form for the
+ *  "given" chips — whole numbers show with no decimal noise, everything
+ *  else is capped at 3 decimals with trailing zeros trimmed. */
+private fun formatTraceVariable(value: Double): String {
+    if (value.isNaN() || value.isInfinite()) return value.toString()
+    return if (value == value.toLong().toDouble() && kotlin.math.abs(value) < 1_000_000) {
+        value.toLong().toString()
+    } else {
+        String.format("%.3f", value).trimEnd('0').trimEnd('.')
     }
 }

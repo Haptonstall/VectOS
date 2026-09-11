@@ -1,0 +1,113 @@
+diff --git a/app/src/main/java/com/lz/vectos/app/MainActivity.kt b/app/src/main/java/com/lz/vectos/app/MainActivity.kt
+index 9952171..3610a80 100644
+--- a/app/src/main/java/com/lz/vectos/app/MainActivity.kt
++++ b/app/src/main/java/com/lz/vectos/app/MainActivity.kt
+@@ -53,10 +53,22 @@ class MainActivity : ComponentActivity() {
+         super.onDestroy()
+ 
+         /*
++         * onDestroy() fires on every configuration change too (e.g. rotation) —
++         * Android destroys this Activity instance and immediately creates a new
++         * one, in the SAME process. RuntimeEnvironment is a process-wide
++         * singleton (see RuntimeInitializer), so shutting it down here
++         * unconditionally used to stop/null it out on every rotation, then the
++         * freshly recreated Activity (and everything under it — Compose tree,
++         * ViewModels, navigation) came back up against a dead runtime. isFinishing
++         * is false during a config-change destroy and true when the Activity is
++         * actually going away for good — only shut down in the latter case.
++         *
+          * Eventually this will move to the Application
+          * lifecycle when background execution is added.
+          */
+-        RuntimeInitializer.shutdown()
++        if (isFinishing) {
++            RuntimeInitializer.shutdown()
++        }
+ 
+     }
+ 
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 43adf35..12b3757 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -1600,14 +1600,74 @@ fun DesignParameterSummary(result: StrengthDesignResult, unitSystem: UnitSystem)
+     }
+ }
+ 
++@OptIn(ExperimentalLayoutApi::class)
+ @Composable
+ fun EquationTraceItem(trace: DesignEquationTrace) {
+-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+-            Text(trace.symbolicEquation, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+-            Text(trace.codeReference, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
++    // The old layout crammed the full substituted equation into one
++    // monospace line with no wrap-point awareness — fine for something
++    // short, but a multi-term AISC formula (e.g. the elastic-LTB case)
++    // easily runs 100+ characters and wraps mid-token into an unreadable
++    // jumble on a phone-width screen, which is what prompted the rotation
++    // in the first place. Leading with a wrapping "given" list of each
++    // variable's substituted value (short, self-contained chips that each
++    // wrap cleanly on their own) gives a readable trace at any width; the
++    // full substituted-equation string is kept below for anyone who wants
++    // the literal audit trail, but it's no longer the only way to read it.
++    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
++        Text(trace.codeReference, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
++        Text(
++            trace.symbolicEquation,
++            style = MaterialTheme.typography.labelMedium,
++            color = MaterialTheme.colorScheme.primary,
++            modifier = Modifier.padding(top = 2.dp)
++        )
++
++        if (trace.variables.isNotEmpty()) {
++            FlowRow(
++                modifier = Modifier.padding(top = 6.dp),
++                horizontalArrangement = Arrangement.spacedBy(14.dp),
++                verticalArrangement = Arrangement.spacedBy(4.dp)
++            ) {
++                trace.variables.forEach { (name, value) ->
++                    Text(
++                        "$name = ${formatTraceVariable(value)}",
++                        style = androidx.compose.ui.text.TextStyle(
++                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
++                            fontSize = 12.sp
++                        ),
++                        color = MaterialTheme.colorScheme.onSurfaceVariant
++                    )
++                }
++            }
+         }
+-        Text(trace.substitutedEquation, style = androidx.compose.ui.text.TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 11.sp))
+-        Text("${trace.result} ${trace.units}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
++
++        Text(
++            trace.substitutedEquation,
++            style = androidx.compose.ui.text.TextStyle(
++                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
++                fontSize = 11.sp,
++                lineHeight = 15.sp
++            ),
++            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
++            modifier = Modifier.padding(top = 6.dp)
++        )
++        Text(
++            "= ${trace.result} ${trace.units}",
++            style = MaterialTheme.typography.bodySmall,
++            fontWeight = FontWeight.Bold,
++            modifier = Modifier.padding(top = 4.dp)
++        )
++    }
++}
++
++/** Trims a substituted-variable value to a compact, readable form for the
++ *  "given" chips — whole numbers show with no decimal noise, everything
++ *  else is capped at 3 decimals with trailing zeros trimmed. */
++private fun formatTraceVariable(value: Double): String {
++    if (value.isNaN() || value.isInfinite()) return value.toString()
++    return if (value == value.toLong().toDouble() && kotlin.math.abs(value) < 1_000_000) {
++        value.toLong().toString()
++    } else {
++        String.format("%.3f", value).trimEnd('0').trimEnd('.')
+     }
+ }

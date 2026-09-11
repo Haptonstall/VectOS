@@ -25,11 +25,11 @@ object ServiceabilityEvaluationService {
      * Evaluates serviceability per span. Each span uses its own override
      * criteria list if present in [spanOverrides], falling back to the
      * building code's criteria otherwise — and, critically, uses that
-     * span's own length as the denominator base and that span's own
-     * governing deflection, not the whole member's. (Deflection limits like
-     * L/360 are defined per span; lumping a multi-span beam's total length
-     * into one L/360 check was never correct, independent of the override
-     * feature this enables.)
+     * span's own length as the denominator base (doubled for a cantilever,
+     * per IBC 1604.3) and that span's own governing deflection, not the
+     * whole member's. (Deflection limits like L/360 are defined per span;
+     * lumping a multi-span beam's total length into one L/360 check was
+     * never correct, independent of the override feature this enables.)
      */
     fun evaluate(
         member: StructuralMember,
@@ -37,13 +37,30 @@ object ServiceabilityEvaluationService {
         buildingCode: BuildingCode,
         spanOverrides: Map<UUID, List<ServiceabilityCriterion>> = emptyMap()
     ): List<ServiceabilityResult> {
+        val nodesById = member.nodes.associateBy { it.id }
+
         return member.spans.flatMap { span ->
             val criteria = spanOverrides[span.id] ?: buildingCode.serviceabilityCriteria
-            val spanLengthInches = span.length.inches
+
+            // Per IBC 1604.3 (and matching convention elsewhere), a cantilever's
+            // deflection-limit length is taken as TWICE its actual physical
+            // length — same denominators (L/360, L/240, etc.) as any other span,
+            // just against double the L. Net effect: a cantilever's allowable
+            // deflection in absolute inches is double what using its raw physical
+            // length would give. A span counts as a cantilever here if either end
+            // node is genuinely unsupported (NodeBoundaryCondition.free() — no
+            // restraint on any DOF), regardless of which end of the span that
+            // node happens to be, and independent of whether default or
+            // per-span-override criteria are in use — this is a property of the
+            // span's own structural condition, not of which criteria set applies.
+            val isCantilever = listOf(span.startNodeId, span.endNodeId).any { nodeId ->
+                nodesById[nodeId]?.boundaryCondition?.isConstrained() == false
+            }
+            val spanLengthInches = span.length.inches * if (isCantilever) 2.0 else 1.0
 
             criteria.map { criterion ->
                 val governingStationResult = if (criterion.loadCategory == null) {
-                    findMaxDeflectionAcrossCombinations(analysisResult, span.id)
+                    findMaxDeflectionForGoverningCombination(analysisResult, span.id)
                 } else {
                     findMaxDeflectionForCategory(analysisResult, criterion.loadCategory!!, span.id)
                 }
@@ -62,21 +79,26 @@ object ServiceabilityEvaluationService {
         }
     }
 
-    private fun findMaxDeflectionAcrossCombinations(
+    private fun findMaxDeflectionForGoverningCombination(
         result: AnalysisResult,
         spanId: UUID
     ): StationDemand {
-        // In a real implementation, we would filter result.combinationResults by those tagged with the limitState.
-        // For now, we'll look at all combinations and find the absolute maximum deflection for this span.
-        return result.combinationResults.values
-            .flatMap { it.spanResults }
+        // "Total Load" deflection now means "under the same governing
+        // combination already shown everywhere else on this screen"
+        // (result.spanResults comes from combinationResults[governingCombination-
+        // Name], one single combo held consistent at every station — see the
+        // MemberAnalysisSolver fix), not the worst deflection independently
+        // found under ANY factored strength combo scanned across
+        // combinationResults. The old approach had no consistent engineering
+        // meaning: it could report the worst deflection from a dead-only combo
+        // at one span/station and a dead+live combo at another, with nothing
+        // tying it to the same governing case the Analysis tab and the GOV%
+        // badge were already built around — hence the header/Design-tab
+        // mismatch even with only Dead + Live active.
+        return result.spanResults
             .flatMap { it.stationDemands }
             .filter { it.spanId == spanId }
             .maxByOrNull { abs(it.deflection.inInches) }
-            ?: result.spanResults
-                .flatMap { it.stationDemands }
-                .filter { it.spanId == spanId }
-                .maxByOrNull { abs(it.deflection.inInches) }
             ?: StationDemand(
                 spanId = spanId,
                 x = 0.0.inches,
