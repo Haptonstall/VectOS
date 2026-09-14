@@ -1409,32 +1409,38 @@ fun DesignSummary(
 
         // 2. Serviceability Checks
         if (serviceabilityResults.isNotEmpty()) {
-            Text("Serviceability Checks", style = MaterialTheme.typography.titleMedium)
+            // Own inner Column with tight spacing — the outer 24dp spacedBy is
+            // meant to separate major sections (Strength vs Serviceability),
+            // not pad between every card within this one. Screen space is
+            // scarce here; readability doesn't need 24dp between a title, a
+            // summary list, and each card.
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Serviceability Checks", style = MaterialTheme.typography.titleMedium)
 
-            // Clean per-span overview — one row per span, its OWN worst
-            // (governing) criterion only, regardless of which span(s) the
-            // detailed cards below happen to be scoped to. This is the only
-            // place a beam with 3+ spans can see every span's deflection
-            // status at once; the detailed cards further down only ever
-            // show the strength-governing span plus whichever single span
-            // has the single worst deflection member-wide.
-            if (member.spans.size > 1) {
-                SpanDeflectionSummaryList(allServiceabilityResults, member)
-                Spacer(modifier = Modifier.height(12.dp))
-            }
+                // Clean per-span overview — one row per span, its OWN worst
+                // (governing) criterion only, regardless of which span(s) the
+                // detailed cards below happen to be scoped to. This is the only
+                // place a beam with 3+ spans can see every span's deflection
+                // status at once; the detailed cards further down only ever
+                // show the strength-governing span plus whichever single span
+                // has the single worst deflection member-wide.
+                if (member.spans.size > 1) {
+                    SpanDeflectionSummaryList(allServiceabilityResults, member)
+                }
 
-            // Only label which span a card belongs to when more than one span is
-            // actually represented (e.g. strength governs on one span, deflection
-            // on another) — a single-span beam, or a multi-span one where both
-            // happen to coincide, doesn't need the extra label cluttering it.
-            val distinctSpanIds = serviceabilityResults.mapNotNull { it.spanId }.distinct()
-            val showSpanLabel = distinctSpanIds.size > 1
-            serviceabilityResults.forEach { res ->
-                val spanLabel = res.spanId
-                    ?.let { id -> member.spans.indexOfFirst { it.id == id } }
-                    ?.takeIf { it >= 0 }
-                    ?.let { "Span ${it + 1}" }
-                ServiceabilityCard(res, unitSystem, spanLabel = spanLabel.takeIf { showSpanLabel })
+                // Only label which span a card belongs to when more than one span is
+                // actually represented (e.g. strength governs on one span, deflection
+                // on another) — a single-span beam, or a multi-span one where both
+                // happen to coincide, doesn't need the extra label cluttering it.
+                val distinctSpanIds = serviceabilityResults.mapNotNull { it.spanId }.distinct()
+                val showSpanLabel = distinctSpanIds.size > 1
+                serviceabilityResults.forEach { res ->
+                    val spanLabel = res.spanId
+                        ?.let { id -> member.spans.indexOfFirst { it.id == id } }
+                        ?.takeIf { it >= 0 }
+                        ?.let { "Span ${it + 1}" }
+                    ServiceabilityCard(res, unitSystem, spanLabel = spanLabel.takeIf { showSpanLabel })
+                }
             }
         }
     }
@@ -1466,7 +1472,7 @@ private fun SpanDeflectionSummaryList(
                 val isFail = governing.utilization > 1.0
 
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1529,7 +1535,7 @@ fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem, spa
         color = if (isFail) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(1.dp, if (isFail) MaterialTheme.colorScheme.error.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             if (spanLabel != null) {
                 Text(
                     spanLabel,
@@ -1548,7 +1554,7 @@ fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem, spa
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
@@ -1565,7 +1571,7 @@ fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem, spa
                 }
             }
 
-            Text(result.criterion.description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 4.dp))
+            Text(result.criterion.description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }
