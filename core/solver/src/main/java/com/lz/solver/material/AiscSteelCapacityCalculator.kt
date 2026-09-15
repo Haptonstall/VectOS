@@ -58,7 +58,31 @@ class AiscSteelCapacityCalculator(
      * this was wired through — so existing call sites that haven't been
      * updated to pass a resolved edition keep identical behavior.
      */
-    private val edition: AiscEdition = AiscEdition.AISC_360_22
+    private val edition: AiscEdition = AiscEdition.AISC_360_22,
+    /**
+     * Member orientation from the Geometry tab's Strong Axis / Weak Axis
+     * toggle. True = the beam bends about its strong axis (default,
+     * matches prior behavior for every caller that hasn't been updated to
+     * pass this). False = the single moment/shear this 2D solver computes
+     * is actually loading the section's WEAK axis — the whole pipeline
+     * downstream (evaluate/evaluateDetailed/CapacityEngine/demand.moment)
+     * is hardwired to treat "flexureX"/"shear(isStrongAxis=true)" as *the*
+     * governing check against that single demand value, so rather than
+     * threading a second orientation-aware demand value through the whole
+     * solver, calculateFlexureX and the governing shear call dispatch to
+     * the weak-axis (F6/G6) formulas internally when this is false. See
+     * calculateFlexureX and the two `calculateShear(memberIsStrongAxis)`
+     * call sites below.
+     *
+     * Known gap: this fixes the STRENGTH CHECK only. Deflection and (for
+     * multi-span continuous beams) moment distribution still use the
+     * strong-axis I unconditionally (BeamAnalysisConfig.momentOfInertiaX),
+     * since MemberAnalysisSolver's stiffness matrix isn't wired to this
+     * flag — a weak-axis-oriented beam will still show understated
+     * deflection and (for continuous beams only) slightly-off moment
+     * redistribution until that's addressed separately.
+     */
+    private val memberIsStrongAxis: Boolean = true
 ) : CapacityCalculator {
 
     private val E: Double = material.modulusOfElasticity.inPsi
@@ -101,8 +125,8 @@ class AiscSteelCapacityCalculator(
 
         val (nomMnX,  lsMnX)  = calculateFlexureX(lb, cb)
         val (nomMnY,  lsMnY)  = calculateFlexureY()
-        val (nomVnX,  lsVnX)  = calculateShear(isStrongAxis = true)
-        val (nomVnY,  lsVnY)  = calculateShear(isStrongAxis = false)
+        val (nomVnX,  lsVnX)  = calculateShear(isStrongAxis = memberIsStrongAxis)
+        val (nomVnY,  lsVnY)  = calculateShear(isStrongAxis = !memberIsStrongAxis)
         val (nomTn,   lsTn)   = calculateTorsion()
 
         return RawCapacityResult(
@@ -138,7 +162,7 @@ class AiscSteelCapacityCalculator(
 
         // --- Nominal capacities (full results, including traces) ---
         val flexureResult = calculateFlexureX(lb, cb)
-        val shearResult   = calculateShear(isStrongAxis = true)
+        val shearResult   = calculateShear(isStrongAxis = memberIsStrongAxis)
         val torsionResult = calculateTorsion()
         val isAxialTension = demand.axial.pounds >= 0.0
         val axialResult = if (isAxialTension)
@@ -232,6 +256,31 @@ class AiscSteelCapacityCalculator(
     // ------------------------------------------------------------------
 
     private fun calculateFlexureX(lb: Double, cb: Double): LimitStateResult {
+        if (!memberIsStrongAxis) {
+            // Weak-axis orientation — the demand this calculator is asked
+            // to check against "X" is actually loading the minor axis.
+            // No LTB term for a doubly symmetric shape bent about its
+            // minor axis, so none of this needs lb/cb.
+            if (profile is SteelProfile) {
+                val zy = profile.propertiesWeakAxis.z.inIn3
+                val sy = profile.propertiesWeakAxis.s.inIn3
+                val mpY = min(Fy * zy, 1.6 * Fy * sy)
+                when (profile.shapeType) {
+                    // F7 doesn't distinguish which HSS wall pair is being
+                    // checked — reuse the same local-buckling logic with
+                    // the flat dimensions swapped (weak-axis bending flips
+                    // which pair of walls is "flange" vs "web").
+                    ShapeType.RECTANGULAR_HSS -> return flexureRectangularHss(mpY, sy, swapped = true)
+                    // Round HSS/pipe: D/t is orientation-independent (Sy =
+                    // Sx by symmetry), so no swap needed.
+                    ShapeType.ROUND_HSS, ShapeType.PIPE -> return flexureRoundHss(mpY, sy)
+                    else -> { /* fall through to calculateFlexureY() below */ }
+                }
+            }
+            val (mn, ls) = calculateFlexureY()
+            return LimitStateResult(mn, ls)
+        }
+
         val zx = profile.propertiesStrongAxis.z.inIn3
         val sx = profile.propertiesStrongAxis.s.inIn3
         val mp = Fy * zx
@@ -241,19 +290,10 @@ class AiscSteelCapacityCalculator(
             ShapeType.WIDE_FLANGE,
             ShapeType.CHANNEL -> ltbAndFlbIShape(lb, cb, mp, sx)
 
-            ShapeType.RECTANGULAR_HSS -> {
-                // F7 — Box sections and HSS (trace generation out of scope for
-                // this pass — see AiscSteelCapacityCalculator handoff notes)
-                val mn = min(mp, 1.6 * Fy * sx)
-                LimitStateResult(mn, "HSS Box Yielding")
-            }
+            ShapeType.RECTANGULAR_HSS -> flexureRectangularHss(mp, sx)
 
             ShapeType.ROUND_HSS,
-            ShapeType.PIPE -> {
-                // F8 — Round HSS and pipe
-                // D/t check for local buckling omitted here; use mp as first pass
-                LimitStateResult(mp, "Round HSS Yielding")
-            }
+            ShapeType.PIPE -> flexureRoundHss(mp, sx)
 
             ShapeType.TEE,
             ShapeType.DOUBLE_ANGLE -> {
@@ -405,6 +445,210 @@ class AiscSteelCapacityCalculator(
         else LimitStateResult(mnFLB, lsFLB, traces)
     }
 
+    /**
+     * AISC F7.2/F7.3 — flange and web local buckling for square/rectangular
+     * HSS and box sections, applied on top of F7.1 yielding (Mn = mp =
+     * min(Fy·Zx, 1.6·Fy·Sx), already computed by the caller). Classic
+     * (360-10/360-16) form of F7-2/F7-3 — AISC 360-22 rewrote these
+     * algebraically to match the F3 I-shape style, but per AISC's own
+     * edition-comparison notes that was a format change to the equation,
+     * not a change to the underlying strength curve, and this calculator
+     * doesn't otherwise branch its W-shape formulas (F2/F3/G2) by edition
+     * either — same precedent followed here.
+     *
+     * b/t and h/t use the *flat* width/height ([SteelProfile.flatWidthB]/
+     * [SteelProfile.flatHeightH]) per Table B4.1a, not the overall B/H
+     * ([flangeWidth]/[depth]) — falls back to an approximation if a profile
+     * predates those fields (e.g. a hand-entered custom HSS).
+     */
+    private fun flexureRectangularHss(mp: Double, sx: Double, swapped: Boolean = false): LimitStateResult {
+        if (profile !is SteelProfile) return LimitStateResult(mp, "HSS Box Yielding")
+
+        val t = profile.webThickness.inInches
+        // b = width of the flange resisting the bending being checked, h =
+        // height of the web in that same direction. For weak-axis bending
+        // (swapped=true, called from calculateFlexureY) these are the
+        // strong-axis's h and b respectively — the flat dimensions swap
+        // roles with the bending axis.
+        val bRaw = profile.flatWidthB ?: (profile.flangeWidth.inInches - 3 * t)
+        val hRaw = profile.flatHeightH ?: (profile.depth.inInches - 3 * t)
+        val b = if (swapped) hRaw else bRaw
+        val h = if (swapped) bRaw else hRaw
+        if (t <= 0.0 || b <= 0.0 || h <= 0.0) return LimitStateResult(mp, "HSS Box Yielding")
+
+        // --- F7.2 Flange Local Buckling (compression flange, width b) ---
+        val bt = b / t
+        val lambdaPf = 1.12 * sqrt(E / Fy)
+        val lambdaRf = 1.40 * sqrt(E / Fy)
+
+        val (mnFlange, lsFlange, flangeTrace) = when {
+            bt <= lambdaPf -> Triple(
+                mp, "HSS Box Yielding",
+                DesignEquationTrace(
+                    symbolicEquation    = "b/t ≤ λpf → compact flange, Mn = Mp",
+                    substitutedEquation = "b/t = ${fmt(bt, 2)} ≤ λpf = 1.12√(E/Fy) = ${fmt(lambdaPf, 2)}",
+                    result              = kipFt(mp),
+                    units               = "kip-ft",
+                    codeReference       = "AISC 360 B4.1 / F7.1",
+                    variables           = mapOf("b_t" to bt, "lambdaPf" to lambdaPf)
+                )
+            )
+            bt <= lambdaRf -> {
+                val mn = min(mp - (mp - Fy * sx) * (3.57 * bt * sqrt(Fy / E) - 4.0), mp)
+                Triple(
+                    mn, "HSS Flange Local Buckling",
+                    DesignEquationTrace(
+                        symbolicEquation    = "Mn = Mp − (Mp − FySx)[3.57(b/t)√(Fy/E) − 4.0] ≤ Mp",
+                        substitutedEquation = "Mn = ${fmt(mp, 0)} − (${fmt(mp, 0)} − ${fmt(Fy, 0)}×${fmt(sx, 2)})×[3.57×${fmt(bt, 2)}×√(${fmt(Fy, 0)}/${fmt(E, 0)}) − 4.0]",
+                        result              = kipFt(mn),
+                        units               = "kip-ft",
+                        codeReference       = "AISC 360 F7-2",
+                        variables           = mapOf("b_t" to bt, "Fy" to Fy, "Sx" to sx)
+                    )
+                )
+            }
+            else -> {
+                val be = min(1.92 * t * sqrt(E / Fy) * (1.0 - (0.38 / bt) * sqrt(E / Fy)), b)
+                // Effective Sx approximated by deducting the lost flange
+                // material (b - be, both flanges) at its real lever arm from
+                // the tabulated (accurate, corner-radius-inclusive) Ix,
+                // rather than a blunt Sx×(be/b) scaling.
+                val ix = if (swapped) profile.propertiesWeakAxis.i.inIn4 else profile.propertiesStrongAxis.i.inIn4
+                val c = (if (swapped) profile.flangeWidth.inInches else profile.depth.inInches) / 2.0
+                val ixEff = max(ix - 2.0 * (b - be) * t * c.pow(2), 0.0)
+                val se = if (c > 0.0) ixEff / c else sx
+                val mn = Fy * se
+                Triple(
+                    mn, "HSS Slender Flange Buckling",
+                    DesignEquationTrace(
+                        symbolicEquation    = "be = 1.92t√(E/Fy)[1−(0.38/(b/t))√(E/Fy)] ≤ b;  Mn = Fy·Se",
+                        substitutedEquation = "be = ${fmt(be, 3)} in (b=${fmt(b, 3)} in) → Ieff = Ix−2(b−be)t·c² = ${fmt(ixEff, 1)} in⁴ → Se = ${fmt(se, 2)} in³",
+                        result              = kipFt(mn),
+                        units               = "kip-ft",
+                        codeReference       = "AISC 360 F7-3, F7-4",
+                        variables           = mapOf("b_t" to bt, "be" to be, "Se" to se)
+                    )
+                )
+            }
+        }
+
+        // --- F7.3 Web Local Buckling (web height h) ---
+        val ht = h / t
+        val lambdaPw = 2.42 * sqrt(E / Fy)
+        val lambdaRw = 5.70 * sqrt(E / Fy)
+
+        val (mnWeb, lsWeb, webTrace) = when {
+            ht <= lambdaPw -> Triple(
+                mp, "HSS Box Yielding",
+                DesignEquationTrace(
+                    symbolicEquation    = "h/t ≤ λpw → compact web, Mn = Mp",
+                    substitutedEquation = "h/t = ${fmt(ht, 2)} ≤ λpw = 2.42√(E/Fy) = ${fmt(lambdaPw, 2)}",
+                    result              = kipFt(mp),
+                    units               = "kip-ft",
+                    codeReference       = "AISC 360 B4.1 / F7.1",
+                    variables           = mapOf("h_t" to ht, "lambdaPw" to lambdaPw)
+                )
+            )
+            ht <= lambdaRw -> {
+                val mn = min(mp - (mp - Fy * sx) * (0.305 * ht * sqrt(Fy / E) - 0.738), mp)
+                Triple(
+                    mn, "HSS Web Local Buckling",
+                    DesignEquationTrace(
+                        symbolicEquation    = "Mn = Mp − (Mp − FySx)[0.305(h/t)√(Fy/E) − 0.738] ≤ Mp",
+                        substitutedEquation = "Mn = ${fmt(mp, 0)} − (${fmt(mp, 0)} − ${fmt(Fy, 0)}×${fmt(sx, 2)})×[0.305×${fmt(ht, 2)}×√(${fmt(Fy, 0)}/${fmt(E, 0)}) − 0.738]",
+                        result              = kipFt(mn),
+                        units               = "kip-ft",
+                        codeReference       = "AISC 360 F7-6",
+                        variables           = mapOf("h_t" to ht, "Fy" to Fy, "Sx" to sx)
+                    )
+                )
+            }
+            else -> {
+                // Slender webs in flexure sit outside the standard AISC HSS
+                // product range (no cataloged wall-thickness/depth
+                // combination at typical Fy reaches h/t this high) —
+                // extend the noncompact formula as a conservative fallback
+                // rather than leaving this branch undefined.
+                val mn = max(min(mp - (mp - Fy * sx) * (0.305 * ht * sqrt(Fy / E) - 0.738), mp), 0.0)
+                Triple(
+                    mn, "HSS Web Local Buckling (slender, extrapolated)",
+                    DesignEquationTrace(
+                        symbolicEquation    = "h/t > λrw — outside standard HSS product range; F7.3 noncompact formula extrapolated conservatively",
+                        substitutedEquation = "h/t = ${fmt(ht, 2)} > λrw = 5.70√(E/Fy) = ${fmt(lambdaRw, 2)}",
+                        result              = kipFt(mn),
+                        units               = "kip-ft",
+                        codeReference       = "AISC 360 F7.3 (extrapolated)",
+                        variables           = mapOf("h_t" to ht, "lambdaRw" to lambdaRw)
+                    )
+                )
+            }
+        }
+
+        val traces = listOf(flangeTrace, webTrace)
+        return if (mnFlange <= mnWeb) LimitStateResult(mnFlange, lsFlange, traces)
+        else LimitStateResult(mnWeb, lsWeb, traces)
+    }
+
+    /**
+     * AISC F8.2/F8.3 — local buckling for round HSS and pipe, on top of
+     * F8.1 yielding (Mn = Mp, already computed by the caller as `mp`).
+     * Unchanged across 360-10/16/22 editions.
+     */
+    private fun flexureRoundHss(mp: Double, sx: Double): LimitStateResult {
+        if (profile !is SteelProfile) return LimitStateResult(mp, "Round HSS Yielding")
+
+        val t = profile.webThickness.inInches
+        val d = profile.depth.inInches
+        if (t <= 0.0 || d <= 0.0) return LimitStateResult(mp, "Round HSS Yielding")
+
+        val dt = d / t
+        val lambdaP = 0.07 * E / Fy
+        val lambdaR = 0.31 * E / Fy
+
+        return when {
+            dt <= lambdaP -> LimitStateResult(
+                mp, "Round HSS Yielding",
+                listOf(DesignEquationTrace(
+                    symbolicEquation    = "D/t ≤ λp → compact, Mn = Mp",
+                    substitutedEquation = "D/t = ${fmt(dt, 1)} ≤ λp = 0.07E/Fy = ${fmt(lambdaP, 1)}",
+                    result              = kipFt(mp),
+                    units               = "kip-ft",
+                    codeReference       = "AISC 360 F8.1, F8-1",
+                    variables           = mapOf("D_t" to dt, "lambdaP" to lambdaP)
+                ))
+            )
+            dt <= lambdaR -> {
+                val mn = (0.021 * E / dt + Fy) * sx
+                LimitStateResult(
+                    mn, "Round HSS Local Buckling",
+                    listOf(DesignEquationTrace(
+                        symbolicEquation    = "Mn = [0.021E/(D/t) + Fy]·S",
+                        substitutedEquation = "Mn = [0.021×${fmt(E, 0)}/${fmt(dt, 1)} + ${fmt(Fy, 0)}]×${fmt(sx, 2)}",
+                        result              = kipFt(mn),
+                        units               = "kip-ft",
+                        codeReference       = "AISC 360 F8-2",
+                        variables           = mapOf("D_t" to dt, "Fy" to Fy, "S" to sx)
+                    ))
+                )
+            }
+            else -> {
+                val fcr = 0.33 * E / dt
+                val mn = fcr * sx
+                LimitStateResult(
+                    mn, "Round HSS Slender Buckling",
+                    listOf(DesignEquationTrace(
+                        symbolicEquation    = "Fcr = 0.33E/(D/t);  Mn = Fcr·S",
+                        substitutedEquation = "Fcr = 0.33×${fmt(E, 0)}/${fmt(dt, 1)} = ${fmt(fcr, 0)} psi",
+                        result              = kipFt(mn),
+                        units               = "kip-ft",
+                        codeReference       = "AISC 360 F8-3",
+                        variables           = mapOf("D_t" to dt, "Fcr" to fcr, "S" to sx)
+                    ))
+                )
+            }
+        }
+    }
+
     private fun calculateFlexureY(): Pair<Double, String> {
         val zy = profile.propertiesWeakAxis.z.inIn3
         val sy = profile.propertiesWeakAxis.s.inIn3
@@ -478,18 +722,56 @@ class AiscSteelCapacityCalculator(
             }
 
             ShapeType.RECTANGULAR_HSS -> {
-                // G5 — HSS rectangular: both walls resist shear
-                val t  = profile.webThickness.inInches
-                val h  = if (isStrongAxis) profile.depth.inInches else profile.flangeWidth.inInches
+                // G4 — HSS/box: both walls resist shear, same Cv2 buckling-
+                // reduction structure as G2's I-shape web (kv fixed at 5.0
+                // instead of G2's own web-plate-buckling-coefficient value).
+                val t = profile.webThickness.inInches
+                val h = if (isStrongAxis) (profile.flatHeightH ?: profile.depth.inInches)
+                        else (profile.flatWidthB ?: profile.flangeWidth.inInches)
                 val aw = 2.0 * h * t
-                LimitStateResult(0.6 * Fy * aw, "HSS Shear Yielding")
+                val kv = 5.0
+                val hT = h / t
+                val lim1 = 1.10 * sqrt(kv * E / Fy)
+                val lim2 = 1.37 * sqrt(kv * E / Fy)
+                val (cv2, cvEqRef, cvSymbolic) = when {
+                    hT <= lim1 -> Triple(1.0, "AISC 360 G4-2", "h/t ≤ 1.10√(kvE/Fy) → Cv2 = 1.0")
+                    hT <= lim2 -> Triple(lim1 / hT, "AISC 360 G4-3", "Cv2 = 1.10√(kvE/Fy) / (h/t)")
+                    else       -> Triple(1.51 * kv * E / (hT.pow(2) * Fy), "AISC 360 G4-4", "Cv2 = 1.51·kv·E / ((h/t)²·Fy)")
+                }
+                val vn = 0.6 * Fy * aw * cv2
+                val ls = if (cv2 == 1.0) "HSS Shear Yielding" else "HSS Shear Buckling"
+                val trace = DesignEquationTrace(
+                    symbolicEquation    = "Vn = 0.6·Fy·Aw·Cv2  [$cvSymbolic]",
+                    substitutedEquation = "Vn = 0.6×${fmt(Fy, 0)}×${fmt(aw, 3)}×${fmt(cv2, 3)}  (h/t=${fmt(hT, 1)})",
+                    result              = kips(vn),
+                    units               = "kips",
+                    codeReference       = "AISC 360 G4-1, $cvEqRef",
+                    variables           = mapOf("Fy" to Fy, "Aw" to aw, "Cv2" to cv2, "h_t" to hT)
+                )
+                LimitStateResult(vn, ls, listOf(trace))
             }
 
             ShapeType.ROUND_HSS,
             ShapeType.PIPE -> {
-                // G6 — Round HSS and pipe
+                // G5 — Round HSS and pipe: yielding only. Fcr-based shear
+                // buckling per G5 needs Lv (clear distance to the point of
+                // zero shear along the member) — not available at this
+                // per-section capacity level (StationDemand carries no Lv),
+                // so this is conservative-by-omission for very thin-wall,
+                // long-unbraced round HSS, same simplification already
+                // accepted elsewhere in this file for other shape/limit-
+                // state combinations outside the calculator's current scope.
                 val aw = profile.area.inIn2 / 2.0
-                LimitStateResult(0.6 * Fy * aw, "Round HSS Shear Yielding")
+                val vn = 0.6 * Fy * aw
+                val trace = DesignEquationTrace(
+                    symbolicEquation    = "Vn = 0.6·Fy·Ag/2  (yielding; Fcr shear-buckling per G5 needs Lv, not available here)",
+                    substitutedEquation = "Vn = 0.6×${fmt(Fy, 0)}×${fmt(aw, 3)}",
+                    result              = kips(vn),
+                    units               = "kips",
+                    codeReference       = "AISC 360 G5 (simplified)",
+                    variables           = mapOf("Fy" to Fy, "Aw" to aw)
+                )
+                LimitStateResult(vn, "Round HSS Shear Yielding", listOf(trace))
             }
 
             ShapeType.TEE -> {
@@ -584,21 +866,39 @@ class AiscSteelCapacityCalculator(
         return when (profile.shapeType) {
 
             ShapeType.RECTANGULAR_HSS -> {
-                // H3.1 — Closed section: Tn = Fcr * C
+                // H3.1 — Closed section: Tn = 0.6·Fy·C, C = 2(B−t)(H−t)t
                 val t = profile.webThickness.inInches
                 val b = profile.flangeWidth.inInches
                 val h = profile.depth.inInches
                 val c = 2.0 * (b - t) * (h - t) * t
-                LimitStateResult(0.6 * Fy * c, "HSS Torsional Yielding (H3.1)")
+                val tn = 0.6 * Fy * c
+                val trace = DesignEquationTrace(
+                    symbolicEquation    = "C = 2(B−t)(H−t)t;  Tn = 0.6·Fy·C",
+                    substitutedEquation = "C = 2×(${fmt(b, 3)}−${fmt(t, 3)})×(${fmt(h, 3)}−${fmt(t, 3)})×${fmt(t, 3)} = ${fmt(c, 3)} in³ → Tn = 0.6×${fmt(Fy, 0)}×${fmt(c, 3)}",
+                    result              = kipFt(tn),
+                    units               = "kip-ft",
+                    codeReference       = "AISC 360 H3.1",
+                    variables           = mapOf("B" to b, "H" to h, "t" to t, "C" to c, "Fy" to Fy)
+                )
+                LimitStateResult(tn, "HSS Torsional Yielding (H3.1)", listOf(trace))
             }
 
             ShapeType.ROUND_HSS,
             ShapeType.PIPE -> {
-                // H3.1 — Round HSS and pipe
+                // H3.1 — Round HSS and pipe: Tn = 0.6·Fy·C, C = π(D−t)²t/2
                 val t = profile.webThickness.inInches
                 val d = profile.depth.inInches
                 val c = PI * (d - t).pow(2) * t / 2.0
-                LimitStateResult(0.6 * Fy * c, "Round HSS Torsional Yielding (H3.1)")
+                val tn = 0.6 * Fy * c
+                val trace = DesignEquationTrace(
+                    symbolicEquation    = "C = π(D−t)²t/2;  Tn = 0.6·Fy·C",
+                    substitutedEquation = "C = π×(${fmt(d, 3)}−${fmt(t, 3)})²×${fmt(t, 3)}/2 = ${fmt(c, 3)} in³ → Tn = 0.6×${fmt(Fy, 0)}×${fmt(c, 3)}",
+                    result              = kipFt(tn),
+                    units               = "kip-ft",
+                    codeReference       = "AISC 360 H3.1",
+                    variables           = mapOf("D" to d, "t" to t, "C" to c, "Fy" to Fy)
+                )
+                LimitStateResult(tn, "Round HSS Torsional Yielding (H3.1)", listOf(trace))
             }
 
             ShapeType.WIDE_FLANGE,

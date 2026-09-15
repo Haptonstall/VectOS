@@ -1,0 +1,661 @@
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/AppDatabase.kt b/core/data/src/main/java/com/lz/data/persistence/room/AppDatabase.kt
+index 15871e7..4db66f5 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/AppDatabase.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/AppDatabase.kt
+@@ -70,7 +70,7 @@ import com.lz.data.persistence.room.entity.DefaultLoadCaseRoomEntity
+         ServiceabilityCriterionRoomEntity::class,
+         DefaultLoadCaseRoomEntity::class
+     ],
+-    version = 2,
++    version = 3,
+     exportSchema = true
+ )
+ @TypeConverters(StandardTypeConverters::class)
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/Migrations.kt b/core/data/src/main/java/com/lz/data/persistence/room/Migrations.kt
+index 1524dc9..58c833d 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/Migrations.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/Migrations.kt
+@@ -80,5 +80,20 @@ object Migrations {
+         }
+     }
+ 
+-    fun getMigrations(): Array<Migration> = arrayOf(MIGRATION_1_2)
++    /**
++     * v2 -> v3:
++     *  - aisc_sections: add flatWidthB / flatHeightH (nullable REAL,
++     *    additive) — HSS-only flat (clear) width/height between corners,
++     *    needed for AISC Table B4.1a local-buckling slenderness ratios
++     *    (F7.2/F7.3, G4). Plain ADD COLUMN is fine here (no DROP/RENAME),
++     *    so no need for the v1->v2 create-copy-drop-rename dance.
++     */
++    val MIGRATION_2_3 = object : Migration(2, 3) {
++        override fun migrate(db: SupportSQLiteDatabase) {
++            db.execSQL("ALTER TABLE aisc_sections ADD COLUMN flatWidthB REAL")
++            db.execSQL("ALTER TABLE aisc_sections ADD COLUMN flatHeightH REAL")
++        }
++    }
++
++    fun getMigrations(): Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+ }
+\ No newline at end of file
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/entity/catalog/AiscSectionRoomEntity.kt b/core/data/src/main/java/com/lz/data/persistence/room/entity/catalog/AiscSectionRoomEntity.kt
+index 0d2728b..2ad0787 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/entity/catalog/AiscSectionRoomEntity.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/entity/catalog/AiscSectionRoomEntity.kt
+@@ -25,5 +25,11 @@ data class AiscSectionRoomEntity(
+     val zy: Double,                      // Zy
+     val ry: Double,                      // ry
+     val torsionalJ: Double,              // J
+-    val warpingCw: Double                // Cw
++    val warpingCw: Double,                // Cw
++    // HSS only (null for every other type). AISC Table B4.1a local-
++    // buckling slenderness for HSS (F7.2/F7.3 flange & web classification,
++    // G4 shear Aw) uses the *flat* width/height between corners, not the
++    // overall outside B/H already carried above as flangeWidth/depth.
++    val flatWidthB: Double? = null,      // b (flat width, rect HSS only)
++    val flatHeightH: Double? = null      // h (flat height, rect HSS only)
+ )
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/seeder/AiscSectionSeeder.kt b/core/data/src/main/java/com/lz/data/persistence/room/seeder/AiscSectionSeeder.kt
+index 1b71f6e..58bf966 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/seeder/AiscSectionSeeder.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/seeder/AiscSectionSeeder.kt
+@@ -12,17 +12,48 @@ class AiscSectionSeeder(
+     private val aiscDao: AiscSectionDao
+ ) {
+     suspend fun seed() {
+-        if (aiscDao.getCount() > 0) return
++        if (aiscDao.getCount() == 0) {
++            try {
++                val sections = parseAiscFile()
++                if (sections.isNotEmpty()) {
++                    aiscDao.insertAll(sections)
++                    Log.d("AiscSectionSeeder", "Seeded ${sections.size} AISC sections.")
++                } else {
++                    Log.w("AiscSectionSeeder", "No AISC sections parsed from file.")
++                }
++            } catch (e: Exception) {
++                Log.e("AiscSectionSeeder", "Error seeding AISC sections", e)
++            }
++            return
++        }
++        repairHssRowsIfNeeded()
++    }
++
++    /**
++     * HSS/PIPE rows were seeded (as bare `"HSS"`/`"PIPE"`, never actually
++     * exposed by the repository) before HSS support existed — read via the
++     * same `d`/`tw`/`bf`/`tf` columns used for W/C/WT/L, which are blank for
++     * HSS rows in the source file, so every install prior to this fix has
++     * those rows sitting in the DB with depth/wall-thickness/etc. all zero.
++     * `seed()` only ever runs once (guarded by `getCount() > 0`), so those
++     * zeroed rows would otherwise persist forever on an existing install.
++     * Repairs them in place — re-parsing and re-inserting just the type="HSS"
++     * rows relies on `insertAll`'s REPLACE conflict strategy to overwrite by
++     * id, so this never touches the already-correct W/C/WT/L catalog.
++     */
++    private suspend fun repairHssRowsIfNeeded() {
++        val needsRepair = aiscDao.getSectionsByType("HSS").any { it.depth <= 0.0 }
++        if (!needsRepair) return
+         try {
+-            val sections = parseAiscFile()
+-            if (sections.isNotEmpty()) {
+-                aiscDao.insertAll(sections)
+-                Log.d("AiscSectionSeeder", "Seeded ${sections.size} AISC sections.")
+-            } else {
+-                Log.w("AiscSectionSeeder", "No AISC sections parsed from file.")
++            val hssSections = parseAiscFile().filter {
++                it.type == ShapeTypeRect || it.type == ShapeTypeRound
++            }
++            if (hssSections.isNotEmpty()) {
++                aiscDao.insertAll(hssSections)
++                Log.d("AiscSectionSeeder", "Repaired ${hssSections.size} HSS sections.")
+             }
+         } catch (e: Exception) {
+-            Log.e("AiscSectionSeeder", "Error seeding AISC sections", e)
++            Log.e("AiscSectionSeeder", "Error repairing HSS sections", e)
+         }
+     }
+ 
+@@ -52,9 +83,18 @@ class AiscSectionSeeder(
+         val ryIdx      = columns.indexOf("ry")
+         val jIdx       = columns.indexOf("J")
+         val cwIdx      = columns.indexOf("Cw")
++        // HSS-only columns — Ht/B/OD/tdes/b/h are blank for every other
++        // type (W/C/WT/L/etc. use d/tw/bf/tf above instead).
++        val htIdx      = columns.indexOf("Ht")
++        val bIdx       = columns.indexOf("B")
++        val odIdx      = columns.indexOf("OD")
++        val tdesIdx    = columns.indexOf("tdes")
++        val flatBIdx   = columns.indexOf("b")
++        val flatHIdx   = columns.indexOf("h")
+ 
+         val maxIdx = listOf(typeIdx, idIdx, labelIdx, areaIdx, depthIdx, twIdx, bfIdx, tfIdx,
+-            ixIdx, sxIdx, zxIdx, rxIdx, iyIdx, syIdx, zyIdx, ryIdx, jIdx, cwIdx).maxOrNull() ?: -1
++            ixIdx, sxIdx, zxIdx, rxIdx, iyIdx, syIdx, zyIdx, ryIdx, jIdx, cwIdx,
++            htIdx, bIdx, odIdx, tdesIdx, flatBIdx, flatHIdx).maxOrNull() ?: -1
+         if (maxIdx == -1) {
+             Log.e("AiscSectionSeeder", "Required columns missing in header")
+             return emptyList()
+@@ -64,26 +104,86 @@ class AiscSectionSeeder(
+             val values = line.split(",")
+             if (values.size > maxIdx) {
+                 try {
+-                    val entity = AiscSectionRoomEntity(
+-                        id = values[idIdx].trim(),
+-                        designation = values[labelIdx].trim(),
+-                        type = values[typeIdx].trim(),
+-                        area = values.getOrNull(areaIdx)?.toDoubleOrNull() ?: 0.0,
+-                        depth = values.getOrNull(depthIdx)?.toDoubleOrNull() ?: 0.0,
+-                        webThickness = values.getOrNull(twIdx)?.toDoubleOrNull() ?: 0.0,
+-                        flangeWidth = values.getOrNull(bfIdx)?.toDoubleOrNull() ?: 0.0,
+-                        flangeThickness = values.getOrNull(tfIdx)?.toDoubleOrNull() ?: 0.0,
+-                        ix = values.getOrNull(ixIdx)?.toDoubleOrNull() ?: 0.0,
+-                        sx = values.getOrNull(sxIdx)?.toDoubleOrNull() ?: 0.0,
+-                        zx = values.getOrNull(zxIdx)?.toDoubleOrNull() ?: 0.0,
+-                        rx = values.getOrNull(rxIdx)?.toDoubleOrNull() ?: 0.0,
+-                        iy = values.getOrNull(iyIdx)?.toDoubleOrNull() ?: 0.0,
+-                        sy = values.getOrNull(syIdx)?.toDoubleOrNull() ?: 0.0,
+-                        zy = values.getOrNull(zyIdx)?.toDoubleOrNull() ?: 0.0,
+-                        ry = values.getOrNull(ryIdx)?.toDoubleOrNull() ?: 0.0,
+-                        torsionalJ = values.getOrNull(jIdx)?.toDoubleOrNull() ?: 0.0,
+-                        warpingCw = values.getOrNull(cwIdx)?.toDoubleOrNull() ?: 0.0
+-                    )
++                    val rawType = values[typeIdx].trim()
++                    val od = values.getOrNull(odIdx)?.toDoubleOrNull()
++
++                    // HSS rows carry geometry in Ht/B/OD/tdes/b/h instead of
++                    // d/tw/bf/tf (blank for these rows in the source file) —
++                    // and the source file's single "HSS" type covers both
++                    // rectangular/square (B populated) and round (OD
++                    // populated) shapes, so split it into two distinct
++                    // stored types here for the repository to tell apart.
++                    val entity = if (rawType == "HSS") {
++                        val tdes = values.getOrNull(tdesIdx)?.toDoubleOrNull() ?: 0.0
++                        if (od != null) {
++                            AiscSectionRoomEntity(
++                                id = values[idIdx].trim(),
++                                designation = values[labelIdx].trim(),
++                                type = ShapeTypeRound,
++                                area = values.getOrNull(areaIdx)?.toDoubleOrNull() ?: 0.0,
++                                depth = od,
++                                webThickness = tdes,
++                                flangeWidth = od,
++                                flangeThickness = tdes,
++                                ix = values.getOrNull(ixIdx)?.toDoubleOrNull() ?: 0.0,
++                                sx = values.getOrNull(sxIdx)?.toDoubleOrNull() ?: 0.0,
++                                zx = values.getOrNull(zxIdx)?.toDoubleOrNull() ?: 0.0,
++                                rx = values.getOrNull(rxIdx)?.toDoubleOrNull() ?: 0.0,
++                                iy = values.getOrNull(iyIdx)?.toDoubleOrNull() ?: 0.0,
++                                sy = values.getOrNull(syIdx)?.toDoubleOrNull() ?: 0.0,
++                                zy = values.getOrNull(zyIdx)?.toDoubleOrNull() ?: 0.0,
++                                ry = values.getOrNull(ryIdx)?.toDoubleOrNull() ?: 0.0,
++                                torsionalJ = values.getOrNull(jIdx)?.toDoubleOrNull() ?: 0.0,
++                                warpingCw = values.getOrNull(cwIdx)?.toDoubleOrNull() ?: 0.0,
++                                flatWidthB = null,
++                                flatHeightH = null
++                            )
++                        } else {
++                            AiscSectionRoomEntity(
++                                id = values[idIdx].trim(),
++                                designation = values[labelIdx].trim(),
++                                type = ShapeTypeRect,
++                                area = values.getOrNull(areaIdx)?.toDoubleOrNull() ?: 0.0,
++                                depth = values.getOrNull(htIdx)?.toDoubleOrNull() ?: 0.0,
++                                webThickness = tdes,
++                                flangeWidth = values.getOrNull(bIdx)?.toDoubleOrNull() ?: 0.0,
++                                flangeThickness = tdes,
++                                ix = values.getOrNull(ixIdx)?.toDoubleOrNull() ?: 0.0,
++                                sx = values.getOrNull(sxIdx)?.toDoubleOrNull() ?: 0.0,
++                                zx = values.getOrNull(zxIdx)?.toDoubleOrNull() ?: 0.0,
++                                rx = values.getOrNull(rxIdx)?.toDoubleOrNull() ?: 0.0,
++                                iy = values.getOrNull(iyIdx)?.toDoubleOrNull() ?: 0.0,
++                                sy = values.getOrNull(syIdx)?.toDoubleOrNull() ?: 0.0,
++                                zy = values.getOrNull(zyIdx)?.toDoubleOrNull() ?: 0.0,
++                                ry = values.getOrNull(ryIdx)?.toDoubleOrNull() ?: 0.0,
++                                torsionalJ = values.getOrNull(jIdx)?.toDoubleOrNull() ?: 0.0,
++                                warpingCw = values.getOrNull(cwIdx)?.toDoubleOrNull() ?: 0.0,
++                                flatWidthB = values.getOrNull(flatBIdx)?.toDoubleOrNull(),
++                                flatHeightH = values.getOrNull(flatHIdx)?.toDoubleOrNull()
++                            )
++                        }
++                    } else {
++                        AiscSectionRoomEntity(
++                            id = values[idIdx].trim(),
++                            designation = values[labelIdx].trim(),
++                            type = rawType,
++                            area = values.getOrNull(areaIdx)?.toDoubleOrNull() ?: 0.0,
++                            depth = values.getOrNull(depthIdx)?.toDoubleOrNull() ?: 0.0,
++                            webThickness = values.getOrNull(twIdx)?.toDoubleOrNull() ?: 0.0,
++                            flangeWidth = values.getOrNull(bfIdx)?.toDoubleOrNull() ?: 0.0,
++                            flangeThickness = values.getOrNull(tfIdx)?.toDoubleOrNull() ?: 0.0,
++                            ix = values.getOrNull(ixIdx)?.toDoubleOrNull() ?: 0.0,
++                            sx = values.getOrNull(sxIdx)?.toDoubleOrNull() ?: 0.0,
++                            zx = values.getOrNull(zxIdx)?.toDoubleOrNull() ?: 0.0,
++                            rx = values.getOrNull(rxIdx)?.toDoubleOrNull() ?: 0.0,
++                            iy = values.getOrNull(iyIdx)?.toDoubleOrNull() ?: 0.0,
++                            sy = values.getOrNull(syIdx)?.toDoubleOrNull() ?: 0.0,
++                            zy = values.getOrNull(zyIdx)?.toDoubleOrNull() ?: 0.0,
++                            ry = values.getOrNull(ryIdx)?.toDoubleOrNull() ?: 0.0,
++                            torsionalJ = values.getOrNull(jIdx)?.toDoubleOrNull() ?: 0.0,
++                            warpingCw = values.getOrNull(cwIdx)?.toDoubleOrNull() ?: 0.0
++                        )
++                    }
+                     if (entity.id.isNotEmpty() && entity.type.isNotEmpty()) sections.add(entity)
+                 } catch (e: Exception) {
+                     Log.w("AiscSectionSeeder", "Skipping malformed row: $line", e)
+@@ -92,4 +192,10 @@ class AiscSectionSeeder(
+         }
+         return sections
+     }
++
++    private companion object {
++        /** Stored `type` values for HSS rows — see [repairHssRowsIfNeeded]. */
++        const val ShapeTypeRect = "HSS_RECT"
++        const val ShapeTypeRound = "HSS_ROUND"
++    }
+ }
+\ No newline at end of file
+diff --git a/core/data/src/main/java/com/lz/data/repository/RoomAiscSectionRepository.kt b/core/data/src/main/java/com/lz/data/repository/RoomAiscSectionRepository.kt
+index a472107..f538d85 100644
+--- a/core/data/src/main/java/com/lz/data/repository/RoomAiscSectionRepository.kt
++++ b/core/data/src/main/java/com/lz/data/repository/RoomAiscSectionRepository.kt
+@@ -34,7 +34,14 @@ class RoomAiscSectionRepository(private val aiscDao: AiscSectionDao) : SectionRe
+ 
+     override suspend fun getShapeTypes(material: MaterialType): List<ShapeType> {
+         if (material != MaterialType.STEEL) return emptyList()
+-        return listOf(ShapeType.WIDE_FLANGE, ShapeType.CHANNEL, ShapeType.TEE, ShapeType.ANGLE)
++        return listOf(
++            ShapeType.WIDE_FLANGE,
++            ShapeType.CHANNEL,
++            ShapeType.TEE,
++            ShapeType.ANGLE,
++            ShapeType.RECTANGULAR_HSS,
++            ShapeType.ROUND_HSS
++        )
+     }
+ 
+     override suspend fun getSections(material: MaterialType, shapeType: ShapeType): List<SectionProfile> {
+@@ -45,6 +52,8 @@ class RoomAiscSectionRepository(private val aiscDao: AiscSectionDao) : SectionRe
+             ShapeType.CHANNEL -> "C"
+             ShapeType.TEE -> "WT"
+             ShapeType.ANGLE -> "L"
++            ShapeType.RECTANGULAR_HSS -> "HSS_RECT"
++            ShapeType.ROUND_HSS -> "HSS_ROUND"
+             else -> return emptyList()
+         }
+ 
+@@ -63,6 +72,8 @@ class RoomAiscSectionRepository(private val aiscDao: AiscSectionDao) : SectionRe
+                     flangeThickness = entity.flangeThickness.inches,
+                     torsionalConstantJ = entity.torsionalJ,
+                     warpingConstantCw = entity.warpingCw,
++                    flatWidthB = entity.flatWidthB,
++                    flatHeightH = entity.flatHeightH,
+                     propertiesStrongAxis = SectionAxisProperties(
+                         i = entity.ix.in4,
+                         s = entity.sx.in3,
+@@ -87,6 +98,8 @@ class RoomAiscSectionRepository(private val aiscDao: AiscSectionDao) : SectionRe
+             "C" -> ShapeType.CHANNEL
+             "WT" -> ShapeType.TEE
+             "L" -> ShapeType.ANGLE
++            "HSS_RECT" -> ShapeType.RECTANGULAR_HSS
++            "HSS_ROUND" -> ShapeType.ROUND_HSS
+             else -> ShapeType.WIDE_FLANGE
+         }
+         return getSections(MaterialType.STEEL, shapeType).find { it.id == id }
+diff --git a/core/model/src/main/java/com/lz/model/structural/SectionModels.kt b/core/model/src/main/java/com/lz/model/structural/SectionModels.kt
+index c2deb88..553533c 100644
+--- a/core/model/src/main/java/com/lz/model/structural/SectionModels.kt
++++ b/core/model/src/main/java/com/lz/model/structural/SectionModels.kt
+@@ -80,6 +80,15 @@ data class SteelProfile(
+     val flangeThickness: Length,
+     val torsionalConstantJ: Double,
+     val warpingConstantCw: Double,
++    // HSS-only geometry, null for every other ShapeType. AISC Table B4.1a
++    // local-buckling slenderness ratios for HSS (F7.2/F7.3 flange & web,
++    // G4 shear Aw) use the *flat* width/height between corners, not the
++    // overall outside B/H already carried above as flangeWidth/depth — so
++    // these are kept separate rather than derived from B/H and an assumed
++    // corner radius. Both null for ROUND_HSS/PIPE (not applicable there;
++    // D/t uses depth directly) and for every non-HSS shape.
++    val flatWidthB: Double? = null,
++    val flatHeightH: Double? = null,
+     override val propertiesStrongAxis: SectionAxisProperties,
+     override val propertiesWeakAxis: SectionAxisProperties,
+     override val databaseMetadata: SectionDatabaseMetadata? = null
+diff --git a/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
+index 1ac8b8b..65ac560 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
+@@ -241,19 +241,10 @@ class AiscSteelCapacityCalculator(
+             ShapeType.WIDE_FLANGE,
+             ShapeType.CHANNEL -> ltbAndFlbIShape(lb, cb, mp, sx)
+ 
+-            ShapeType.RECTANGULAR_HSS -> {
+-                // F7 — Box sections and HSS (trace generation out of scope for
+-                // this pass — see AiscSteelCapacityCalculator handoff notes)
+-                val mn = min(mp, 1.6 * Fy * sx)
+-                LimitStateResult(mn, "HSS Box Yielding")
+-            }
++            ShapeType.RECTANGULAR_HSS -> flexureRectangularHss(mp, sx)
+ 
+             ShapeType.ROUND_HSS,
+-            ShapeType.PIPE -> {
+-                // F8 — Round HSS and pipe
+-                // D/t check for local buckling omitted here; use mp as first pass
+-                LimitStateResult(mp, "Round HSS Yielding")
+-            }
++            ShapeType.PIPE -> flexureRoundHss(mp, sx)
+ 
+             ShapeType.TEE,
+             ShapeType.DOUBLE_ANGLE -> {
+@@ -405,6 +396,203 @@ class AiscSteelCapacityCalculator(
+         else LimitStateResult(mnFLB, lsFLB, traces)
+     }
+ 
++    /**
++     * AISC F7.2/F7.3 — flange and web local buckling for square/rectangular
++     * HSS and box sections, applied on top of F7.1 yielding (Mn = mp =
++     * min(Fy·Zx, 1.6·Fy·Sx), already computed by the caller). Classic
++     * (360-10/360-16) form of F7-2/F7-3 — AISC 360-22 rewrote these
++     * algebraically to match the F3 I-shape style, but per AISC's own
++     * edition-comparison notes that was a format change to the equation,
++     * not a change to the underlying strength curve, and this calculator
++     * doesn't otherwise branch its W-shape formulas (F2/F3/G2) by edition
++     * either — same precedent followed here.
++     *
++     * b/t and h/t use the *flat* width/height ([SteelProfile.flatWidthB]/
++     * [SteelProfile.flatHeightH]) per Table B4.1a, not the overall B/H
++     * ([flangeWidth]/[depth]) — falls back to an approximation if a profile
++     * predates those fields (e.g. a hand-entered custom HSS).
++     */
++    private fun flexureRectangularHss(mp: Double, sx: Double): LimitStateResult {
++        if (profile !is SteelProfile) return LimitStateResult(mp, "HSS Box Yielding")
++
++        val t = profile.webThickness.inInches
++        val b = profile.flatWidthB ?: (profile.flangeWidth.inInches - 3 * t)
++        val h = profile.flatHeightH ?: (profile.depth.inInches - 3 * t)
++        if (t <= 0.0 || b <= 0.0 || h <= 0.0) return LimitStateResult(mp, "HSS Box Yielding")
++
++        // --- F7.2 Flange Local Buckling (compression flange, width b) ---
++        val bt = b / t
++        val lambdaPf = 1.12 * sqrt(E / Fy)
++        val lambdaRf = 1.40 * sqrt(E / Fy)
++
++        val (mnFlange, lsFlange, flangeTrace) = when {
++            bt <= lambdaPf -> Triple(
++                mp, "HSS Box Yielding",
++                DesignEquationTrace(
++                    symbolicEquation    = "b/t ≤ λpf → compact flange, Mn = Mp",
++                    substitutedEquation = "b/t = ${fmt(bt, 2)} ≤ λpf = 1.12√(E/Fy) = ${fmt(lambdaPf, 2)}",
++                    result              = kipFt(mp),
++                    units               = "kip-ft",
++                    codeReference       = "AISC 360 B4.1 / F7.1",
++                    variables           = mapOf("b_t" to bt, "lambdaPf" to lambdaPf)
++                )
++            )
++            bt <= lambdaRf -> {
++                val mn = min(mp - (mp - Fy * sx) * (3.57 * bt * sqrt(Fy / E) - 4.0), mp)
++                Triple(
++                    mn, "HSS Flange Local Buckling",
++                    DesignEquationTrace(
++                        symbolicEquation    = "Mn = Mp − (Mp − FySx)[3.57(b/t)√(Fy/E) − 4.0] ≤ Mp",
++                        substitutedEquation = "Mn = ${fmt(mp, 0)} − (${fmt(mp, 0)} − ${fmt(Fy, 0)}×${fmt(sx, 2)})×[3.57×${fmt(bt, 2)}×√(${fmt(Fy, 0)}/${fmt(E, 0)}) − 4.0]",
++                        result              = kipFt(mn),
++                        units               = "kip-ft",
++                        codeReference       = "AISC 360 F7-2",
++                        variables           = mapOf("b_t" to bt, "Fy" to Fy, "Sx" to sx)
++                    )
++                )
++            }
++            else -> {
++                val be = min(1.92 * t * sqrt(E / Fy) * (1.0 - (0.38 / bt) * sqrt(E / Fy)), b)
++                // Effective Sx approximated by deducting the lost flange
++                // material (b - be, both flanges) at its real lever arm from
++                // the tabulated (accurate, corner-radius-inclusive) Ix,
++                // rather than a blunt Sx×(be/b) scaling.
++                val ix = profile.propertiesStrongAxis.i.inIn4
++                val c = profile.depth.inInches / 2.0
++                val ixEff = max(ix - 2.0 * (b - be) * t * c.pow(2), 0.0)
++                val se = if (c > 0.0) ixEff / c else sx
++                val mn = Fy * se
++                Triple(
++                    mn, "HSS Slender Flange Buckling",
++                    DesignEquationTrace(
++                        symbolicEquation    = "be = 1.92t√(E/Fy)[1−(0.38/(b/t))√(E/Fy)] ≤ b;  Mn = Fy·Se",
++                        substitutedEquation = "be = ${fmt(be, 3)} in (b=${fmt(b, 3)} in) → Ieff = Ix−2(b−be)t·c² = ${fmt(ixEff, 1)} in⁴ → Se = ${fmt(se, 2)} in³",
++                        result              = kipFt(mn),
++                        units               = "kip-ft",
++                        codeReference       = "AISC 360 F7-3, F7-4",
++                        variables           = mapOf("b_t" to bt, "be" to be, "Se" to se)
++                    )
++                )
++            }
++        }
++
++        // --- F7.3 Web Local Buckling (web height h) ---
++        val ht = h / t
++        val lambdaPw = 2.42 * sqrt(E / Fy)
++        val lambdaRw = 5.70 * sqrt(E / Fy)
++
++        val (mnWeb, lsWeb, webTrace) = when {
++            ht <= lambdaPw -> Triple(
++                mp, "HSS Box Yielding",
++                DesignEquationTrace(
++                    symbolicEquation    = "h/t ≤ λpw → compact web, Mn = Mp",
++                    substitutedEquation = "h/t = ${fmt(ht, 2)} ≤ λpw = 2.42√(E/Fy) = ${fmt(lambdaPw, 2)}",
++                    result              = kipFt(mp),
++                    units               = "kip-ft",
++                    codeReference       = "AISC 360 B4.1 / F7.1",
++                    variables           = mapOf("h_t" to ht, "lambdaPw" to lambdaPw)
++                )
++            )
++            ht <= lambdaRw -> {
++                val mn = min(mp - (mp - Fy * sx) * (0.305 * ht * sqrt(Fy / E) - 0.738), mp)
++                Triple(
++                    mn, "HSS Web Local Buckling",
++                    DesignEquationTrace(
++                        symbolicEquation    = "Mn = Mp − (Mp − FySx)[0.305(h/t)√(Fy/E) − 0.738] ≤ Mp",
++                        substitutedEquation = "Mn = ${fmt(mp, 0)} − (${fmt(mp, 0)} − ${fmt(Fy, 0)}×${fmt(sx, 2)})×[0.305×${fmt(ht, 2)}×√(${fmt(Fy, 0)}/${fmt(E, 0)}) − 0.738]",
++                        result              = kipFt(mn),
++                        units               = "kip-ft",
++                        codeReference       = "AISC 360 F7-6",
++                        variables           = mapOf("h_t" to ht, "Fy" to Fy, "Sx" to sx)
++                    )
++                )
++            }
++            else -> {
++                // Slender webs in flexure sit outside the standard AISC HSS
++                // product range (no cataloged wall-thickness/depth
++                // combination at typical Fy reaches h/t this high) —
++                // extend the noncompact formula as a conservative fallback
++                // rather than leaving this branch undefined.
++                val mn = max(min(mp - (mp - Fy * sx) * (0.305 * ht * sqrt(Fy / E) - 0.738), mp), 0.0)
++                Triple(
++                    mn, "HSS Web Local Buckling (slender, extrapolated)",
++                    DesignEquationTrace(
++                        symbolicEquation    = "h/t > λrw — outside standard HSS product range; F7.3 noncompact formula extrapolated conservatively",
++                        substitutedEquation = "h/t = ${fmt(ht, 2)} > λrw = 5.70√(E/Fy) = ${fmt(lambdaRw, 2)}",
++                        result              = kipFt(mn),
++                        units               = "kip-ft",
++                        codeReference       = "AISC 360 F7.3 (extrapolated)",
++                        variables           = mapOf("h_t" to ht, "lambdaRw" to lambdaRw)
++                    )
++                )
++            }
++        }
++
++        val traces = listOf(flangeTrace, webTrace)
++        return if (mnFlange <= mnWeb) LimitStateResult(mnFlange, lsFlange, traces)
++        else LimitStateResult(mnWeb, lsWeb, traces)
++    }
++
++    /**
++     * AISC F8.2/F8.3 — local buckling for round HSS and pipe, on top of
++     * F8.1 yielding (Mn = Mp, already computed by the caller as `mp`).
++     * Unchanged across 360-10/16/22 editions.
++     */
++    private fun flexureRoundHss(mp: Double, sx: Double): LimitStateResult {
++        if (profile !is SteelProfile) return LimitStateResult(mp, "Round HSS Yielding")
++
++        val t = profile.webThickness.inInches
++        val d = profile.depth.inInches
++        if (t <= 0.0 || d <= 0.0) return LimitStateResult(mp, "Round HSS Yielding")
++
++        val dt = d / t
++        val lambdaP = 0.07 * E / Fy
++        val lambdaR = 0.31 * E / Fy
++
++        return when {
++            dt <= lambdaP -> LimitStateResult(
++                mp, "Round HSS Yielding",
++                listOf(DesignEquationTrace(
++                    symbolicEquation    = "D/t ≤ λp → compact, Mn = Mp",
++                    substitutedEquation = "D/t = ${fmt(dt, 1)} ≤ λp = 0.07E/Fy = ${fmt(lambdaP, 1)}",
++                    result              = kipFt(mp),
++                    units               = "kip-ft",
++                    codeReference       = "AISC 360 F8.1, F8-1",
++                    variables           = mapOf("D_t" to dt, "lambdaP" to lambdaP)
++                ))
++            )
++            dt <= lambdaR -> {
++                val mn = (0.021 * E / dt + Fy) * sx
++                LimitStateResult(
++                    mn, "Round HSS Local Buckling",
++                    listOf(DesignEquationTrace(
++                        symbolicEquation    = "Mn = [0.021E/(D/t) + Fy]·S",
++                        substitutedEquation = "Mn = [0.021×${fmt(E, 0)}/${fmt(dt, 1)} + ${fmt(Fy, 0)}]×${fmt(sx, 2)}",
++                        result              = kipFt(mn),
++                        units               = "kip-ft",
++                        codeReference       = "AISC 360 F8-2",
++                        variables           = mapOf("D_t" to dt, "Fy" to Fy, "S" to sx)
++                    ))
++                )
++            }
++            else -> {
++                val fcr = 0.33 * E / dt
++                val mn = fcr * sx
++                LimitStateResult(
++                    mn, "Round HSS Slender Buckling",
++                    listOf(DesignEquationTrace(
++                        symbolicEquation    = "Fcr = 0.33E/(D/t);  Mn = Fcr·S",
++                        substitutedEquation = "Fcr = 0.33×${fmt(E, 0)}/${fmt(dt, 1)} = ${fmt(fcr, 0)} psi",
++                        result              = kipFt(mn),
++                        units               = "kip-ft",
++                        codeReference       = "AISC 360 F8-3",
++                        variables           = mapOf("D_t" to dt, "Fcr" to fcr, "S" to sx)
++                    ))
++                )
++            }
++        }
++    }
++
+     private fun calculateFlexureY(): Pair<Double, String> {
+         val zy = profile.propertiesWeakAxis.z.inIn3
+         val sy = profile.propertiesWeakAxis.s.inIn3
+@@ -478,18 +666,56 @@ class AiscSteelCapacityCalculator(
+             }
+ 
+             ShapeType.RECTANGULAR_HSS -> {
+-                // G5 — HSS rectangular: both walls resist shear
+-                val t  = profile.webThickness.inInches
+-                val h  = if (isStrongAxis) profile.depth.inInches else profile.flangeWidth.inInches
++                // G4 — HSS/box: both walls resist shear, same Cv2 buckling-
++                // reduction structure as G2's I-shape web (kv fixed at 5.0
++                // instead of G2's own web-plate-buckling-coefficient value).
++                val t = profile.webThickness.inInches
++                val h = if (isStrongAxis) (profile.flatHeightH ?: profile.depth.inInches)
++                        else (profile.flatWidthB ?: profile.flangeWidth.inInches)
+                 val aw = 2.0 * h * t
+-                LimitStateResult(0.6 * Fy * aw, "HSS Shear Yielding")
++                val kv = 5.0
++                val hT = h / t
++                val lim1 = 1.10 * sqrt(kv * E / Fy)
++                val lim2 = 1.37 * sqrt(kv * E / Fy)
++                val (cv2, cvEqRef, cvSymbolic) = when {
++                    hT <= lim1 -> Triple(1.0, "AISC 360 G4-2", "h/t ≤ 1.10√(kvE/Fy) → Cv2 = 1.0")
++                    hT <= lim2 -> Triple(lim1 / hT, "AISC 360 G4-3", "Cv2 = 1.10√(kvE/Fy) / (h/t)")
++                    else       -> Triple(1.51 * kv * E / (hT.pow(2) * Fy), "AISC 360 G4-4", "Cv2 = 1.51·kv·E / ((h/t)²·Fy)")
++                }
++                val vn = 0.6 * Fy * aw * cv2
++                val ls = if (cv2 == 1.0) "HSS Shear Yielding" else "HSS Shear Buckling"
++                val trace = DesignEquationTrace(
++                    symbolicEquation    = "Vn = 0.6·Fy·Aw·Cv2  [$cvSymbolic]",
++                    substitutedEquation = "Vn = 0.6×${fmt(Fy, 0)}×${fmt(aw, 3)}×${fmt(cv2, 3)}  (h/t=${fmt(hT, 1)})",
++                    result              = kips(vn),
++                    units               = "kips",
++                    codeReference       = "AISC 360 G4-1, $cvEqRef",
++                    variables           = mapOf("Fy" to Fy, "Aw" to aw, "Cv2" to cv2, "h_t" to hT)
++                )
++                LimitStateResult(vn, ls, listOf(trace))
+             }
+ 
+             ShapeType.ROUND_HSS,
+             ShapeType.PIPE -> {
+-                // G6 — Round HSS and pipe
++                // G5 — Round HSS and pipe: yielding only. Fcr-based shear
++                // buckling per G5 needs Lv (clear distance to the point of
++                // zero shear along the member) — not available at this
++                // per-section capacity level (StationDemand carries no Lv),
++                // so this is conservative-by-omission for very thin-wall,
++                // long-unbraced round HSS, same simplification already
++                // accepted elsewhere in this file for other shape/limit-
++                // state combinations outside the calculator's current scope.
+                 val aw = profile.area.inIn2 / 2.0
+-                LimitStateResult(0.6 * Fy * aw, "Round HSS Shear Yielding")
++                val vn = 0.6 * Fy * aw
++                val trace = DesignEquationTrace(
++                    symbolicEquation    = "Vn = 0.6·Fy·Ag/2  (yielding; Fcr shear-buckling per G5 needs Lv, not available here)",
++                    substitutedEquation = "Vn = 0.6×${fmt(Fy, 0)}×${fmt(aw, 3)}",
++                    result              = kips(vn),
++                    units               = "kips",
++                    codeReference       = "AISC 360 G5 (simplified)",
++                    variables           = mapOf("Fy" to Fy, "Aw" to aw)
++                )
++                LimitStateResult(vn, "Round HSS Shear Yielding", listOf(trace))
+             }
+ 
+             ShapeType.TEE -> {
+@@ -584,21 +810,39 @@ class AiscSteelCapacityCalculator(
+         return when (profile.shapeType) {
+ 
+             ShapeType.RECTANGULAR_HSS -> {
+-                // H3.1 — Closed section: Tn = Fcr * C
++                // H3.1 — Closed section: Tn = 0.6·Fy·C, C = 2(B−t)(H−t)t
+                 val t = profile.webThickness.inInches
+                 val b = profile.flangeWidth.inInches
+                 val h = profile.depth.inInches
+                 val c = 2.0 * (b - t) * (h - t) * t
+-                LimitStateResult(0.6 * Fy * c, "HSS Torsional Yielding (H3.1)")
++                val tn = 0.6 * Fy * c
++                val trace = DesignEquationTrace(
++                    symbolicEquation    = "C = 2(B−t)(H−t)t;  Tn = 0.6·Fy·C",
++                    substitutedEquation = "C = 2×(${fmt(b, 3)}−${fmt(t, 3)})×(${fmt(h, 3)}−${fmt(t, 3)})×${fmt(t, 3)} = ${fmt(c, 3)} in³ → Tn = 0.6×${fmt(Fy, 0)}×${fmt(c, 3)}",
++                    result              = kipFt(tn),
++                    units               = "kip-ft",
++                    codeReference       = "AISC 360 H3.1",
++                    variables           = mapOf("B" to b, "H" to h, "t" to t, "C" to c, "Fy" to Fy)
++                )
++                LimitStateResult(tn, "HSS Torsional Yielding (H3.1)", listOf(trace))
+             }
+ 
+             ShapeType.ROUND_HSS,
+             ShapeType.PIPE -> {
+-                // H3.1 — Round HSS and pipe
++                // H3.1 — Round HSS and pipe: Tn = 0.6·Fy·C, C = π(D−t)²t/2
+                 val t = profile.webThickness.inInches
+                 val d = profile.depth.inInches
+                 val c = PI * (d - t).pow(2) * t / 2.0
+-                LimitStateResult(0.6 * Fy * c, "Round HSS Torsional Yielding (H3.1)")
++                val tn = 0.6 * Fy * c
++                val trace = DesignEquationTrace(
++                    symbolicEquation    = "C = π(D−t)²t/2;  Tn = 0.6·Fy·C",
++                    substitutedEquation = "C = π×(${fmt(d, 3)}−${fmt(t, 3)})²×${fmt(t, 3)}/2 = ${fmt(c, 3)} in³ → Tn = 0.6×${fmt(Fy, 0)}×${fmt(c, 3)}",
++                    result              = kipFt(tn),
++                    units               = "kip-ft",
++                    codeReference       = "AISC 360 H3.1",
++                    variables           = mapOf("D" to d, "t" to t, "C" to c, "Fy" to Fy)
++                )
++                LimitStateResult(tn, "Round HSS Torsional Yielding (H3.1)", listOf(trace))
+             }
+ 
+             ShapeType.WIDE_FLANGE,

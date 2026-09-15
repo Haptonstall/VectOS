@@ -1,0 +1,291 @@
+diff --git a/core/ui/src/main/java/com/lz/ui/SectionPicker.kt b/core/ui/src/main/java/com/lz/ui/SectionPicker.kt
+index 0fda398..79a5774 100644
+--- a/core/ui/src/main/java/com/lz/ui/SectionPicker.kt
++++ b/core/ui/src/main/java/com/lz/ui/SectionPicker.kt
+@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.lazy.LazyColumn
+ import androidx.compose.foundation.lazy.items
++import androidx.compose.foundation.lazy.rememberLazyListState
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.ArrowDropDown
+@@ -89,6 +90,7 @@ fun SectionPicker(
+     if (showDialog) {
+         SectionSelectionDialog(
+             sections = sections,
++            selectedSection = selectedSection,
+             onDismiss = { showDialog = false },
+             onSelect = { section ->
+                 onSectionSelected(section)
+@@ -102,6 +104,7 @@ fun SectionPicker(
+ @Composable
+ fun SectionSelectionDialog(
+     sections: List<SectionProfile>,
++    selectedSection: SectionProfile?,
+     onDismiss: () -> Unit,
+     onSelect: (SectionProfile?) -> Unit
+ ) {
+@@ -112,6 +115,22 @@ fun SectionSelectionDialog(
+ 
+     var expandedSectionId by remember { mutableStateOf<String?>(null) }
+ 
++    // Open already scrolled to the current selection, not the top of the
++    // list — the real use case is nudging up/down near an already-chosen
++    // size (e.g. tweaking near a W8x10), not scrolling from the W44s or
++    // typing a search query every time. +1 accounts for the "Manual Entry"
++    // item ahead of the section list; the small backward offset leaves a
++    // couple of items visible above the selection so both directions are
++    // immediately browsable, instead of pinning it to the very top edge.
++    // Only computed once, at dialog-open time (searchQuery is still empty
++    // then, so filteredSections == sections) — the list shouldn't jump
++    // around again as the user types a search query afterward.
++    val initialListIndex = remember {
++        val matchIndex = selectedSection?.let { sel -> sections.indexOfFirst { it.id == sel.id } } ?: -1
++        if (matchIndex >= 0) maxOf(0, matchIndex + 1 - 3) else 0
++    }
++    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialListIndex)
++
+     Dialog(onDismissRequest = onDismiss) {
+         Card(
+             modifier = Modifier
+@@ -136,6 +155,7 @@ fun SectionSelectionDialog(
+                 )
+ 
+                 LazyColumn(
++                    state = listState,
+                     modifier = Modifier.weight(1f),
+                     verticalArrangement = Arrangement.spacedBy(8.dp)
+                 ) {
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 80da7a7..490a6dc 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -140,6 +140,17 @@ class BeamViewModel @Inject constructor(
+     var calculationError by mutableStateOf<String?>(null)
+         private set
+ 
++    // True whenever the current inputs (and the calculationResult they
++    // produced) differ from what's actually persisted — i.e. there's
++    // something on screen that would be lost by navigating away. Compared
++    // against RecalculationInputs snapshots rather than a plain toggle so a
++    // freshly-loaded calculation's own auto-recalculation (see
++    // observeInputsForAutoRecalculation) doesn't itself get misread as an
++    // unsaved edit.
++    var hasUnsavedChanges by mutableStateOf(false)
++        private set
++    private var savedInputsSnapshot: RecalculationInputs? = null
++
+     var selectedAnalysisCombination by mutableStateOf<LoadCombination?>(null)
+     var enabledCombinations by mutableStateOf<Set<String>>(emptySet())
+ 
+@@ -284,9 +295,11 @@ class BeamViewModel @Inject constructor(
+         calculationJob = viewModelScope.launch(Dispatchers.Default) {
+             try {
+                 val result = buildCurrentCalculation() ?: return@launch
++                val inputsAtResult = currentRecalculationInputs()
+                 withContext(Dispatchers.Main) {
+                     calculationResult = result
+                     calculationError = null
++                    hasUnsavedChanges = inputsAtResult != savedInputsSnapshot
+                 }
+             } catch (e: Exception) {
+                 withContext(Dispatchers.Main) {
+@@ -309,10 +322,13 @@ class BeamViewModel @Inject constructor(
+             try {
+                 val calculation = buildCurrentCalculation()
+                     ?: throw IllegalStateException("Calculation inputs are incomplete.")
++                val inputsAtSave = currentRecalculationInputs()
+                 beamRepository.saveBeamCalculation(calculation)
+                 withContext(Dispatchers.Main) {
+                     calculationResult = calculation
+                     calculationError = null
++                    savedInputsSnapshot = inputsAtSave
++                    hasUnsavedChanges = false
+                     onSaved(calculation)
+                 }
+             } catch (e: Exception) {
+@@ -471,6 +487,8 @@ class BeamViewModel @Inject constructor(
+                     calculationResult = result
+                     structuralMember = result.member
+                     restoreInputs(result.inputs, result.member)
++                    savedInputsSnapshot = currentRecalculationInputs()
++                    hasUnsavedChanges = false
+                 }
+             } finally {
+                 isLoadingSavedCalculation = false
+@@ -728,27 +746,34 @@ class BeamViewModel @Inject constructor(
+      */
+     private fun observeInputsForAutoRecalculation() {
+         viewModelScope.launch {
+-            snapshotFlow {
+-                RecalculationInputs(
+-                    structuralMember = structuralMember,
+-                    spanBracingInputs = spanBracingInputs,
+-                    loadCases = loadCases,
+-                    includeSelfWeight = includeSelfWeight,
+-                    selectedSection = selectedSection,
+-                    selectedMaterial = selectedMaterial,
+-                    activeMaterialGrade = activeMaterialGrade,
+-                    selectedCombinationSet = selectedCombinationSet,
+-                    enabledCombinations = enabledCombinations,
+-                    methodology = methodology,
+-                    activeBuildingCode = activeBuildingCode
+-                )
+-            }
++            snapshotFlow { currentRecalculationInputs() }
+                 .debounce(400)
+                 .distinctUntilChanged()
+                 .collect { calculate() }
+         }
+     }
+ 
++    /**
++     * Snapshot of every input calculate() reads, taken right now. Shared by
++     * the auto-recalculation observer above and by hasUnsavedChanges
++     * tracking (calculate/loadCalculation/saveCalculation), which compares
++     * this against savedInputsSnapshot to know whether the current on-screen
++     * state actually matches what's persisted.
++     */
++    private fun currentRecalculationInputs() = RecalculationInputs(
++        structuralMember = structuralMember,
++        spanBracingInputs = spanBracingInputs,
++        loadCases = loadCases,
++        includeSelfWeight = includeSelfWeight,
++        selectedSection = selectedSection,
++        selectedMaterial = selectedMaterial,
++        activeMaterialGrade = activeMaterialGrade,
++        selectedCombinationSet = selectedCombinationSet,
++        enabledCombinations = enabledCombinations,
++        methodology = methodology,
++        activeBuildingCode = activeBuildingCode
++    )
++
+     /**
+      * Snapshot of every input calculate() reads. Equality here determines
+      * whether a recalculation is actually triggered — anything calculate()
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 33c3b66..1a0a5e3 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -2,6 +2,8 @@ package com.lz.beam.ui
+ 
+ import kotlin.math.abs
+ import kotlin.math.roundToInt
++import androidx.activity.OnBackPressedCallback
++import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+ import androidx.compose.foundation.Canvas
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.layout.Arrangement
+@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.LineAxis
+ import androidx.compose.material.icons.filled.Save
+ import androidx.compose.material.icons.filled.Settings
+ import androidx.compose.material.icons.filled.VerticalAlignBottom
++import androidx.compose.material3.AlertDialog
+ import androidx.compose.material3.Card
+ import androidx.compose.material3.CardDefaults
+ import androidx.compose.material3.Checkbox
+@@ -49,8 +52,10 @@ import androidx.compose.material3.Surface
+ import androidx.compose.material3.Switch
+ import androidx.compose.material3.Tab
+ import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
+ import androidx.compose.material3.TopAppBar
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.DisposableEffect
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.remember
+@@ -176,6 +181,83 @@ fun BeamCalculatorScreen(
+ 
+     val scope = rememberCoroutineScope()
+ 
++    // Guards both the app-bar back arrow and the system back gesture/button
++    // against discarding an unsaved calculation. Uses a manually-managed
++    // OnBackPressedCallback (not the BackHandler composable) because onBack
++    // itself calls backDispatcher.onBackPressed() — with our callback still
++    // topmost on the dispatcher stack, that would just re-invoke this same
++    // callback (infinite recursion). Disabling it synchronously for the
++    // single onBack() call sidesteps that; a plain mutableStateOf-backed
++    // "enabled" flag can't, since BackHandler only applies it on the next
++    // recomposition, which hasn't happened yet at that point in the lambda.
++    var showUnsavedChangesDialog by remember { mutableStateOf(false) }
++    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
++    val backCallback = remember {
++        object : OnBackPressedCallback(true) {
++            override fun handleOnBackPressed() {
++                if (viewModel.hasUnsavedChanges) {
++                    showUnsavedChangesDialog = true
++                } else {
++                    isEnabled = false
++                    onBack()
++                    isEnabled = true
++                }
++            }
++        }
++    }
++    DisposableEffect(backDispatcher) {
++        backDispatcher?.addCallback(backCallback)
++        onDispose { backCallback.remove() }
++    }
++    val attemptBack: () -> Unit = { backCallback.handleOnBackPressed() }
++
++    if (showUnsavedChangesDialog) {
++        AlertDialog(
++            onDismissRequest = { showUnsavedChangesDialog = false },
++            title = { Text("Unsaved changes") },
++            text = { Text("This calculation hasn't been saved. Save it before leaving, or discard the changes?") },
++            confirmButton = {
++                // hasUnsavedChanges will already be false by the time onSaved
++                // fires (saveCalculation clears it on success), so this could
++                // call onBack() directly and still work — but disabling the
++                // callback explicitly here keeps both buttons' bypass of the
++                // dialog check equally explicit rather than one of them
++                // leaning on save-completion timing.
++                TextButton(onClick = {
++                    showUnsavedChangesDialog = false
++                    viewModel.saveCalculation(
++                        onSaved = {
++                            backCallback.isEnabled = false
++                            onBack()
++                            backCallback.isEnabled = true
++                        },
++                        onError = { message ->
++                            scope.launch {
++                                snackbarHostState.showSnackbar("Save failed: $message")
++                            }
++                        }
++                    )
++                }) {
++                    Text("Save & exit")
++                }
++            },
++            dismissButton = {
++                // Bypasses the same check handleOnBackPressed would otherwise
++                // re-run (hasUnsavedChanges is still true here — discarding
++                // doesn't touch the ViewModel's dirty state) and immediately
++                // reopen this same dialog instead of leaving.
++                TextButton(onClick = {
++                    showUnsavedChangesDialog = false
++                    backCallback.isEnabled = false
++                    onBack()
++                    backCallback.isEnabled = true
++                }) {
++                    Text("Discard")
++                }
++            }
++        )
++    }
++
+     Scaffold(
+         topBar = {
+             TopAppBar(
+@@ -227,7 +309,7 @@ fun BeamCalculatorScreen(
+                     }
+                 },
+                 navigationIcon = {
+-                    IconButton(onClick = onBack) {
++                    IconButton(onClick = attemptBack) {
+                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                     }
+                 },

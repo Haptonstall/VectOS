@@ -80,5 +80,20 @@ object Migrations {
         }
     }
 
-    fun getMigrations(): Array<Migration> = arrayOf(MIGRATION_1_2)
+    /**
+     * v2 -> v3:
+     *  - aisc_sections: add flatWidthB / flatHeightH (nullable REAL,
+     *    additive) — HSS-only flat (clear) width/height between corners,
+     *    needed for AISC Table B4.1a local-buckling slenderness ratios
+     *    (F7.2/F7.3, G4). Plain ADD COLUMN is fine here (no DROP/RENAME),
+     *    so no need for the v1->v2 create-copy-drop-rename dance.
+     */
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE aisc_sections ADD COLUMN flatWidthB REAL")
+            db.execSQL("ALTER TABLE aisc_sections ADD COLUMN flatHeightH REAL")
+        }
+    }
+
+    fun getMigrations(): Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 }

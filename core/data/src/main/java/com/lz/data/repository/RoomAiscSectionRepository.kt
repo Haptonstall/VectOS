@@ -34,7 +34,14 @@ class RoomAiscSectionRepository(private val aiscDao: AiscSectionDao) : SectionRe
 
     override suspend fun getShapeTypes(material: MaterialType): List<ShapeType> {
         if (material != MaterialType.STEEL) return emptyList()
-        return listOf(ShapeType.WIDE_FLANGE, ShapeType.CHANNEL, ShapeType.TEE, ShapeType.ANGLE)
+        return listOf(
+            ShapeType.WIDE_FLANGE,
+            ShapeType.CHANNEL,
+            ShapeType.TEE,
+            ShapeType.ANGLE,
+            ShapeType.RECTANGULAR_HSS,
+            ShapeType.ROUND_HSS
+        )
     }
 
     override suspend fun getSections(material: MaterialType, shapeType: ShapeType): List<SectionProfile> {
@@ -45,6 +52,8 @@ class RoomAiscSectionRepository(private val aiscDao: AiscSectionDao) : SectionRe
             ShapeType.CHANNEL -> "C"
             ShapeType.TEE -> "WT"
             ShapeType.ANGLE -> "L"
+            ShapeType.RECTANGULAR_HSS -> "HSS_RECT"
+            ShapeType.ROUND_HSS -> "HSS_ROUND"
             else -> return emptyList()
         }
 
@@ -63,6 +72,8 @@ class RoomAiscSectionRepository(private val aiscDao: AiscSectionDao) : SectionRe
                     flangeThickness = entity.flangeThickness.inches,
                     torsionalConstantJ = entity.torsionalJ,
                     warpingConstantCw = entity.warpingCw,
+                    flatWidthB = entity.flatWidthB,
+                    flatHeightH = entity.flatHeightH,
                     propertiesStrongAxis = SectionAxisProperties(
                         i = entity.ix.in4,
                         s = entity.sx.in3,
@@ -87,6 +98,8 @@ class RoomAiscSectionRepository(private val aiscDao: AiscSectionDao) : SectionRe
             "C" -> ShapeType.CHANNEL
             "WT" -> ShapeType.TEE
             "L" -> ShapeType.ANGLE
+            "HSS_RECT" -> ShapeType.RECTANGULAR_HSS
+            "HSS_ROUND" -> ShapeType.ROUND_HSS
             else -> ShapeType.WIDE_FLANGE
         }
         return getSections(MaterialType.STEEL, shapeType).find { it.id == id }

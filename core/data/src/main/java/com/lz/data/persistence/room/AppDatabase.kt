@@ -70,7 +70,7 @@ import com.lz.data.persistence.room.entity.DefaultLoadCaseRoomEntity
         ServiceabilityCriterionRoomEntity::class,
         DefaultLoadCaseRoomEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(StandardTypeConverters::class)

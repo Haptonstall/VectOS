@@ -143,7 +143,8 @@ object BeamAnalysisSolver {
         val calculator: CapacityCalculator? = when (material) {
             is MaterialGrade.Steel -> AiscSteelCapacityCalculator(
                 profile, material,
-                edition = resolveAiscEdition(config) ?: AiscEdition.AISC_360_22
+                edition = resolveAiscEdition(config) ?: AiscEdition.AISC_360_22,
+                memberIsStrongAxis = config.isStrongAxis
             )
             is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
                 profile, material,

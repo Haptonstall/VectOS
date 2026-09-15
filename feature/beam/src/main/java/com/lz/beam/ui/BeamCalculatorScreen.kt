@@ -2,6 +2,8 @@ package com.lz.beam.ui
 
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.LineAxis
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VerticalAlignBottom
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -49,8 +52,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -176,6 +181,83 @@ fun BeamCalculatorScreen(
 
     val scope = rememberCoroutineScope()
 
+    // Guards both the app-bar back arrow and the system back gesture/button
+    // against discarding an unsaved calculation. Uses a manually-managed
+    // OnBackPressedCallback (not the BackHandler composable) because onBack
+    // itself calls backDispatcher.onBackPressed() — with our callback still
+    // topmost on the dispatcher stack, that would just re-invoke this same
+    // callback (infinite recursion). Disabling it synchronously for the
+    // single onBack() call sidesteps that; a plain mutableStateOf-backed
+    // "enabled" flag can't, since BackHandler only applies it on the next
+    // recomposition, which hasn't happened yet at that point in the lambda.
+    var showUnsavedChangesDialog by remember { mutableStateOf(false) }
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    val backCallback = remember {
+        object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (viewModel.hasUnsavedChanges) {
+                    showUnsavedChangesDialog = true
+                } else {
+                    isEnabled = false
+                    onBack()
+                    isEnabled = true
+                }
+            }
+        }
+    }
+    DisposableEffect(backDispatcher) {
+        backDispatcher?.addCallback(backCallback)
+        onDispose { backCallback.remove() }
+    }
+    val attemptBack: () -> Unit = { backCallback.handleOnBackPressed() }
+
+    if (showUnsavedChangesDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedChangesDialog = false },
+            title = { Text("Unsaved changes") },
+            text = { Text("This calculation hasn't been saved. Save it before leaving, or discard the changes?") },
+            confirmButton = {
+                // hasUnsavedChanges will already be false by the time onSaved
+                // fires (saveCalculation clears it on success), so this could
+                // call onBack() directly and still work — but disabling the
+                // callback explicitly here keeps both buttons' bypass of the
+                // dialog check equally explicit rather than one of them
+                // leaning on save-completion timing.
+                TextButton(onClick = {
+                    showUnsavedChangesDialog = false
+                    viewModel.saveCalculation(
+                        onSaved = {
+                            backCallback.isEnabled = false
+                            onBack()
+                            backCallback.isEnabled = true
+                        },
+                        onError = { message ->
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Save failed: $message")
+                            }
+                        }
+                    )
+                }) {
+                    Text("Save & exit")
+                }
+            },
+            dismissButton = {
+                // Bypasses the same check handleOnBackPressed would otherwise
+                // re-run (hasUnsavedChanges is still true here — discarding
+                // doesn't touch the ViewModel's dirty state) and immediately
+                // reopen this same dialog instead of leaving.
+                TextButton(onClick = {
+                    showUnsavedChangesDialog = false
+                    backCallback.isEnabled = false
+                    onBack()
+                    backCallback.isEnabled = true
+                }) {
+                    Text("Discard")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -227,7 +309,7 @@ fun BeamCalculatorScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = attemptBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },

@@ -35,6 +35,14 @@ data class BeamAnalysisConfig(
     val designMethodology: DesignMethodology = DesignMethodology.ASD,
     val sectionProfile: SectionProfile? = null,
     val material: MaterialGrade? = null,
+    /**
+     * Geometry tab's Strong Axis / Weak Axis toggle. True (default) = beam
+     * bends about its strong axis, matching every caller that hasn't been
+     * updated to pass this. See AiscSteelCapacityCalculator.memberIsStrongAxis
+     * for what this actually changes (strength check only — not yet wired
+     * into the analysis stiffness/deflection).
+     */
+    val isStrongAxis: Boolean = true,
     val liveLoadDeflectionLimitRatio: Double = 360.0,
     val totalLoadDeflectionLimitRatio: Double = 240.0,
     /**

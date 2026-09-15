@@ -80,6 +80,15 @@ data class SteelProfile(
     val flangeThickness: Length,
     val torsionalConstantJ: Double,
     val warpingConstantCw: Double,
+    // HSS-only geometry, null for every other ShapeType. AISC Table B4.1a
+    // local-buckling slenderness ratios for HSS (F7.2/F7.3 flange & web,
+    // G4 shear Aw) use the *flat* width/height between corners, not the
+    // overall outside B/H already carried above as flangeWidth/depth — so
+    // these are kept separate rather than derived from B/H and an assumed
+    // corner radius. Both null for ROUND_HSS/PIPE (not applicable there;
+    // D/t uses depth directly) and for every non-HSS shape.
+    val flatWidthB: Double? = null,
+    val flatHeightH: Double? = null,
     override val propertiesStrongAxis: SectionAxisProperties,
     override val propertiesWeakAxis: SectionAxisProperties,
     override val databaseMetadata: SectionDatabaseMetadata? = null

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -89,6 +90,7 @@ fun SectionPicker(
     if (showDialog) {
         SectionSelectionDialog(
             sections = sections,
+            selectedSection = selectedSection,
             onDismiss = { showDialog = false },
             onSelect = { section ->
                 onSectionSelected(section)
@@ -102,6 +104,7 @@ fun SectionPicker(
 @Composable
 fun SectionSelectionDialog(
     sections: List<SectionProfile>,
+    selectedSection: SectionProfile?,
     onDismiss: () -> Unit,
     onSelect: (SectionProfile?) -> Unit
 ) {
@@ -111,6 +114,22 @@ fun SectionSelectionDialog(
     }
 
     var expandedSectionId by remember { mutableStateOf<String?>(null) }
+
+    // Open already scrolled to the current selection, not the top of the
+    // list — the real use case is nudging up/down near an already-chosen
+    // size (e.g. tweaking near a W8x10), not scrolling from the W44s or
+    // typing a search query every time. +1 accounts for the "Manual Entry"
+    // item ahead of the section list; the small backward offset leaves a
+    // couple of items visible above the selection so both directions are
+    // immediately browsable, instead of pinning it to the very top edge.
+    // Only computed once, at dialog-open time (searchQuery is still empty
+    // then, so filteredSections == sections) — the list shouldn't jump
+    // around again as the user types a search query afterward.
+    val initialListIndex = remember {
+        val matchIndex = selectedSection?.let { sel -> sections.indexOfFirst { it.id == sel.id } } ?: -1
+        if (matchIndex >= 0) maxOf(0, matchIndex + 1 - 3) else 0
+    }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialListIndex)
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -136,6 +155,7 @@ fun SectionSelectionDialog(
                 )
 
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {

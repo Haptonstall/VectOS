@@ -140,6 +140,17 @@ class BeamViewModel @Inject constructor(
     var calculationError by mutableStateOf<String?>(null)
         private set
 
+    // True whenever the current inputs (and the calculationResult they
+    // produced) differ from what's actually persisted — i.e. there's
+    // something on screen that would be lost by navigating away. Compared
+    // against RecalculationInputs snapshots rather than a plain toggle so a
+    // freshly-loaded calculation's own auto-recalculation (see
+    // observeInputsForAutoRecalculation) doesn't itself get misread as an
+    // unsaved edit.
+    var hasUnsavedChanges by mutableStateOf(false)
+        private set
+    private var savedInputsSnapshot: RecalculationInputs? = null
+
     var selectedAnalysisCombination by mutableStateOf<LoadCombination?>(null)
     var enabledCombinations by mutableStateOf<Set<String>>(emptySet())
 
@@ -182,7 +193,7 @@ class BeamViewModel @Inject constructor(
             val governingDemand = governingDesignPoint()?.demand ?: return null
 
             val calculator = when (val mat = activeMaterialGrade) {
-                is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat)
+                is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
                 is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(section, mat)
                 else                   -> null
             } ?: return null
@@ -284,9 +295,11 @@ class BeamViewModel @Inject constructor(
         calculationJob = viewModelScope.launch(Dispatchers.Default) {
             try {
                 val result = buildCurrentCalculation() ?: return@launch
+                val inputsAtResult = currentRecalculationInputs()
                 withContext(Dispatchers.Main) {
                     calculationResult = result
                     calculationError = null
+                    hasUnsavedChanges = inputsAtResult != savedInputsSnapshot
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -309,10 +322,13 @@ class BeamViewModel @Inject constructor(
             try {
                 val calculation = buildCurrentCalculation()
                     ?: throw IllegalStateException("Calculation inputs are incomplete.")
+                val inputsAtSave = currentRecalculationInputs()
                 beamRepository.saveBeamCalculation(calculation)
                 withContext(Dispatchers.Main) {
                     calculationResult = calculation
                     calculationError = null
+                    savedInputsSnapshot = inputsAtSave
+                    hasUnsavedChanges = false
                     onSaved(calculation)
                 }
             } catch (e: Exception) {
@@ -471,6 +487,8 @@ class BeamViewModel @Inject constructor(
                     calculationResult = result
                     structuralMember = result.member
                     restoreInputs(result.inputs, result.member)
+                    savedInputsSnapshot = currentRecalculationInputs()
+                    hasUnsavedChanges = false
                 }
             } finally {
                 isLoadingSavedCalculation = false
@@ -630,7 +648,8 @@ class BeamViewModel @Inject constructor(
                 designMethodology = methodology,
                 sectionProfile = selectedSection,
                 material = activeMaterialGrade,
-                buildingCode = code
+                buildingCode = code,
+                isStrongAxis = isStrongAxis
             )
         )
 
@@ -728,26 +747,33 @@ class BeamViewModel @Inject constructor(
      */
     private fun observeInputsForAutoRecalculation() {
         viewModelScope.launch {
-            snapshotFlow {
-                RecalculationInputs(
-                    structuralMember = structuralMember,
-                    spanBracingInputs = spanBracingInputs,
-                    loadCases = loadCases,
-                    includeSelfWeight = includeSelfWeight,
-                    selectedSection = selectedSection,
-                    selectedMaterial = selectedMaterial,
-                    activeMaterialGrade = activeMaterialGrade,
-                    selectedCombinationSet = selectedCombinationSet,
-                    enabledCombinations = enabledCombinations,
-                    methodology = methodology,
-                    activeBuildingCode = activeBuildingCode
-                )
-            }
+            snapshotFlow { currentRecalculationInputs() }
                 .debounce(400)
                 .distinctUntilChanged()
                 .collect { calculate() }
         }
     }
+
+    /**
+     * Snapshot of every input calculate() reads, taken right now. Shared by
+     * the auto-recalculation observer above and by hasUnsavedChanges
+     * tracking (calculate/loadCalculation/saveCalculation), which compares
+     * this against savedInputsSnapshot to know whether the current on-screen
+     * state actually matches what's persisted.
+     */
+    private fun currentRecalculationInputs() = RecalculationInputs(
+        structuralMember = structuralMember,
+        spanBracingInputs = spanBracingInputs,
+        loadCases = loadCases,
+        includeSelfWeight = includeSelfWeight,
+        selectedSection = selectedSection,
+        selectedMaterial = selectedMaterial,
+        activeMaterialGrade = activeMaterialGrade,
+        selectedCombinationSet = selectedCombinationSet,
+        enabledCombinations = enabledCombinations,
+        methodology = methodology,
+        activeBuildingCode = activeBuildingCode
+    )
 
     /**
      * Snapshot of every input calculate() reads. Equality here determines
