@@ -1,0 +1,146 @@
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 963787d..d441921 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -117,6 +117,21 @@ class BeamViewModel @Inject constructor(
+     var methodology by mutableStateOf(DesignMethodology.LRFD)
+     var isStrongAxis by mutableStateOf(true)
+ 
++    // Prompted once on entry for a brand-new calculation (Quick Calc's most
++    // common path today, since a project-associated launch doesn't yet
++    // differ from Quick Calc at this screen's level) so the ASD/LRFD choice
++    // is front-and-center rather than left to silently default to LRFD and
++    // only discoverable buried in settings. Suppressed when loading an
++    // existing saved calculation instead — see loadCalculation() — since its
++    // methodology is already known from what was saved.
++    var showMethodologyPrompt by mutableStateOf(true)
++        private set
++
++    fun selectMethodology(selected: DesignMethodology) {
++        methodology = selected
++        showMethodologyPrompt = false
++    }
++
+     // --- Selection State: Selection Flows ---
+     var availableMaterials by mutableStateOf<List<MaterialType>>(emptyList())
+         private set
+@@ -489,6 +504,7 @@ class BeamViewModel @Inject constructor(
+                     restoreInputs(result.inputs, result.member)
+                     savedInputsSnapshot = currentRecalculationInputs()
+                     hasUnsavedChanges = false
++                    showMethodologyPrompt = false
+                 }
+             } finally {
+                 isLoadingSavedCalculation = false
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 1a0a5e3..bb6781c 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.History
+ import androidx.compose.material.icons.filled.Info
+ import androidx.compose.material.icons.filled.Layers
+ import androidx.compose.material.icons.filled.LineAxis
++import androidx.compose.material.icons.filled.Rule
+ import androidx.compose.material.icons.filled.Save
+ import androidx.compose.material.icons.filled.Settings
+ import androidx.compose.material.icons.filled.VerticalAlignBottom
+@@ -258,6 +259,29 @@ fun BeamCalculatorScreen(
+         )
+     }
+ 
++    if (viewModel.showMethodologyPrompt) {
++        // No dismiss-by-tapping-outside / back-press dismissal here — this
++        // is a required up-front choice for a brand-new calculation (see
++        // showMethodologyPrompt's doc comment in the ViewModel), not an
++        // optional confirmation, so onDismissRequest intentionally does
++        // nothing rather than closing it unanswered.
++        AlertDialog(
++            onDismissRequest = { },
++            title = { Text("Design methodology") },
++            text = { Text("Choose ASD or LRFD for this calculation. You can still change it later from the Geometry tab.") },
++            confirmButton = {
++                TextButton(onClick = { viewModel.selectMethodology(DesignMethodology.LRFD) }) {
++                    Text("LRFD")
++                }
++            },
++            dismissButton = {
++                TextButton(onClick = { viewModel.selectMethodology(DesignMethodology.ASD) }) {
++                    Text("ASD")
++                }
++            }
++        )
++    }
++
+     Scaffold(
+         topBar = {
+             TopAppBar(
+@@ -766,6 +790,8 @@ fun GeometryTab(viewModel: BeamViewModel) {
+         selectedGrade = viewModel.activeMaterialGrade,
+         isStrongAxis = viewModel.isStrongAxis,
+         onUpdateOrientation = viewModel::updateOrientation,
++        methodology = viewModel.methodology,
++        onUpdateMethodology = viewModel::selectMethodology,
+         onMaterialSelected = {
+             viewModel.onMaterialSelected(it)
+         },
+@@ -1007,6 +1033,8 @@ fun GeometryConfiguration(
+     selectedGrade: MaterialGrade?,
+     isStrongAxis: Boolean,
+     onUpdateOrientation: (Boolean) -> Unit,
++    methodology: DesignMethodology,
++    onUpdateMethodology: (DesignMethodology) -> Unit,
+     onMaterialSelected: (MaterialType) -> Unit,
+     onOpenWoodPicker: () -> Unit,
+     onGradeSelected: (MaterialGrade) -> Unit,
+@@ -1148,6 +1176,51 @@ fun GeometryConfiguration(
+                 icon = Icons.Default.LineAxis,
+                 weight = selectedSection?.getWeightLbFt(490.0)?.toFloat() ?: 0f
+             )
++
++            // Methodology Toggle — set once via the entry prompt
++            // (showMethodologyPrompt), changeable here afterward.
++            MethodologyToggle(
++                methodology = methodology,
++                onToggle = {
++                    onUpdateMethodology(
++                        if (methodology == DesignMethodology.LRFD) DesignMethodology.ASD else DesignMethodology.LRFD
++                    )
++                }
++            )
++        }
++    }
++}
++
++@Composable
++fun MethodologyToggle(
++    methodology: DesignMethodology,
++    onToggle: () -> Unit
++) {
++    val isLrfd = methodology == DesignMethodology.LRFD
++    Surface(
++        modifier = Modifier.fillMaxWidth(),
++        shape = RoundedCornerShape(12.dp),
++        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
++        onClick = onToggle
++    ) {
++        Row(
++            modifier = Modifier.padding(16.dp),
++            verticalAlignment = Alignment.CenterVertically,
++            horizontalArrangement = Arrangement.SpaceBetween
++        ) {
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                Icon(Icons.Default.Rule, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
++                Spacer(Modifier.width(12.dp))
++                Column {
++                    Text("Methodology", style = MaterialTheme.typography.labelLarge)
++                    Text(
++                        if (isLrfd) "LRFD (Strength)" else "ASD (Allowable Stress)",
++                        style = MaterialTheme.typography.bodySmall,
++                        color = MaterialTheme.colorScheme.primary
++                    )
++                }
++            }
++            Switch(checked = isLrfd, onCheckedChange = { onToggle() })
+         }
+     }
+ }

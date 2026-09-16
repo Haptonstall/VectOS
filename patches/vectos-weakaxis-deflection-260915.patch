@@ -1,0 +1,58 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
+index 14a85c9..e2b5fb7 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
+@@ -74,13 +74,13 @@ class AiscSteelCapacityCalculator(
+      * calculateFlexureX and the two `calculateShear(memberIsStrongAxis)`
+      * call sites below.
+      *
+-     * Known gap: this fixes the STRENGTH CHECK only. Deflection and (for
+-     * multi-span continuous beams) moment distribution still use the
+-     * strong-axis I unconditionally (BeamAnalysisConfig.momentOfInertiaX),
+-     * since MemberAnalysisSolver's stiffness matrix isn't wired to this
+-     * flag — a weak-axis-oriented beam will still show understated
+-     * deflection and (for continuous beams only) slightly-off moment
+-     * redistribution until that's addressed separately.
++     * This covers the strength check. Deflection and (for multi-span
++     * continuous beams) moment distribution get the matching fix on the
++     * analysis side — BeamViewModel.buildCurrentCalculation() swaps which
++     * of propertiesStrongAxis/propertiesWeakAxis feeds
++     * BeamAnalysisConfig.momentOfInertiaX based on the same toggle, so the
++     * FEM element MemberAnalysisSolver builds uses the correct EI for
++     * whichever axis is actually being bent about.
+      */
+     private val memberIsStrongAxis: Boolean = true
+ ) : CapacityCalculator {
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index afd3a31..963787d 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -642,8 +642,26 @@ class BeamViewModel @Inject constructor(
+                 combinations = activeCombinations,
+                 modulusOfElasticity = (activeMaterialGrade?.modulusOfElasticity?.psi
+                     ?: selectedMaterial.defaultModulusOfElasticityPsi).psiModulus,
+-                momentOfInertiaX = (selectedSection?.propertiesStrongAxis?.i ?: MomentOfInertia(100.0)),
+-                momentOfInertiaY = (selectedSection?.propertiesWeakAxis?.i ?: MomentOfInertia(10.0)),
++                // Analysis-element stiffness for the two bending planes. This
++                // solver builds a real 6-DOF frame element (i and iy both feed
++                // the stiffness matrix — see MemberAnalysisSolver), but only
++                // ever applies loads in the vertical (gravity) plane, so "X" is
++                // really "whichever axis is actually being bent about" rather
++                // than always-strong-axis. Swapped here based on the Geometry
++                // tab's orientation toggle so a weak-axis-oriented beam's
++                // deflection and (for continuous/multi-span beams) moment
++                // distribution are computed with the correct EI — previously
++                // this was hardcoded to strong-axis regardless of orientation.
++                // The orthogonal ("Y") slot isn't loaded by anything this
++                // solver models, so swapping it too is safe/inert either way.
++                momentOfInertiaX = (
++                    (if (isStrongAxis) selectedSection?.propertiesStrongAxis else selectedSection?.propertiesWeakAxis)?.i
++                        ?: MomentOfInertia(100.0)
++                    ),
++                momentOfInertiaY = (
++                    (if (isStrongAxis) selectedSection?.propertiesWeakAxis else selectedSection?.propertiesStrongAxis)?.i
++                        ?: MomentOfInertia(10.0)
++                    ),
+                 braceState = getGlobalBraceState(),
+                 designMethodology = methodology,
+                 sectionProfile = selectedSection,

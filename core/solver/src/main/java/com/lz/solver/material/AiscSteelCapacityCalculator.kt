@@ -74,13 +74,13 @@ class AiscSteelCapacityCalculator(
      * calculateFlexureX and the two `calculateShear(memberIsStrongAxis)`
      * call sites below.
      *
-     * Known gap: this fixes the STRENGTH CHECK only. Deflection and (for
-     * multi-span continuous beams) moment distribution still use the
-     * strong-axis I unconditionally (BeamAnalysisConfig.momentOfInertiaX),
-     * since MemberAnalysisSolver's stiffness matrix isn't wired to this
-     * flag — a weak-axis-oriented beam will still show understated
-     * deflection and (for continuous beams only) slightly-off moment
-     * redistribution until that's addressed separately.
+     * This covers the strength check. Deflection and (for multi-span
+     * continuous beams) moment distribution get the matching fix on the
+     * analysis side — BeamViewModel.buildCurrentCalculation() swaps which
+     * of propertiesStrongAxis/propertiesWeakAxis feeds
+     * BeamAnalysisConfig.momentOfInertiaX based on the same toggle, so the
+     * FEM element MemberAnalysisSolver builds uses the correct EI for
+     * whichever axis is actually being bent about.
      */
     private val memberIsStrongAxis: Boolean = true
 ) : CapacityCalculator {

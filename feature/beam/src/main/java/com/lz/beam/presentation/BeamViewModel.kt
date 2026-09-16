@@ -117,6 +117,21 @@ class BeamViewModel @Inject constructor(
     var methodology by mutableStateOf(DesignMethodology.LRFD)
     var isStrongAxis by mutableStateOf(true)
 
+    // Prompted once on entry for a brand-new calculation (Quick Calc's most
+    // common path today, since a project-associated launch doesn't yet
+    // differ from Quick Calc at this screen's level) so the ASD/LRFD choice
+    // is front-and-center rather than left to silently default to LRFD and
+    // only discoverable buried in settings. Suppressed when loading an
+    // existing saved calculation instead — see loadCalculation() — since its
+    // methodology is already known from what was saved.
+    var showMethodologyPrompt by mutableStateOf(true)
+        private set
+
+    fun selectMethodology(selected: DesignMethodology) {
+        methodology = selected
+        showMethodologyPrompt = false
+    }
+
     // --- Selection State: Selection Flows ---
     var availableMaterials by mutableStateOf<List<MaterialType>>(emptyList())
         private set
@@ -489,6 +504,7 @@ class BeamViewModel @Inject constructor(
                     restoreInputs(result.inputs, result.member)
                     savedInputsSnapshot = currentRecalculationInputs()
                     hasUnsavedChanges = false
+                    showMethodologyPrompt = false
                 }
             } finally {
                 isLoadingSavedCalculation = false
@@ -642,8 +658,26 @@ class BeamViewModel @Inject constructor(
                 combinations = activeCombinations,
                 modulusOfElasticity = (activeMaterialGrade?.modulusOfElasticity?.psi
                     ?: selectedMaterial.defaultModulusOfElasticityPsi).psiModulus,
-                momentOfInertiaX = (selectedSection?.propertiesStrongAxis?.i ?: MomentOfInertia(100.0)),
-                momentOfInertiaY = (selectedSection?.propertiesWeakAxis?.i ?: MomentOfInertia(10.0)),
+                // Analysis-element stiffness for the two bending planes. This
+                // solver builds a real 6-DOF frame element (i and iy both feed
+                // the stiffness matrix — see MemberAnalysisSolver), but only
+                // ever applies loads in the vertical (gravity) plane, so "X" is
+                // really "whichever axis is actually being bent about" rather
+                // than always-strong-axis. Swapped here based on the Geometry
+                // tab's orientation toggle so a weak-axis-oriented beam's
+                // deflection and (for continuous/multi-span beams) moment
+                // distribution are computed with the correct EI — previously
+                // this was hardcoded to strong-axis regardless of orientation.
+                // The orthogonal ("Y") slot isn't loaded by anything this
+                // solver models, so swapping it too is safe/inert either way.
+                momentOfInertiaX = (
+                    (if (isStrongAxis) selectedSection?.propertiesStrongAxis else selectedSection?.propertiesWeakAxis)?.i
+                        ?: MomentOfInertia(100.0)
+                    ),
+                momentOfInertiaY = (
+                    (if (isStrongAxis) selectedSection?.propertiesWeakAxis else selectedSection?.propertiesStrongAxis)?.i
+                        ?: MomentOfInertia(10.0)
+                    ),
                 braceState = getGlobalBraceState(),
                 designMethodology = methodology,
                 sectionProfile = selectedSection,
