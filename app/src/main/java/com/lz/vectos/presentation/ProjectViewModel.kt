@@ -129,6 +129,14 @@ class ProjectViewModel @Inject constructor(
 
     }
 
+    // Called when the user launches a calculation via "Quick Calc" rather
+    // than from within a specific project — see ActiveProjectProvider.isQuickCalcMode.
+    fun enterQuickCalcMode() {
+
+        activeProjectProvider.setQuickCalcMode(true)
+
+    }
+
     // -------------------------------------------------------------------------
     // CRUD
     // -------------------------------------------------------------------------

@@ -117,11 +117,12 @@ class BeamViewModel @Inject constructor(
     var methodology by mutableStateOf(DesignMethodology.LRFD)
     var isStrongAxis by mutableStateOf(true)
 
-    // Prompted once on entry for a brand-new calculation (Quick Calc's most
-    // common path today, since a project-associated launch doesn't yet
-    // differ from Quick Calc at this screen's level) so the ASD/LRFD choice
-    // is front-and-center rather than left to silently default to LRFD and
-    // only discoverable buried in settings. Suppressed when loading an
+    // Prompted once on entry for a brand-new Quick Calc calculation so the
+    // ASD/LRFD choice is front-and-center rather than left to silently
+    // default to LRFD and only discoverable buried in settings. Suppressed
+    // for a calculation launched from within a project — see
+    // loadDefaultBuildingCode(), which reverts methodology to that
+    // project's own default instead — and suppressed when loading an
     // existing saved calculation instead — see loadCalculation() — since its
     // methodology is already known from what was saved.
     var showMethodologyPrompt by mutableStateOf(true)
@@ -276,6 +277,13 @@ class BeamViewModel @Inject constructor(
                 // this must happen before it's used below to pick the
                 // default LRFD/ASD combination set.
                 methodology = activeProjectProvider.activeProject.value.settings.designMethodology
+
+                // The methodology prompt is only meaningful for Quick Calc,
+                // which has no project to inherit a methodology from. A
+                // calculation launched from within a project always reverts
+                // to that project's own default methodology (set just above)
+                // and is never prompted.
+                showMethodologyPrompt = activeProjectProvider.isQuickCalcMode.value
 
                 // Use the active project's own selected building code — falling
                 // back to the app default only if that project hasn't set one

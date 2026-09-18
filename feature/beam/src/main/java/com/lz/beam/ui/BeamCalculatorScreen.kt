@@ -45,6 +45,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
@@ -55,6 +56,8 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -108,6 +111,7 @@ import com.lz.model.units.Length
 import com.lz.model.units.Moment
 import com.lz.model.units.UnitFormattingService
 import com.lz.model.units.UnitSystem
+import com.lz.model.units.feet
 import com.lz.model.units.inInches
 import com.lz.model.units.inFeet
 import com.lz.model.units.inKiloNewtons
@@ -117,9 +121,12 @@ import com.lz.model.units.inLbIn
 import com.lz.model.units.inMeters
 import com.lz.model.units.inNewtonMeters
 import com.lz.model.units.inPoundsForce
+import com.lz.model.units.meters
+import com.lz.solver.analysis.AnalysisPoint
 import com.lz.solver.analysis.AnalysisResult
 import com.lz.solver.analysis.ReactionResult
 import com.lz.ui.AnalysisChart
+import com.lz.ui.interpolateAnalysisValue
 import com.lz.ui.SectionPicker
 import com.lz.ui.boundary.BoundaryConditionPicker
 import com.lz.ui.boundary.BoundaryConditionPickerConfig
@@ -1409,6 +1416,33 @@ fun AnalysisSummary(
         analysis.spanResults.flatMap { it.deflectionDiagram }
     }
 
+    // Station picker: lets the user request the interpolated moment/shear/
+    // deflection at an arbitrary point along the member, rather than only the
+    // fixed set of pre-computed diagram points. Text-input only for now — a
+    // draggable on-chart marker was considered but the chart currently has no
+    // gesture-handling infrastructure at all, so that's deferred as a separate,
+    // bigger follow-up rather than risking a half-working drag interaction here.
+    var stationInputText by remember { mutableStateOf("") }
+    val stationUnitLabel = if (unitSystem == UnitSystem.METRIC) "m" else "ft"
+
+    val overallMinX = remember(momentPoints, shearPoints, deflectionPoints) {
+        (momentPoints + shearPoints + deflectionPoints).minOfOrNull { it.x.inches }
+    }
+    val overallMaxX = remember(momentPoints, shearPoints, deflectionPoints) {
+        (momentPoints + shearPoints + deflectionPoints).maxOfOrNull { it.x.inches }
+    }
+
+    // Station values entered outside the member's length are clamped rather
+    // than rejected, matching how AnalysisChart itself already clamps a marker
+    // to its plotted domain.
+    val stationXInches = remember(stationInputText, unitSystem, overallMinX, overallMaxX) {
+        val entered = stationInputText.toDoubleOrNull() ?: return@remember null
+        val minX = overallMinX ?: return@remember null
+        val maxX = overallMaxX ?: return@remember null
+        val inches = if (unitSystem == UnitSystem.METRIC) entered.meters.inInches else entered.feet.inInches
+        inches.coerceIn(minX, maxX)
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Force Envelopes", style = MaterialTheme.typography.titleMedium)
         InfoCard(
@@ -1438,6 +1472,40 @@ fun AnalysisSummary(
         // Diagrams Card
         if (shearPoints.isNotEmpty() || momentPoints.isNotEmpty() || deflectionPoints.isNotEmpty()) {
             Text("Analysis Diagrams", style = MaterialTheme.typography.titleMedium)
+
+            // Station picker
+            val maxStationDisplay = remember(overallMaxX, unitSystem) {
+                val maxLength = Length(overallMaxX ?: 0.0)
+                if (unitSystem == UnitSystem.METRIC) maxLength.inMeters else maxLength.inFeet
+            }
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = stationInputText,
+                        onValueChange = { stationInputText = it },
+                        label = { Text("Station ($stationUnitLabel)") },
+                        placeholder = { Text("e.g. ${String.format("%.1f", maxStationDisplay / 2.0)}") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (stationXInches != null) {
+                        val stationMoment = interpolateAnalysisValue(momentPoints, stationXInches)
+                        val stationShear = interpolateAnalysisValue(shearPoints, stationXInches)
+                        val stationDeflection = interpolateAnalysisValue(deflectionPoints, stationXInches)
+
+                        stationMoment?.let { ResultRow("Moment ($momentUnitLabel)", String.format("%.2f", it)) }
+                        stationShear?.let { ResultRow("Shear ($shearUnitLabel)", String.format("%.2f", it)) }
+                        stationDeflection?.let { ResultRow("Deflection (in)", String.format("%.3f", it)) }
+                    }
+                }
+            }
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -1456,7 +1524,8 @@ fun AnalysisSummary(
                             unitLabel = shearUnitLabel,
                             lineColor = MaterialTheme.colorScheme.secondary, // Theme-aware secondary
                             modifier = Modifier.fillMaxWidth(),
-                            invertY = false
+                            invertY = false,
+                            markerXInches = stationXInches
                         )
                     }
 
@@ -1471,7 +1540,8 @@ fun AnalysisSummary(
                             unitLabel = momentUnitLabel,
                             lineColor = MaterialTheme.colorScheme.primary, // Theme-aware primary
                             modifier = Modifier.fillMaxWidth(),
-                            invertY = true // Standard convention (tension side down)
+                            invertY = true, // Standard convention (tension side down)
+                            markerXInches = stationXInches
                         )
                     }
 
@@ -1489,7 +1559,8 @@ fun AnalysisSummary(
                             // Downward loads solve to negative deflection values (y-up
                             // convention); no inversion needed so the diagram naturally
                             // dips down on screen for a beam sagging under gravity loads.
-                            invertY = false
+                            invertY = false,
+                            markerXInches = stationXInches
                         )
                     }
                 }

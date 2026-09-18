@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -22,6 +23,35 @@ import com.lz.solver.analysis.AnalysisPoint
 import java.util.Locale
 import kotlin.math.abs
 
+/**
+ * Linearly interpolates the diagram value at an arbitrary station between the
+ * discrete, pre-computed [points]. [points] does not need to be pre-sorted.
+ * Stations outside the diagram's domain clamp to the nearest end point rather
+ * than returning null, matching how the chart itself visually terminates.
+ * Returns null only when [points] is empty.
+ */
+fun interpolateAnalysisValue(points: List<AnalysisPoint>, targetXInches: Double): Double? {
+    if (points.isEmpty()) return null
+    val sorted = points.sortedBy { it.x.inches }
+
+    val first = sorted.first()
+    val last = sorted.last()
+    if (targetXInches <= first.x.inches) return first.value
+    if (targetXInches >= last.x.inches) return last.value
+
+    for (i in 0 until sorted.size - 1) {
+        val p0 = sorted[i]
+        val p1 = sorted[i + 1]
+        if (targetXInches in p0.x.inches..p1.x.inches) {
+            val span = p1.x.inches - p0.x.inches
+            if (span <= 1e-9) return p0.value
+            val t = (targetXInches - p0.x.inches) / span
+            return p0.value + t * (p1.value - p0.value)
+        }
+    }
+    return last.value
+}
+
 @Composable
 fun AnalysisChart(
     title: String,
@@ -29,7 +59,12 @@ fun AnalysisChart(
     unitLabel: String,
     lineColor: Color,
     modifier: Modifier = Modifier,
-    invertY: Boolean = false
+    invertY: Boolean = false,
+    // When non-null and within the plotted domain, draws a vertical marker line
+    // plus a highlighted point at that station, showing the interpolated value.
+    // Station-picker feature: lets the user see where a chosen location falls on
+    // each diagram without needing drag-gesture support on the chart itself.
+    markerXInches: Double? = null
 ) {
     if (points.isEmpty()) return
 
@@ -110,6 +145,36 @@ fun AnalysisChart(
                         it.value - (maxPt?.value ?: 0.0)
                     ) > absMaxVal * 0.1
                 ) drawValueLabel(it)
+            }
+
+            // Station marker (see markerXInches doc above)
+            if (markerXInches != null && markerXInches in minX..maxX) {
+                val markerValue = interpolateAnalysisValue(sortedPoints, markerXInches) ?: 0.0
+                val markerX = margin + ((markerXInches - minX) / totalL).toFloat() * chartW
+                val markerY = centerY - (markerValue.toFloat() * scaleY.toFloat() * yInvertMultiplier)
+
+                drawLine(
+                    color = onSurface.copy(alpha = 0.5f),
+                    start = Offset(markerX, 0f),
+                    end = Offset(markerX, h),
+                    strokeWidth = 3f,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f)
+                )
+                drawCircle(onSurface, 7f, Offset(markerX, markerY))
+                drawCircle(lineColor, 4f, Offset(markerX, markerY))
+
+                val markerLabel = String.format(Locale.US, "%.2f %s", markerValue, unitLabel)
+                drawContext.canvas.nativeCanvas.drawText(
+                    markerLabel,
+                    markerX,
+                    if ((markerValue >= 0 && !invertY) || (markerValue < 0 && invertY)) markerY - 15f else markerY + 35f,
+                    android.graphics.Paint().apply {
+                        color = onSurface.toArgb()
+                        textSize = 30f
+                        textAlign = android.graphics.Paint.Align.CENTER
+                        typeface = Typeface.DEFAULT_BOLD
+                    }
+                )
             }
         }
     }

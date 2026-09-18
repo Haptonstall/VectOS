@@ -1,0 +1,113 @@
+diff --git a/app/src/main/java/com/lz/vectos/app/navigation/AppNavGraph.kt b/app/src/main/java/com/lz/vectos/app/navigation/AppNavGraph.kt
+index bce5e74..3b96c80 100644
+--- a/app/src/main/java/com/lz/vectos/app/navigation/AppNavGraph.kt
++++ b/app/src/main/java/com/lz/vectos/app/navigation/AppNavGraph.kt
+@@ -93,6 +93,8 @@ fun AppNavGraph(
+ 
+                 onQuickCalc = {
+ 
++                    projectViewModel.enterQuickCalcMode()
++
+                     toolPickerViewModel.loadTools(
+ 
+                         CalculationContext.QuickCalcContext()
+diff --git a/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt b/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt
+index 9de9be5..bbd0c16 100644
+--- a/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt
++++ b/app/src/main/java/com/lz/vectos/presentation/ProjectViewModel.kt
+@@ -129,6 +129,14 @@ class ProjectViewModel @Inject constructor(
+ 
+     }
+ 
++    // Called when the user launches a calculation via "Quick Calc" rather
++    // than from within a specific project — see ActiveProjectProvider.isQuickCalcMode.
++    fun enterQuickCalcMode() {
++
++        activeProjectProvider.setQuickCalcMode(true)
++
++    }
++
+     // -------------------------------------------------------------------------
+     // CRUD
+     // -------------------------------------------------------------------------
+diff --git a/core/data/src/main/java/com/lz/data/project/DefaultActiveProjectProvider.kt b/core/data/src/main/java/com/lz/data/project/DefaultActiveProjectProvider.kt
+index c6167df..7cd9ea0 100644
+--- a/core/data/src/main/java/com/lz/data/project/DefaultActiveProjectProvider.kt
++++ b/core/data/src/main/java/com/lz/data/project/DefaultActiveProjectProvider.kt
+@@ -21,5 +21,19 @@ class DefaultActiveProjectProvider @Inject constructor() : ActiveProjectProvider
+ 
+     override fun setActiveProject(project: Project) {
+         _activeProject.value = project
++        // Selecting a real project always means the user is no longer in
++        // the Quick Calc flow.
++        _isQuickCalcMode.value = false
++    }
++
++    // Defaults true: on a cold start no navigation choice has been made yet,
++    // and treating that as Quick Calc (prompt for methodology, don't trust
++    // the placeholder "Default Project" above) is the safer default than
++    // silently inheriting it.
++    private val _isQuickCalcMode = MutableStateFlow(true)
++    override val isQuickCalcMode: StateFlow<Boolean> = _isQuickCalcMode.asStateFlow()
++
++    override fun setQuickCalcMode(isQuickCalc: Boolean) {
++        _isQuickCalcMode.value = isQuickCalc
+     }
+ }
+diff --git a/core/domain/src/main/java/com/lz/domain/project/ActiveProjectProvider.kt b/core/domain/src/main/java/com/lz/domain/project/ActiveProjectProvider.kt
+index c7cfba5..85e9ea3 100644
+--- a/core/domain/src/main/java/com/lz/domain/project/ActiveProjectProvider.kt
++++ b/core/domain/src/main/java/com/lz/domain/project/ActiveProjectProvider.kt
+@@ -10,4 +10,15 @@ interface ActiveProjectProvider {
+         project: Project
+     )
+ 
++    // True when the user entered a calculation tool via "Quick Calc" rather
++    // than through a specific project. Quick Calc has no project to inherit
++    // a default design methodology from, so the tool should prompt for
++    // ASD/LRFD up front; a project-launched calculation already has one via
++    // [activeProject]'s settings and should never prompt.
++    val isQuickCalcMode: StateFlow<Boolean>
++
++    fun setQuickCalcMode(
++        isQuickCalc: Boolean
++    )
++
+ }
+\ No newline at end of file
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index d441921..9ff7d27 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -117,11 +117,12 @@ class BeamViewModel @Inject constructor(
+     var methodology by mutableStateOf(DesignMethodology.LRFD)
+     var isStrongAxis by mutableStateOf(true)
+ 
+-    // Prompted once on entry for a brand-new calculation (Quick Calc's most
+-    // common path today, since a project-associated launch doesn't yet
+-    // differ from Quick Calc at this screen's level) so the ASD/LRFD choice
+-    // is front-and-center rather than left to silently default to LRFD and
+-    // only discoverable buried in settings. Suppressed when loading an
++    // Prompted once on entry for a brand-new Quick Calc calculation so the
++    // ASD/LRFD choice is front-and-center rather than left to silently
++    // default to LRFD and only discoverable buried in settings. Suppressed
++    // for a calculation launched from within a project — see
++    // loadDefaultBuildingCode(), which reverts methodology to that
++    // project's own default instead — and suppressed when loading an
+     // existing saved calculation instead — see loadCalculation() — since its
+     // methodology is already known from what was saved.
+     var showMethodologyPrompt by mutableStateOf(true)
+@@ -277,6 +278,13 @@ class BeamViewModel @Inject constructor(
+                 // default LRFD/ASD combination set.
+                 methodology = activeProjectProvider.activeProject.value.settings.designMethodology
+ 
++                // The methodology prompt is only meaningful for Quick Calc,
++                // which has no project to inherit a methodology from. A
++                // calculation launched from within a project always reverts
++                // to that project's own default methodology (set just above)
++                // and is never prompted.
++                showMethodologyPrompt = activeProjectProvider.isQuickCalcMode.value
++
+                 // Use the active project's own selected building code — falling
+                 // back to the app default only if that project hasn't set one
+                 // or its id no longer resolves (e.g. seed data changed).

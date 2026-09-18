@@ -37,6 +37,16 @@ fun WoodMaterialPickerDialog(
     var selectedSpecies by remember { mutableStateOf(currentGrade?.species ?: WoodSpecies.DF_L) }
     var selectedGrade by remember { mutableStateOf(currentGrade?.grade ?: WoodGrade.NO_2) }
 
+    // Recomputed on every species/grade change so the dialog can warn (and
+    // block Confirm) immediately for a combination that isn't tabulated yet,
+    // rather than only discovering it when the user taps Confirm. See
+    // WoodPropertyService.getReferenceProperties doc comment — this is
+    // deliberately null instead of a fabricated fallback for anything not
+    // yet in the reference table (currently: every glulam combination).
+    val props = remember(selectedSpecies, selectedGrade) {
+        WoodPropertyService.getReferenceProperties(selectedSpecies, selectedGrade)
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Select Wood Species & Grade") },
@@ -91,33 +101,45 @@ fun WoodMaterialPickerDialog(
                             }
                         }
                 }
+
+                if (props == null) {
+                    Text(
+                        "Reference design values for this species/grade combination " +
+                            "aren't available yet — Confirm is disabled until real NDS " +
+                            "Supplement values are added for it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val props =
-                    WoodPropertyService.getReferenceProperties(selectedSpecies, selectedGrade)
-                val newGrade = MaterialGrade.Wood(
-                    id = "WOOD_${selectedSpecies.name}_${selectedGrade.name}",
-                    name = "${
-                        selectedSpecies.name.replace(
-                            "_",
-                            " "
-                        )
-                    } ${selectedGrade.name.replace("_", " ")}",
-                    species = selectedSpecies,
-                    grade = selectedGrade,
-                    referenceBending = props.bending,
-                    referenceShear = props.shear,
-                    referenceCompressionParallel = props.compressionParallel,
-                    referenceCompressionPerp = props.compressionPerp,
-                    referenceTensionParallel = props.tensionParallel,
-                    modulusOfElasticity = props.modulusOfElasticity,
-                    shearModulus = props.shearModulus,
-                    densityPcf = props.densityPcf
-                )
-                onConfirm(newGrade)
-            }) {
+            TextButton(
+                enabled = props != null,
+                onClick = {
+                    val resolvedProps = props ?: return@TextButton
+                    val newGrade = MaterialGrade.Wood(
+                        id = "WOOD_${selectedSpecies.name}_${selectedGrade.name}",
+                        name = "${
+                            selectedSpecies.name.replace(
+                                "_",
+                                " "
+                            )
+                        } ${selectedGrade.name.replace("_", " ")}",
+                        species = selectedSpecies,
+                        grade = selectedGrade,
+                        referenceBending = resolvedProps.bending,
+                        referenceShear = resolvedProps.shear,
+                        referenceCompressionParallel = resolvedProps.compressionParallel,
+                        referenceCompressionPerp = resolvedProps.compressionPerp,
+                        referenceTensionParallel = resolvedProps.tensionParallel,
+                        modulusOfElasticity = resolvedProps.modulusOfElasticity,
+                        shearModulus = resolvedProps.shearModulus,
+                        densityPcf = resolvedProps.densityPcf
+                    )
+                    onConfirm(newGrade)
+                }
+            ) {
                 Text("Confirm")
             }
         },

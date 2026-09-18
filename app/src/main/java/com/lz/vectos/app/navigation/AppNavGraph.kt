@@ -93,6 +93,8 @@ fun AppNavGraph(
 
                 onQuickCalc = {
 
+                    projectViewModel.enterQuickCalcMode()
+
                     toolPickerViewModel.loadTools(
 
                         CalculationContext.QuickCalcContext()
