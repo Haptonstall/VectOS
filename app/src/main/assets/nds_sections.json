@@ -7,11 +7,59 @@
   },
   "sections": [
     {
+      "id": "2x2",
+      "designation": "2x2",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 2.25,
+      "nominalWidth": 2,
+      "nominalDepth": 2,
+      "depth": 1.5,
+      "width": 1.5,
+      "strongAxis": {
+        "ix": 0.4219,
+        "sx": 0.5625,
+        "zx": 0.8438,
+        "rx": 0.433
+      },
+      "weakAxis": {
+        "ix": 0.4219,
+        "sx": 0.5625,
+        "zx": 0.8438,
+        "rx": 0.433
+      }
+    },
+    {
+      "id": "2x3",
+      "designation": "2x3",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 3.75,
+      "nominalWidth": 2,
+      "nominalDepth": 3,
+      "depth": 2.5,
+      "width": 1.5,
+      "strongAxis": {
+        "ix": 1.9531,
+        "sx": 1.5625,
+        "zx": 2.3438,
+        "rx": 0.7217
+      },
+      "weakAxis": {
+        "ix": 0.7031,
+        "sx": 0.9375,
+        "zx": 1.4062,
+        "rx": 0.433
+      }
+    },
+    {
       "id": "2x4",
       "designation": "2x4",
       "materialType": "WOOD",
       "shapeType": "RECTANGULAR",
       "area": 5.25,
+      "nominalWidth": 2,
+      "nominalDepth": 4,
       "depth": 3.5,
       "width": 1.5,
       "strongAxis": {
@@ -33,6 +81,8 @@
       "materialType": "WOOD",
       "shapeType": "RECTANGULAR",
       "area": 8.25,
+      "nominalWidth": 2,
+      "nominalDepth": 6,
       "depth": 5.5,
       "width": 1.5,
       "strongAxis": {
@@ -54,6 +104,8 @@
       "materialType": "WOOD",
       "shapeType": "RECTANGULAR",
       "area": 10.875,
+      "nominalWidth": 2,
+      "nominalDepth": 8,
       "depth": 7.25,
       "width": 1.5,
       "strongAxis": {
@@ -75,6 +127,8 @@
       "materialType": "WOOD",
       "shapeType": "RECTANGULAR",
       "area": 13.875,
+      "nominalWidth": 2,
+      "nominalDepth": 10,
       "depth": 9.25,
       "width": 1.5,
       "strongAxis": {
@@ -96,6 +150,8 @@
       "materialType": "WOOD",
       "shapeType": "RECTANGULAR",
       "area": 16.875,
+      "nominalWidth": 2,
+      "nominalDepth": 12,
       "depth": 11.25,
       "width": 1.5,
       "strongAxis": {
@@ -109,6 +165,144 @@
         "sx": 4.2188,
         "zx": 6.3281,
         "rx": 0.433
+      }
+    },
+    {
+      "id": "2x14",
+      "designation": "2x14",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 19.875,
+      "nominalWidth": 2,
+      "nominalDepth": 14,
+      "depth": 13.25,
+      "width": 1.5,
+      "strongAxis": {
+        "ix": 290.7754,
+        "sx": 43.8906,
+        "zx": 65.8359,
+        "rx": 3.8249
+      },
+      "weakAxis": {
+        "ix": 3.7266,
+        "sx": 4.9688,
+        "zx": 7.4531,
+        "rx": 0.433
+      }
+    },
+    {
+      "id": "4x4",
+      "designation": "4x4",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 12.25,
+      "nominalWidth": 4,
+      "nominalDepth": 4,
+      "depth": 3.5,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 12.5052,
+        "sx": 7.1458,
+        "zx": 10.7188,
+        "rx": 1.0104
+      },
+      "weakAxis": {
+        "ix": 12.5052,
+        "sx": 7.1458,
+        "zx": 10.7188,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "4x6",
+      "designation": "4x6",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 19.25,
+      "nominalWidth": 4,
+      "nominalDepth": 6,
+      "depth": 5.5,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 48.526,
+        "sx": 17.6458,
+        "zx": 26.4688,
+        "rx": 1.5877
+      },
+      "weakAxis": {
+        "ix": 19.651,
+        "sx": 11.2292,
+        "zx": 16.8438,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "4x8",
+      "designation": "4x8",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 25.375,
+      "nominalWidth": 4,
+      "nominalDepth": 8,
+      "depth": 7.25,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 111.1478,
+        "sx": 30.6615,
+        "zx": 45.9922,
+        "rx": 2.0929
+      },
+      "weakAxis": {
+        "ix": 25.9036,
+        "sx": 14.8021,
+        "zx": 22.2031,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "4x10",
+      "designation": "4x10",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 32.375,
+      "nominalWidth": 4,
+      "nominalDepth": 10,
+      "depth": 9.25,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 230.8405,
+        "sx": 49.9115,
+        "zx": 74.8672,
+        "rx": 2.6702
+      },
+      "weakAxis": {
+        "ix": 33.0495,
+        "sx": 18.8854,
+        "zx": 28.3281,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "4x12",
+      "designation": "4x12",
+      "materialType": "WOOD",
+      "shapeType": "RECTANGULAR",
+      "area": 39.375,
+      "nominalWidth": 4,
+      "nominalDepth": 12,
+      "depth": 11.25,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 415.2832,
+        "sx": 73.8281,
+        "zx": 110.7422,
+        "rx": 3.2476
+      },
+      "weakAxis": {
+        "ix": 40.1953,
+        "sx": 22.9688,
+        "zx": 34.4531,
+        "rx": 1.0104
       }
     }
   ]

@@ -29,6 +29,8 @@ private data class WoodSectionJson(
     val materialType: String,
     val shapeType: String,
     val area: Double,
+    val nominalWidth: Double,
+    val nominalDepth: Double,
     val depth: Double,
     val width: Double,
     val strongAxis: AxisPropsJson,
@@ -110,8 +112,16 @@ class NdsSectionRepository(private val context: Context) : SectionRepository {
             WoodProfile(
                 id = s.id,
                 designation = s.designation,
-                nominalWidth = s.width.inches,
-                nominalDepth = s.depth.inches,
+                // nominalWidth/nominalDepth are the sawn-lumber "2x4"-style
+                // trade sizes (e.g. 2 and 4), used for NDS Table 4A adjustment
+                // lookups (size factor CF) that are indexed by nominal, not
+                // dressed, dimension. dressedWidth/dressedDepth are the real
+                // actual (surfaced) dimensions used for every geometric and
+                // strength calculation. These used to be wrongly set equal
+                // to each other — fixed once real nominal data was added to
+                // the underlying JSON.
+                nominalWidth = s.nominalWidth.inches,
+                nominalDepth = s.nominalDepth.inches,
                 dressedWidth = s.width.inches,
                 dressedDepth = s.depth.inches,
                 databaseMetadata = metadata

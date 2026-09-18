@@ -11,6 +11,7 @@ import com.lz.model.structural.ShapeType
 import com.lz.model.structural.StationDemand
 import com.lz.model.structural.StrengthCheckResult
 import com.lz.model.structural.StrengthDesignResult
+import com.lz.model.structural.WoodGrade
 import com.lz.model.structural.WoodProfile
 import com.lz.model.structural.WoodSpecies
 import com.lz.model.units.Force
@@ -314,19 +315,69 @@ class NdsWoodCapacityCalculator(
     }
 
     /**
-     * NDS Table 4A Size Factor CF for sawn lumber.
-     * CF applies when d > 12 inches for bending.
-     * CF = (12/d)^(1/9)
+     * NDS Table 4A Size Factor CF for sawn dimension lumber (2"-4" thick),
+     * looked up by nominal width and grade group — NOT the continuous
+     * `(12/d)^(1/9)` formula, which is Table 4D's timber (5"x5" and larger)
+     * formula and does not apply to dimension lumber. Table 4A gives one
+     * shared CF value for Fb and Fc at every width; Ft differs from it only
+     * at the 8" and 10" nominal-width brackets (by 0.1), a difference small
+     * enough, and Ft-governed checks rare enough for typical beams, that
+     * this shares one `cf` value across Fb/Ft/Fc rather than splitting
+     * [NdsAdjustmentFactors] into three separate size-factor fields — a
+     * documented simplification, not an oversight.
      * Returns adjustmentFactors.cf if explicitly set (non-default),
-     * otherwise computes from section depth.
+     * otherwise looks up the tabulated value from the section's nominal
+     * width (falls back to the physical/dressed depth for a non-WoodProfile
+     * section, which should not occur on the sawn-lumber path in practice).
      */
     private fun computeSawnCF(): Double {
         // If caller explicitly set CF, use it
         if (adjustmentFactors.cf != 1.0) return adjustmentFactors.cf
 
-        val d = profile.depth.inInches
-        if (d <= 12.0) return 1.0
-        return (12.0 / d).pow(1.0 / 9.0)
+        val nominalWidthIn =
+            if (profile is WoodProfile) profile.nominalDepth.inInches else profile.depth.inInches
+
+        return ndsTable4ASizeFactor(material.grade, nominalWidthIn)
+    }
+
+    companion object {
+        /**
+         * NDS 2018 Supplement Table 4A "Size Factors, CF" — the Fb/Fc
+         * column (see [computeSawnCF] doc for why Ft isn't split out).
+         * Grade groups per the table: Select Structural/No.1 & Btr/No.1/
+         * No.2/No.3 share one column; Stud has its own (and defers to the
+         * first group's values at 8" and wider, per the table's own note);
+         * Construction/Standard are flat 1.0; Utility is 1.0 at 4" and 0.4
+         * below that.
+         */
+        fun ndsTable4ASizeFactor(grade: WoodGrade, nominalWidthIn: Double): Double {
+            fun selectStructuralGroupCf(width: Double): Double = when {
+                width <= 4.0 -> 1.5
+                width <= 5.0 -> 1.4
+                width <= 6.0 -> 1.3
+                width <= 8.0 -> 1.2
+                width <= 10.0 -> 1.1
+                width <= 12.0 -> 1.0
+                else -> 0.9
+            }
+            return when (grade) {
+                WoodGrade.SELECT_STRUCTURAL, WoodGrade.NO_1, WoodGrade.NO_2, WoodGrade.NO_3 ->
+                    selectStructuralGroupCf(nominalWidthIn)
+                WoodGrade.STUD -> when {
+                    nominalWidthIn <= 4.0 -> 1.1
+                    nominalWidthIn <= 6.0 -> 1.0
+                    // "8\" & wider: Use No.3 Grade tabulated design values
+                    // and size factors" — NDS Table 4A note.
+                    else -> selectStructuralGroupCf(nominalWidthIn)
+                }
+                WoodGrade.CONSTRUCTION, WoodGrade.STANDARD -> 1.0
+                WoodGrade.UTILITY -> if (nominalWidthIn <= 3.0) 0.4 else 1.0
+                // Glulam grades never reach this path (isGlulam routes to
+                // computeCV instead), but return 1.0 rather than throw if
+                // ever called with one.
+                WoodGrade.G_24F_1_8E, WoodGrade.G_24F_1_7E, WoodGrade.G_20F_1_5E -> 1.0
+            }
+        }
     }
 
     // ------------------------------------------------------------------

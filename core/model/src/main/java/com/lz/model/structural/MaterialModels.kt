@@ -25,6 +25,7 @@ enum class WoodGrade {
     SELECT_STRUCTURAL,
     NO_1,
     NO_2,
+    NO_3,
     STUD,
     CONSTRUCTION,
     STANDARD,

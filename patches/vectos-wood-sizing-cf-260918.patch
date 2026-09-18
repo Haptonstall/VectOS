@@ -1,0 +1,369 @@
+diff --git a/app/src/main/assets/nds_sections.json b/app/src/main/assets/nds_sections.json
+index 2b65c16..2397175 100644
+--- a/app/src/main/assets/nds_sections.json
++++ b/app/src/main/assets/nds_sections.json
+@@ -6,12 +6,60 @@
+     "units": "IMPERIAL"
+   },
+   "sections": [
++    {
++      "id": "2x2",
++      "designation": "2x2",
++      "materialType": "WOOD",
++      "shapeType": "RECTANGULAR",
++      "area": 2.25,
++      "nominalWidth": 2,
++      "nominalDepth": 2,
++      "depth": 1.5,
++      "width": 1.5,
++      "strongAxis": {
++        "ix": 0.4219,
++        "sx": 0.5625,
++        "zx": 0.8438,
++        "rx": 0.433
++      },
++      "weakAxis": {
++        "ix": 0.4219,
++        "sx": 0.5625,
++        "zx": 0.8438,
++        "rx": 0.433
++      }
++    },
++    {
++      "id": "2x3",
++      "designation": "2x3",
++      "materialType": "WOOD",
++      "shapeType": "RECTANGULAR",
++      "area": 3.75,
++      "nominalWidth": 2,
++      "nominalDepth": 3,
++      "depth": 2.5,
++      "width": 1.5,
++      "strongAxis": {
++        "ix": 1.9531,
++        "sx": 1.5625,
++        "zx": 2.3438,
++        "rx": 0.7217
++      },
++      "weakAxis": {
++        "ix": 0.7031,
++        "sx": 0.9375,
++        "zx": 1.4062,
++        "rx": 0.433
++      }
++    },
+     {
+       "id": "2x4",
+       "designation": "2x4",
+       "materialType": "WOOD",
+       "shapeType": "RECTANGULAR",
+       "area": 5.25,
++      "nominalWidth": 2,
++      "nominalDepth": 4,
+       "depth": 3.5,
+       "width": 1.5,
+       "strongAxis": {
+@@ -33,6 +81,8 @@
+       "materialType": "WOOD",
+       "shapeType": "RECTANGULAR",
+       "area": 8.25,
++      "nominalWidth": 2,
++      "nominalDepth": 6,
+       "depth": 5.5,
+       "width": 1.5,
+       "strongAxis": {
+@@ -54,6 +104,8 @@
+       "materialType": "WOOD",
+       "shapeType": "RECTANGULAR",
+       "area": 10.875,
++      "nominalWidth": 2,
++      "nominalDepth": 8,
+       "depth": 7.25,
+       "width": 1.5,
+       "strongAxis": {
+@@ -75,6 +127,8 @@
+       "materialType": "WOOD",
+       "shapeType": "RECTANGULAR",
+       "area": 13.875,
++      "nominalWidth": 2,
++      "nominalDepth": 10,
+       "depth": 9.25,
+       "width": 1.5,
+       "strongAxis": {
+@@ -96,6 +150,8 @@
+       "materialType": "WOOD",
+       "shapeType": "RECTANGULAR",
+       "area": 16.875,
++      "nominalWidth": 2,
++      "nominalDepth": 12,
+       "depth": 11.25,
+       "width": 1.5,
+       "strongAxis": {
+@@ -110,6 +166,144 @@
+         "zx": 6.3281,
+         "rx": 0.433
+       }
++    },
++    {
++      "id": "2x14",
++      "designation": "2x14",
++      "materialType": "WOOD",
++      "shapeType": "RECTANGULAR",
++      "area": 19.875,
++      "nominalWidth": 2,
++      "nominalDepth": 14,
++      "depth": 13.25,
++      "width": 1.5,
++      "strongAxis": {
++        "ix": 290.7754,
++        "sx": 43.8906,
++        "zx": 65.8359,
++        "rx": 3.8249
++      },
++      "weakAxis": {
++        "ix": 3.7266,
++        "sx": 4.9688,
++        "zx": 7.4531,
++        "rx": 0.433
++      }
++    },
++    {
++      "id": "4x4",
++      "designation": "4x4",
++      "materialType": "WOOD",
++      "shapeType": "RECTANGULAR",
++      "area": 12.25,
++      "nominalWidth": 4,
++      "nominalDepth": 4,
++      "depth": 3.5,
++      "width": 3.5,
++      "strongAxis": {
++        "ix": 12.5052,
++        "sx": 7.1458,
++        "zx": 10.7188,
++        "rx": 1.0104
++      },
++      "weakAxis": {
++        "ix": 12.5052,
++        "sx": 7.1458,
++        "zx": 10.7188,
++        "rx": 1.0104
++      }
++    },
++    {
++      "id": "4x6",
++      "designation": "4x6",
++      "materialType": "WOOD",
++      "shapeType": "RECTANGULAR",
++      "area": 19.25,
++      "nominalWidth": 4,
++      "nominalDepth": 6,
++      "depth": 5.5,
++      "width": 3.5,
++      "strongAxis": {
++        "ix": 48.526,
++        "sx": 17.6458,
++        "zx": 26.4688,
++        "rx": 1.5877
++      },
++      "weakAxis": {
++        "ix": 19.651,
++        "sx": 11.2292,
++        "zx": 16.8438,
++        "rx": 1.0104
++      }
++    },
++    {
++      "id": "4x8",
++      "designation": "4x8",
++      "materialType": "WOOD",
++      "shapeType": "RECTANGULAR",
++      "area": 25.375,
++      "nominalWidth": 4,
++      "nominalDepth": 8,
++      "depth": 7.25,
++      "width": 3.5,
++      "strongAxis": {
++        "ix": 111.1478,
++        "sx": 30.6615,
++        "zx": 45.9922,
++        "rx": 2.0929
++      },
++      "weakAxis": {
++        "ix": 25.9036,
++        "sx": 14.8021,
++        "zx": 22.2031,
++        "rx": 1.0104
++      }
++    },
++    {
++      "id": "4x10",
++      "designation": "4x10",
++      "materialType": "WOOD",
++      "shapeType": "RECTANGULAR",
++      "area": 32.375,
++      "nominalWidth": 4,
++      "nominalDepth": 10,
++      "depth": 9.25,
++      "width": 3.5,
++      "strongAxis": {
++        "ix": 230.8405,
++        "sx": 49.9115,
++        "zx": 74.8672,
++        "rx": 2.6702
++      },
++      "weakAxis": {
++        "ix": 33.0495,
++        "sx": 18.8854,
++        "zx": 28.3281,
++        "rx": 1.0104
++      }
++    },
++    {
++      "id": "4x12",
++      "designation": "4x12",
++      "materialType": "WOOD",
++      "shapeType": "RECTANGULAR",
++      "area": 39.375,
++      "nominalWidth": 4,
++      "nominalDepth": 12,
++      "depth": 11.25,
++      "width": 3.5,
++      "strongAxis": {
++        "ix": 415.2832,
++        "sx": 73.8281,
++        "zx": 110.7422,
++        "rx": 3.2476
++      },
++      "weakAxis": {
++        "ix": 40.1953,
++        "sx": 22.9688,
++        "zx": 34.4531,
++        "rx": 1.0104
++      }
+     }
+   ]
+-}
++}
+\ No newline at end of file
+diff --git a/core/data/src/main/java/com/lz/data/repository/NdsSectionRepository.kt b/core/data/src/main/java/com/lz/data/repository/NdsSectionRepository.kt
+index ec26d5a..a91b941 100644
+--- a/core/data/src/main/java/com/lz/data/repository/NdsSectionRepository.kt
++++ b/core/data/src/main/java/com/lz/data/repository/NdsSectionRepository.kt
+@@ -29,6 +29,8 @@ private data class WoodSectionJson(
+     val materialType: String,
+     val shapeType: String,
+     val area: Double,
++    val nominalWidth: Double,
++    val nominalDepth: Double,
+     val depth: Double,
+     val width: Double,
+     val strongAxis: AxisPropsJson,
+@@ -110,8 +112,16 @@ class NdsSectionRepository(private val context: Context) : SectionRepository {
+             WoodProfile(
+                 id = s.id,
+                 designation = s.designation,
+-                nominalWidth = s.width.inches,
+-                nominalDepth = s.depth.inches,
++                // nominalWidth/nominalDepth are the sawn-lumber "2x4"-style
++                // trade sizes (e.g. 2 and 4), used for NDS Table 4A adjustment
++                // lookups (size factor CF) that are indexed by nominal, not
++                // dressed, dimension. dressedWidth/dressedDepth are the real
++                // actual (surfaced) dimensions used for every geometric and
++                // strength calculation. These used to be wrongly set equal
++                // to each other — fixed once real nominal data was added to
++                // the underlying JSON.
++                nominalWidth = s.nominalWidth.inches,
++                nominalDepth = s.nominalDepth.inches,
+                 dressedWidth = s.width.inches,
+                 dressedDepth = s.depth.inches,
+                 databaseMetadata = metadata
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index 2a2710b..b4dfff3 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -11,6 +11,7 @@ import com.lz.model.structural.ShapeType
+ import com.lz.model.structural.StationDemand
+ import com.lz.model.structural.StrengthCheckResult
+ import com.lz.model.structural.StrengthDesignResult
++import com.lz.model.structural.WoodGrade
+ import com.lz.model.structural.WoodProfile
+ import com.lz.model.structural.WoodSpecies
+ import com.lz.model.units.Force
+@@ -314,19 +315,69 @@ class NdsWoodCapacityCalculator(
+     }
+ 
+     /**
+-     * NDS Table 4A Size Factor CF for sawn lumber.
+-     * CF applies when d > 12 inches for bending.
+-     * CF = (12/d)^(1/9)
++     * NDS Table 4A Size Factor CF for sawn dimension lumber (2"-4" thick),
++     * looked up by nominal width and grade group — NOT the continuous
++     * `(12/d)^(1/9)` formula, which is Table 4D's timber (5"x5" and larger)
++     * formula and does not apply to dimension lumber. Table 4A gives one
++     * shared CF value for Fb and Fc at every width; Ft differs from it only
++     * at the 8" and 10" nominal-width brackets (by 0.1), a difference small
++     * enough, and Ft-governed checks rare enough for typical beams, that
++     * this shares one `cf` value across Fb/Ft/Fc rather than splitting
++     * [NdsAdjustmentFactors] into three separate size-factor fields — a
++     * documented simplification, not an oversight.
+      * Returns adjustmentFactors.cf if explicitly set (non-default),
+-     * otherwise computes from section depth.
++     * otherwise looks up the tabulated value from the section's nominal
++     * width (falls back to the physical/dressed depth for a non-WoodProfile
++     * section, which should not occur on the sawn-lumber path in practice).
+      */
+     private fun computeSawnCF(): Double {
+         // If caller explicitly set CF, use it
+         if (adjustmentFactors.cf != 1.0) return adjustmentFactors.cf
+ 
+-        val d = profile.depth.inInches
+-        if (d <= 12.0) return 1.0
+-        return (12.0 / d).pow(1.0 / 9.0)
++        val nominalWidthIn =
++            if (profile is WoodProfile) profile.nominalDepth.inInches else profile.depth.inInches
++
++        return ndsTable4ASizeFactor(material.grade, nominalWidthIn)
++    }
++
++    companion object {
++        /**
++         * NDS 2018 Supplement Table 4A "Size Factors, CF" — the Fb/Fc
++         * column (see [computeSawnCF] doc for why Ft isn't split out).
++         * Grade groups per the table: Select Structural/No.1 & Btr/No.1/
++         * No.2/No.3 share one column; Stud has its own (and defers to the
++         * first group's values at 8" and wider, per the table's own note);
++         * Construction/Standard are flat 1.0; Utility is 1.0 at 4" and 0.4
++         * below that.
++         */
++        fun ndsTable4ASizeFactor(grade: WoodGrade, nominalWidthIn: Double): Double {
++            fun selectStructuralGroupCf(width: Double): Double = when {
++                width <= 4.0 -> 1.5
++                width <= 5.0 -> 1.4
++                width <= 6.0 -> 1.3
++                width <= 8.0 -> 1.2
++                width <= 10.0 -> 1.1
++                width <= 12.0 -> 1.0
++                else -> 0.9
++            }
++            return when (grade) {
++                WoodGrade.SELECT_STRUCTURAL, WoodGrade.NO_1, WoodGrade.NO_2, WoodGrade.NO_3 ->
++                    selectStructuralGroupCf(nominalWidthIn)
++                WoodGrade.STUD -> when {
++                    nominalWidthIn <= 4.0 -> 1.1
++                    nominalWidthIn <= 6.0 -> 1.0
++                    // "8\" & wider: Use No.3 Grade tabulated design values
++                    // and size factors" — NDS Table 4A note.
++                    else -> selectStructuralGroupCf(nominalWidthIn)
++                }
++                WoodGrade.CONSTRUCTION, WoodGrade.STANDARD -> 1.0
++                WoodGrade.UTILITY -> if (nominalWidthIn <= 3.0) 0.4 else 1.0
++                // Glulam grades never reach this path (isGlulam routes to
++                // computeCV instead), but return 1.0 rather than throw if
++                // ever called with one.
++                WoodGrade.G_24F_1_8E, WoodGrade.G_24F_1_7E, WoodGrade.G_20F_1_5E -> 1.0
++            }
++        }
+     }
+ 
+     // ------------------------------------------------------------------
