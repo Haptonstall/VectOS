@@ -155,21 +155,126 @@ object WoodPropertyService {
                 )
                 else -> null
             }
-            // 24F-1.8E is the only glulam combination mapped so far, for
-            // both species groupings — see NDS Supplement Table 5A ("24F-V4
-            // 1.8E DF/DF" for GLULAM_WS, "24F-V3 1.8E SP/SP" for GLULAM_SP).
-            // Real glulam properties are asymmetric (different values for
-            // positive vs. negative-moment bending, and for the x-axis vs.
-            // y-axis) in a way this single-value shape can't fully capture;
-            // the values below are each combination's positive-bending,
-            // x-axis set (Fbx+, Fvx, Fc-perp-x, Ex/Eminx), which is what a
-            // simple-span beam in positive bending needs. G_24F_1_7E and
-            // G_20F_1_5E are not yet mapped.
-            WoodSpecies.GLULAM_WS -> when (grade) {
-                WoodGrade.G_24F_1_8E -> WoodReferenceProperties(
-                    bending = 2400.0.psi,
+            // Glulam combination symbols — NDS Supplement Table 5A / ICC-ES
+            // ESR-1940 (joint APA/ICC-ES evaluation report), organized by
+            // species pairing. Real glulam properties are asymmetric
+            // (different values for positive vs. negative-moment bending,
+            // and for the x-axis vs. y-axis) in a way this single-value
+            // shape can't fully capture; the values below are each
+            // combination's positive-bending, x-axis set (Fbx+, Fvx,
+            // Fc-perp-x, Ex-true), which is what a simple-span beam in
+            // positive bending needs. See WoodGrade.validGradesFor() for
+            // which symbols the picker offers for each species; not every
+            // symbol offered there has verified values here yet — each
+            // branch below documents exactly which do.
+            WoodSpecies.GLULAM_DF_DF -> when (grade) {
+                // NDS Table 5A / APA PR-L313 & ICC-ES ESR-1940, 16F-V3 DF/DF
+                // (unbalanced layup, for simple-span use).
+                WoodGrade.G_16F_V3 -> WoodReferenceProperties(
+                    bending = 1600.0.psi,
                     shear = 265.0.psi,
-                    compressionParallel = 1650.0.psi,
+                    compressionParallel = 1500.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 975.0.psi,
+                    modulusOfElasticity = (1.6 * 1000.0).psi,
+                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
+                    densityPcf = 31.2 // G = 0.5
+                )
+                // ESR-1940 Table 1, 16F-V6 DF/DF (balanced layup, for
+                // continuous/cantilever use).
+                WoodGrade.G_16F_V6 -> WoodReferenceProperties(
+                    bending = 1600.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1600.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 1000.0.psi,
+                    modulusOfElasticity = (1.7 * 1000.0).psi,
+                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
+                    densityPcf = 31.2 // G = 0.5
+                )
+                // ESR-1940 Table 1, 20F-V4 DF/DF.
+                WoodGrade.G_20F_V4 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1550.0.psi,
+                    compressionPerp = 590.0.psi,
+                    tensionParallel = 975.0.psi,
+                    modulusOfElasticity = (1.7 * 1000.0).psi,
+                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
+                    densityPcf = 31.2 // G = 0.5
+                )
+                // ESR-1940 Table 1, 20F-V8 DF/DF.
+                WoodGrade.G_20F_V8 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1600.0.psi,
+                    compressionPerp = 590.0.psi,
+                    tensionParallel = 975.0.psi,
+                    modulusOfElasticity = (1.7 * 1000.0).psi,
+                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
+                    densityPcf = 31.2 // G = 0.5
+                )
+                // 2024 NDS Supplement Table 5A (Cody-supplied screenshot),
+                // 16F-G3 DF/DF.
+                WoodGrade.G_16F_G3 -> WoodReferenceProperties(
+                    bending = 1600.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1600.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 975.0.psi,
+                    modulusOfElasticity = (1.7 * 1000.0).psi,
+                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
+                    densityPcf = 31.2 // G = 0.5
+                )
+                // 2024 NDS Supplement Table 5A, 16F-G6 DF/DF.
+                WoodGrade.G_16F_G6 -> WoodReferenceProperties(
+                    bending = 1600.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1600.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 1000.0.psi,
+                    modulusOfElasticity = (1.7 * 1000.0).psi,
+                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
+                    densityPcf = 31.2 // G = 0.5
+                )
+                // 2024 NDS Supplement Table 5A, 20F-V3 DF/DF. Resolves an
+                // earlier discrepancy: ESR-1940 (2018-era NDS) didn't have a
+                // symbol by this name for DF/DF, only "20F-V4"/"20F-V8" —
+                // the current 2024 NDS Supplement confirms 20F-V3/V7 are the
+                // real DF/DF symbols after all, matching what Cody originally
+                // asked for.
+                WoodGrade.G_20F_V3 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1450.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 1000.0.psi,
+                    modulusOfElasticity = (1.7 * 1000.0).psi,
+                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
+                    densityPcf = 31.2 // G = 0.5
+                )
+                // 2024 NDS Supplement Table 5A, 20F-V7 DF/DF.
+                WoodGrade.G_20F_V7 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1600.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 1000.0.psi,
+                    modulusOfElasticity = (1.7 * 1000.0).psi,
+                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
+                    densityPcf = 31.2 // G = 0.5
+                )
+                // G_16F_E3/E6, G_20F_E3/E6, G_24F_V4/V8, G_24F_E4/E13/E18,
+                // G_26F_V1/V2 — not yet confidently extracted (sit in wider,
+                // denser blocks of the source tables than the rows above).
+                else -> null
+            }
+            // 2024 NDS Supplement Table 5A / ESR-1940 Table 1, 24F-V5 DF/HF.
+            WoodSpecies.GLULAM_DF_HF -> when (grade) {
+                WoodGrade.G_24F_V5 -> WoodReferenceProperties(
+                    bending = 2400.0.psi,
+                    shear = 215.0.psi,
+                    compressionParallel = 1450.0.psi,
                     compressionPerp = 650.0.psi,
                     tensionParallel = 1100.0.psi,
                     modulusOfElasticity = (1.8 * 1000.0).psi,
@@ -178,15 +283,189 @@ object WoodPropertyService {
                 )
                 else -> null
             }
-            WoodSpecies.GLULAM_SP -> when (grade) {
-                WoodGrade.G_24F_1_8E -> WoodReferenceProperties(
-                    bending = 2400.0.psi,
-                    shear = 300.0.psi,
-                    compressionParallel = 1650.0.psi,
-                    compressionPerp = 740.0.psi,
+            // 2024 NDS Supplement Table 5A, 16F-G2 & 16F-G7 HF/HF.
+            WoodSpecies.GLULAM_HF_HF -> when (grade) {
+                WoodGrade.G_16F_G2 -> WoodReferenceProperties(
+                    bending = 1600.0.psi,
+                    shear = 215.0.psi,
+                    compressionParallel = 1150.0.psi,
+                    compressionPerp = 375.0.psi,
+                    tensionParallel = 825.0.psi,
+                    modulusOfElasticity = (1.5 * 1000.0).psi,
+                    shearModulus = (1.5 * 1000.0 / 16.0).psi,
+                    densityPcf = 26.9 // G = 0.43
+                )
+                WoodGrade.G_16F_G7 -> WoodReferenceProperties(
+                    bending = 1600.0.psi,
+                    shear = 215.0.psi,
+                    compressionParallel = 1250.0.psi,
+                    compressionPerp = 375.0.psi,
+                    tensionParallel = 875.0.psi,
+                    modulusOfElasticity = (1.5 * 1000.0).psi,
+                    shearModulus = (1.5 * 1000.0 / 16.0).psi,
+                    densityPcf = 26.9 // G = 0.43
+                )
+                // 24F-E15M1 not yet confidently extracted.
+                else -> null
+            }
+            // ESR-1940 Table 1, 20F-V12/V13 AC/AC.
+            WoodSpecies.GLULAM_AC_AC -> when (grade) {
+                WoodGrade.G_20F_V12 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1500.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 925.0.psi,
+                    modulusOfElasticity = (1.6 * 1000.0).psi,
+                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
+                    densityPcf = 28.7 // G = 0.46
+                )
+                WoodGrade.G_20F_V13 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1550.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 950.0.psi,
+                    modulusOfElasticity = (1.6 * 1000.0).psi,
+                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
+                    densityPcf = 28.7 // G = 0.46
+                )
+                else -> null
+            }
+            // ESR-1940 Table 1, 20F-E/ES1 & 20F-E8 ES/ES.
+            WoodSpecies.GLULAM_ES_ES -> when (grade) {
+                WoodGrade.G_20F_E_ES1 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 200.0.psi,
+                    compressionParallel = 1150.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 1050.0.psi,
+                    modulusOfElasticity = (1.9 * 1000.0).psi,
+                    shearModulus = (1.9 * 1000.0 / 16.0).psi,
+                    densityPcf = 25.6 // G = 0.41
+                )
+                WoodGrade.G_20F_E8 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 200.0.psi,
+                    compressionParallel = 1100.0.psi,
+                    compressionPerp = 450.0.psi,
+                    tensionParallel = 825.0.psi,
+                    modulusOfElasticity = (1.6 * 1000.0).psi,
+                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
+                    densityPcf = 25.6 // G = 0.41
+                )
+                else -> null
+            }
+            // ESR-1940 Table 1, 22F-V/POC1 & 22F-V/POC2 POC/POC.
+            WoodSpecies.GLULAM_POC_POC -> when (grade) {
+                WoodGrade.G_22F_V_POC1 -> WoodReferenceProperties(
+                    bending = 2200.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1950.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 1150.0.psi,
+                    modulusOfElasticity = (1.9 * 1000.0).psi,
+                    shearModulus = (1.9 * 1000.0 / 16.0).psi,
+                    densityPcf = 28.1 // G = 0.45
+                )
+                WoodGrade.G_22F_V_POC2 -> WoodReferenceProperties(
+                    bending = 2200.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1900.0.psi,
+                    compressionPerp = 560.0.psi,
                     tensionParallel = 1150.0.psi,
                     modulusOfElasticity = (1.8 * 1000.0).psi,
                     shearModulus = (1.8 * 1000.0 / 16.0).psi,
+                    densityPcf = 28.1 // G = 0.45
+                )
+                // 2024 NDS Supplement Table 5A, 20F-V14 & 20F-V15 POC/POC.
+                WoodGrade.G_20F_V14 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1300.0.psi,
+                    compressionPerp = 470.0.psi,
+                    tensionParallel = 900.0.psi,
+                    modulusOfElasticity = (1.6 * 1000.0).psi,
+                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
+                    densityPcf = 28.1 // G = 0.45 (footnote default; not
+                    // independently confirmed for this specific symbol)
+                )
+                WoodGrade.G_20F_V15 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1600.0.psi,
+                    compressionPerp = 470.0.psi,
+                    tensionParallel = 900.0.psi,
+                    modulusOfElasticity = (1.6 * 1000.0).psi,
+                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
+                    densityPcf = 28.1
+                )
+                else -> null
+            }
+            // No NDS Table 5C hardwood data sourced yet.
+            WoodSpecies.GLULAM_HARDWOODS -> null
+            // ESR-1940 Table 1, 20F-E/SPF1 SPF/SPF.
+            WoodSpecies.GLULAM_SPF_SPF -> when (grade) {
+                WoodGrade.G_20F_E_SPF1 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 215.0.psi,
+                    compressionParallel = 1100.0.psi,
+                    compressionPerp = 425.0.psi,
+                    tensionParallel = 425.0.psi,
+                    modulusOfElasticity = (1.6 * 1000.0).psi,
+                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
+                    densityPcf = 26.2 // G = 0.42
+                )
+                else -> null
+            }
+            WoodSpecies.GLULAM_SP_SP -> when (grade) {
+                // ESR-1940 Table 1, "24F-1.8E Glulam Header" (species
+                // "WS,SP/WS,SP" — valid across multiple species groupings per
+                // the source, filed here since it's most often specified for
+                // SP headers; not DF/DF-specific as this entry's values were
+                // wrongly assumed to be before this pass).
+                WoodGrade.G_24F_1_8E -> WoodReferenceProperties(
+                    bending = 2400.0.psi,
+                    shear = 215.0.psi,
+                    compressionParallel = 1200.0.psi,
+                    compressionPerp = 500.0.psi,
+                    tensionParallel = 950.0.psi,
+                    modulusOfElasticity = (1.9 * 1000.0).psi,
+                    shearModulus = (1.9 * 1000.0 / 16.0).psi,
+                    densityPcf = 26.2 // G = 0.42
+                )
+                // ESR-1940 Table 1, 16F-V5M1 SP/SP.
+                WoodGrade.G_16F_V5M1 -> WoodReferenceProperties(
+                    bending = 1600.0.psi,
+                    shear = 300.0.psi,
+                    compressionParallel = 1500.0.psi,
+                    compressionPerp = 650.0.psi,
+                    tensionParallel = 1000.0.psi,
+                    modulusOfElasticity = (1.5 * 1000.0).psi,
+                    shearModulus = (1.5 * 1000.0 / 16.0).psi,
+                    densityPcf = 34.3 // G = 0.55
+                )
+                // 2024 NDS Supplement Table 5A (Cody-supplied screenshot),
+                // 16F-V2 SP/SP.
+                WoodGrade.G_16F_V2 -> WoodReferenceProperties(
+                    bending = 1600.0.psi,
+                    shear = 300.0.psi,
+                    compressionParallel = 1300.0.psi,
+                    compressionPerp = 740.0.psi,
+                    tensionParallel = 1000.0.psi,
+                    modulusOfElasticity = (1.6 * 1000.0).psi,
+                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
+                    densityPcf = 34.3 // G = 0.55
+                )
+                // 2024 NDS Supplement Table 5A, 16F-G1 SP/SP.
+                WoodGrade.G_16F_G1 -> WoodReferenceProperties(
+                    bending = 1600.0.psi,
+                    shear = 300.0.psi,
+                    compressionParallel = 1400.0.psi,
+                    compressionPerp = 650.0.psi,
+                    tensionParallel = 1050.0.psi,
+                    modulusOfElasticity = (1.7 * 1000.0).psi,
+                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
                     densityPcf = 34.3 // G = 0.55
                 )
                 else -> null

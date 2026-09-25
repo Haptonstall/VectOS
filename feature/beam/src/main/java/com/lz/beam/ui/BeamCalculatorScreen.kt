@@ -132,6 +132,7 @@ import com.lz.ui.boundary.BoundaryConditionPicker
 import com.lz.ui.boundary.BoundaryConditionPickerConfig
 import com.lz.ui.loads.LoadEditor
 import com.lz.ui.material.WoodMaterialPickerDialog
+import com.lz.ui.material.displayName
 import com.lz.ui.member.BracingPickerDialog
 import com.lz.ui.member.DeflectionCriteriaPickerDialog
 import com.lz.ui.member.SpanEditor
@@ -487,6 +488,20 @@ fun BeamCalculatorScreen(
     }
 }
 
+/**
+ * Shape-type chip label. Wood's shape types get names an engineer picking
+ * a beam actually recognizes ("Solid Sawn", "Western Glulam", "Southern
+ * Pine Glulam") rather than the raw enum name ("Solid rectangular",
+ * "Glulam western"); every other shape type (steel) keeps the existing
+ * generic enum-name-derived label unchanged.
+ */
+private fun ShapeType.shapeTypeChipLabel(): String = when (this) {
+    ShapeType.SOLID_RECTANGULAR -> "Solid Sawn"
+    ShapeType.GLULAM_WESTERN -> "Western Glulam"
+    ShapeType.GLULAM_SOUTHERN_PINE -> "Southern Pine Glulam"
+    else -> name.replace("_", " ").lowercase().capitalize()
+}
+
 @Composable
 fun StatusBadgeSmall(label: String, value: String, isCritical: Boolean) {
     Surface(
@@ -821,6 +836,7 @@ fun GeometryTab(viewModel: BeamViewModel) {
     if (isWoodPickerVisible) {
         WoodMaterialPickerDialog(
             currentGrade = viewModel.activeMaterialGrade as? MaterialGrade.Wood,
+            shapeType = viewModel.selectedShapeType,
             onDismiss = { isWoodPickerVisible = false },
             onConfirm = {
                 viewModel.onGradeSelected(it)
@@ -1092,10 +1108,37 @@ fun GeometryConfiguration(
                 }
             }
 
+            // Shape Type Selection (moved up: for wood this functions as a
+            // "material sub-type" — Solid Sawn / Western Glulam / Southern
+            // Pine Glulam — that the species/grade choice right after it
+            // depends on, so it has to come first)
+            if (availableShapeTypes.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("2. Shape Type", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        availableShapeTypes.forEach { shape ->
+                            FilterChip(
+                                selected = selectedShapeType == shape,
+                                onClick = { onShapeTypeSelected(shape) },
+                                label = { Text(shape.shapeTypeChipLabel()) },
+                                shape = RoundedCornerShape(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             // Material Grade Selection
             if (selectedMaterial == MaterialType.WOOD) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("2. Wood Species & Grade", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (selectedShapeType == ShapeType.SOLID_RECTANGULAR) "3. Wood Species & Grade" else "3. Combination Symbol",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
                     Surface(
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
                         shape = RoundedCornerShape(12.dp),
@@ -1114,7 +1157,7 @@ fun GeometryConfiguration(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = if (woodGrade != null) "${woodGrade.species.name.replace("_", " ")} - ${woodGrade.grade.name.replace("_", " ")}" else "Select to configure",
+                                    text = if (woodGrade != null) "${woodGrade.species.displayName()} - ${woodGrade.grade.displayName()}" else "Select to configure",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -1125,7 +1168,7 @@ fun GeometryConfiguration(
                 }
             } else if (availableGrades.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("2. Material Grade", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Text("3. Material Grade", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1135,26 +1178,6 @@ fun GeometryConfiguration(
                                 selected = selectedGrade == grade,
                                 onClick = { onGradeSelected(grade) },
                                 label = { Text(grade.name) },
-                                shape = RoundedCornerShape(20.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Shape Type Selection
-            if (availableShapeTypes.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("3. Shape Type", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        availableShapeTypes.forEach { shape ->
-                            FilterChip(
-                                selected = selectedShapeType == shape,
-                                onClick = { onShapeTypeSelected(shape) },
-                                label = { Text(shape.name.replace("_", " ").lowercase().capitalize()) },
                                 shape = RoundedCornerShape(20.dp)
                             )
                         }

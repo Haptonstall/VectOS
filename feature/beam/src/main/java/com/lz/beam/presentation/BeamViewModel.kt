@@ -42,6 +42,8 @@ import com.lz.model.structural.StrengthDesignResult
 import com.lz.model.structural.StructuralMember
 import com.lz.model.structural.StructuralNode
 import com.lz.model.structural.NodeBoundaryCondition
+import com.lz.model.structural.WoodGrade
+import com.lz.model.structural.WoodSpecies
 import com.lz.solver.analysis.UtilizationPoint
 import com.lz.model.units.Length
 import com.lz.model.units.MomentOfInertia
@@ -255,6 +257,25 @@ class BeamViewModel @Inject constructor(
 
     fun onShapeTypeSelected(shapeType: ShapeType) {
         selectedShapeType = shapeType
+        // A wood grade selected under the old shape type (e.g. a solid-sawn
+        // species/grade, or a glulam combination symbol from a different
+        // species group) is very likely invalid for the new one — clear it
+        // rather than silently keep a stale, mismatched grade active. The
+        // picker dialog already handles a null currentGrade gracefully.
+        if (selectedMaterial == MaterialType.WOOD) {
+            val currentWoodGrade = activeMaterialGrade as? MaterialGrade.Wood
+            val stillValid = currentWoodGrade != null &&
+                currentWoodGrade.grade in WoodGrade.validGradesFor(currentWoodGrade.species) &&
+                when (shapeType) {
+                    ShapeType.SOLID_RECTANGULAR -> !currentWoodGrade.species.isGlulam
+                    ShapeType.GLULAM_WESTERN -> currentWoodGrade.species.isGlulam && currentWoodGrade.species != WoodSpecies.GLULAM_SP_SP
+                    ShapeType.GLULAM_SOUTHERN_PINE -> currentWoodGrade.species == WoodSpecies.GLULAM_SP_SP
+                    else -> true
+                }
+            if (!stillValid) {
+                activeMaterialGrade = null
+            }
+        }
         viewModelScope.launch {
             availableSections = sectionRepository.getSections(selectedMaterial, shapeType)
             // Auto-select the first section or W8X10 for steel

@@ -1,0 +1,510 @@
+diff --git a/core/model/src/main/java/com/lz/model/structural/MaterialModels.kt b/core/model/src/main/java/com/lz/model/structural/MaterialModels.kt
+index 22b8a17..01d14a3 100644
+--- a/core/model/src/main/java/com/lz/model/structural/MaterialModels.kt
++++ b/core/model/src/main/java/com/lz/model/structural/MaterialModels.kt
+@@ -12,8 +12,30 @@ enum class WoodSpecies(val isGlulam: Boolean = false) {
+     HEM_FIR,
+     SPF,
+     SOUTHERN_PINE,
+-    GLULAM_WS,
+-    GLULAM_SP;
++
++    // Glulam species combinations — NDS Supplement Table 5A / ICC-ES
++    // ESR-1940 organizes glulam reference values by "outer/core" species
++    // pairing, not by a single species. These 9 match the full pairing set
++    // (matches the reference tree Cody supplied). GLULAM_DF_DF and
++    // GLULAM_SP_SP replace the old GLULAM_WS/GLULAM_SP names (same real
++    // data — GLULAM_WS was always really DF/DF-specific data in practice;
++    // GLULAM_SP was always SP/SP) now that the fuller set makes a single
++    // umbrella "Western Species" name misleading. Ordered to match Cody's
++    // reference tree.
++    GLULAM_AC_AC(isGlulam = true),
++    GLULAM_DF_DF(isGlulam = true),
++    GLULAM_DF_HF(isGlulam = true),
++    GLULAM_ES_ES(isGlulam = true),
++    // NDS Table 5C hardwood glulam combinations — not yet sourced (ESR-1940
++    // and the other softwood-combination sources used elsewhere in this file
++    // don't cover hardwoods at all). Present as a selectable species so the
++    // full reference tree is browsable, but has zero WoodGrade entries
++    // mapped to it yet — see validGradesFor().
++    GLULAM_HARDWOODS(isGlulam = true),
++    GLULAM_HF_HF(isGlulam = true),
++    GLULAM_POC_POC(isGlulam = true),
++    GLULAM_SP_SP(isGlulam = true),
++    GLULAM_SPF_SPF(isGlulam = true);
+ 
+     companion object {
+         fun fromString(value: String): WoodSpecies = entries.find { it.name == value } ?: DF_L
+@@ -32,37 +54,89 @@ enum class WoodGrade {
+     UTILITY,
+ 
+     // Legacy glulam combination-symbol naming ("stress class"-"MOE in
+-    // millions psi") used before the fuller NDS Table 5A combination-symbol
+-    // set below was added. G_24F_1_8E has verified real values behind it
+-    // (matches the DF/DF "24F-V4" combination — see WoodPropertyService);
+-    // kept as-is rather than merged into G_24F_V4 below without confirming
+-    // that's really the right equivalence — flagged for Cody to reconcile.
++    // millions psi"), predating the NDS Table 5A combination-symbol set
++    // below. Corrected this pass: ICC-ES ESR-1940 lists "24F-1.8E Glulam
++    // Header" as its own distinct row (species "WS,SP/WS,SP" — valid across
++    // multiple species groupings, not DF/DF-specific as originally assumed)
++    // with its own real values, different from the DF/DF-specific "24F-V4"
++    // symbol below. G_24F_1_7E / G_20F_1_5E still unmapped — not confirmed
++    // against an authoritative source.
+     G_24F_1_8E,
+     G_24F_1_7E,
+     G_20F_1_5E,
+ 
+-    // NDS Table 5A / AITC combination symbols, DF/DF species combination —
+-    // the full set a real glulam selector needs (matches the reference tree
+-    // Cody supplied). Only a subset has verified reference values behind it
+-    // so far — see WoodPropertyService's doc comment for exactly which.
++    // NDS Table 5A / AITC / ICC-ES ESR-1940 combination symbols. A symbol
++    // name can be reused across different species pairings that happen to
++    // share a stress-class label with genuinely different underlying values
++    // (e.g. "24F-V5" exists for both DF/HF and SP/SP) — safe, since
++    // WoodPropertyService branches on species before grade, so the pairing
++    // is never ambiguous. See validGradesFor() for which symbols are valid
++    // for which species, and WoodPropertyService's doc comment for exactly
++    // which have verified values vs. are name-only placeholders.
+     G_16F_V3,
+     G_16F_V6,
+     G_16F_E3,
+     G_16F_E6,
++    G_16F_V5M1,
+     G_20F_V3,
+     G_20F_V7,
++    G_20F_V4,
++    G_20F_V8,
++    G_20F_V12,
++    G_20F_V13,
+     G_20F_E3,
+     G_20F_E6,
++    G_20F_E_ES1,
++    G_20F_E8,
++    G_20F_E_SPF1,
++    G_22F_V_POC1,
++    G_22F_V_POC2,
+     G_24F_V4,
++    G_24F_V5,
+     G_24F_V8,
+     G_24F_E4,
+     G_24F_E13,
+     G_24F_E18,
++    G_24F_E15M1,
+     G_26F_V1,
+     G_26F_V2;
+ 
+     companion object {
+         fun fromString(value: String): WoodGrade = entries.find { it.name == value } ?: NO_2
++
++        /**
++         * Which [WoodGrade] symbols are valid options for a given
++         * [WoodSpecies]. Replaces the old flat "any 'G_' grade is valid for
++         * any glulam species" filter — real glulam combination symbols are
++         * specific to a species pairing (e.g. "16F-V3" is DF/DF only), so
++         * showing all of them regardless of the selected species was
++         * misleading even though [com.lz.solver.material.WoodPropertyService]
++         * already safely blocked an invalid combination from being confirmed.
++         * Solid-sawn grades apply uniformly to any non-glulam species.
++         */
++        fun validGradesFor(species: WoodSpecies): List<WoodGrade> {
++            if (!species.isGlulam) {
++                return listOf(SELECT_STRUCTURAL, NO_1, NO_2, NO_3, STUD, CONSTRUCTION, STANDARD, UTILITY)
++            }
++            return when (species) {
++                WoodSpecies.GLULAM_DF_DF -> listOf(
++                    G_16F_V3, G_16F_V6, G_16F_E3, G_16F_E6,
++                    G_20F_V3, G_20F_V7, G_20F_V4, G_20F_V8, G_20F_E3, G_20F_E6,
++                    G_24F_V4, G_24F_V8, G_24F_E4, G_24F_E13, G_24F_E18,
++                    G_26F_V1, G_26F_V2
++                )
++                WoodSpecies.GLULAM_DF_HF -> listOf(G_24F_V5)
++                WoodSpecies.GLULAM_HF_HF -> listOf(G_24F_E15M1)
++                WoodSpecies.GLULAM_AC_AC -> listOf(G_20F_V12, G_20F_V13)
++                WoodSpecies.GLULAM_ES_ES -> listOf(G_20F_E_ES1, G_20F_E8)
++                WoodSpecies.GLULAM_POC_POC -> listOf(G_22F_V_POC1, G_22F_V_POC2)
++                WoodSpecies.GLULAM_SPF_SPF -> listOf(G_20F_E_SPF1)
++                WoodSpecies.GLULAM_SP_SP -> listOf(G_24F_1_8E, G_16F_V5M1)
++                // No NDS Table 5C hardwood data sourced yet.
++                WoodSpecies.GLULAM_HARDWOODS -> emptyList()
++                else -> emptyList()
++            }
++        }
+     }
+ }
+ 
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index 40d9441..1dd36a6 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -305,7 +305,7 @@ class NdsWoodCapacityCalculator(
+ 
+         if (l <= 0.0 || d <= 0.0 || b <= 0.0) return 1.0
+ 
+-        val x = if (material.species == WoodSpecies.GLULAM_SP) 20.0 else 10.0
++        val x = if (material.species == WoodSpecies.GLULAM_SP_SP) 20.0 else 10.0
+ 
+         val cv = (21.0 / l).pow(1.0 / x) *
+                 (12.0 / d).pow(1.0 / x) *
+diff --git a/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt b/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
+index b429b30..53d8143 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
+@@ -155,35 +155,21 @@ object WoodPropertyService {
+                 )
+                 else -> null
+             }
+-            // Glulam combination symbols mapped so far, DF/DF species
+-            // combination (GLULAM_WS) — see NDS Supplement Table 5A / AITC
+-            // 117. Real glulam properties are asymmetric (different values
+-            // for positive vs. negative-moment bending, and for the x-axis
+-            // vs. y-axis) in a way this single-value shape can't fully
+-            // capture; the values below are each combination's
+-            // positive-bending, x-axis set (Fbx+, Fvx, Fc-perp-x, Ex-true),
+-            // which is what a simple-span beam in positive bending needs.
+-            // G_24F_1_8E (legacy naming) verified as equivalent to 24F-V4.
+-            // Still unmapped: G_24F_1_7E, G_20F_1_5E (legacy names — not yet
+-            // confirmed which Table 5A symbol these correspond to, so left
+-            // separate rather than guessed), and of the newer Table 5A
+-            // symbol set: G_16F_E3, G_16F_E6, G_20F_V3, G_20F_V7, G_20F_E3,
+-            // G_20F_E6, G_24F_V8, G_24F_E4, G_24F_E13, G_24F_E18, G_26F_V1,
+-            // G_26F_V2 — the DF/DF-specific values weren't confirmed for
+-            // these within the search budget spent this session.
+-            WoodSpecies.GLULAM_WS -> when (grade) {
+-                WoodGrade.G_24F_1_8E, WoodGrade.G_24F_V4 -> WoodReferenceProperties(
+-                    bending = 2400.0.psi,
+-                    shear = 265.0.psi,
+-                    compressionParallel = 1650.0.psi,
+-                    compressionPerp = 650.0.psi,
+-                    tensionParallel = 1100.0.psi,
+-                    modulusOfElasticity = (1.8 * 1000.0).psi,
+-                    shearModulus = (1.8 * 1000.0 / 16.0).psi,
+-                    densityPcf = 31.2 // G = 0.5
+-                )
+-                // NDS Table 5A / APA PR-L313, 16F-V3 DF/DF (unbalanced
+-                // layup, for simple-span use).
++            // Glulam combination symbols — NDS Supplement Table 5A / ICC-ES
++            // ESR-1940 (joint APA/ICC-ES evaluation report), organized by
++            // species pairing. Real glulam properties are asymmetric
++            // (different values for positive vs. negative-moment bending,
++            // and for the x-axis vs. y-axis) in a way this single-value
++            // shape can't fully capture; the values below are each
++            // combination's positive-bending, x-axis set (Fbx+, Fvx,
++            // Fc-perp-x, Ex-true), which is what a simple-span beam in
++            // positive bending needs. See WoodGrade.validGradesFor() for
++            // which symbols the picker offers for each species; not every
++            // symbol offered there has verified values here yet — each
++            // branch below documents exactly which do.
++            WoodSpecies.GLULAM_DF_DF -> when (grade) {
++                // NDS Table 5A / APA PR-L313 & ICC-ES ESR-1940, 16F-V3 DF/DF
++                // (unbalanced layup, for simple-span use).
+                 WoodGrade.G_16F_V3 -> WoodReferenceProperties(
+                     bending = 1600.0.psi,
+                     shear = 265.0.psi,
+@@ -194,8 +180,8 @@ object WoodPropertyService {
+                     shearModulus = (1.6 * 1000.0 / 16.0).psi,
+                     densityPcf = 31.2 // G = 0.5
+                 )
+-                // NDS Table 5A / APA PR-L313, 16F-V6 DF/DF (balanced layup,
+-                // for continuous/cantilever use).
++                // ESR-1940 Table 1, 16F-V6 DF/DF (balanced layup, for
++                // continuous/cantilever use).
+                 WoodGrade.G_16F_V6 -> WoodReferenceProperties(
+                     bending = 1600.0.psi,
+                     shear = 265.0.psi,
+@@ -206,17 +192,167 @@ object WoodPropertyService {
+                     shearModulus = (1.7 * 1000.0 / 16.0).psi,
+                     densityPcf = 31.2 // G = 0.5
+                 )
++                // ESR-1940 Table 1, 20F-V4 DF/DF.
++                WoodGrade.G_20F_V4 -> WoodReferenceProperties(
++                    bending = 2000.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1550.0.psi,
++                    compressionPerp = 590.0.psi,
++                    tensionParallel = 975.0.psi,
++                    modulusOfElasticity = (1.7 * 1000.0).psi,
++                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.5
++                )
++                // ESR-1940 Table 1, 20F-V8 DF/DF.
++                WoodGrade.G_20F_V8 -> WoodReferenceProperties(
++                    bending = 2000.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1600.0.psi,
++                    compressionPerp = 590.0.psi,
++                    tensionParallel = 975.0.psi,
++                    modulusOfElasticity = (1.7 * 1000.0).psi,
++                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.5
++                )
++                // G_16F_E3/E6, G_20F_V3/V7, G_20F_E3/E6, G_24F_V4/V8,
++                // G_24F_E4/E13/E18, G_26F_V1/V2 — Cody's originally-supplied
++                // DF/DF symbol names don't line up cleanly against ESR-1940's
++                // authoritative numbering (e.g. ESR-1940's DF/DF 20F symbols
++                // are "20F-V4"/"20F-V8", not "20F-V3"/"20F-V7"; ESR-1940
++                // lists "26F-V1"/"26F-V2" as SP/SP, not DF/DF) — flagged for
++                // Cody rather than force-matched. Left unmapped.
+                 else -> null
+             }
+-            WoodSpecies.GLULAM_SP -> when (grade) {
+-                WoodGrade.G_24F_1_8E -> WoodReferenceProperties(
++            // ESR-1940 Table 1, 24F-V5 DF/HF.
++            WoodSpecies.GLULAM_DF_HF -> when (grade) {
++                WoodGrade.G_24F_V5 -> WoodReferenceProperties(
+                     bending = 2400.0.psi,
+-                    shear = 300.0.psi,
+-                    compressionParallel = 1650.0.psi,
+-                    compressionPerp = 740.0.psi,
++                    shear = 215.0.psi,
++                    compressionParallel = 1450.0.psi,
++                    compressionPerp = 650.0.psi,
++                    tensionParallel = 1100.0.psi,
++                    modulusOfElasticity = (1.8 * 1000.0).psi,
++                    shearModulus = (1.8 * 1000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.5
++                )
++                else -> null
++            }
++            // Not yet verified — 24F-E15M1 sits in a wide multi-column block
++            // of ESR-1940's table that wasn't safely extractable this pass.
++            WoodSpecies.GLULAM_HF_HF -> null
++            // ESR-1940 Table 1, 20F-V12/V13 AC/AC.
++            WoodSpecies.GLULAM_AC_AC -> when (grade) {
++                WoodGrade.G_20F_V12 -> WoodReferenceProperties(
++                    bending = 2000.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1500.0.psi,
++                    compressionPerp = 560.0.psi,
++                    tensionParallel = 925.0.psi,
++                    modulusOfElasticity = (1.6 * 1000.0).psi,
++                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    densityPcf = 28.7 // G = 0.46
++                )
++                WoodGrade.G_20F_V13 -> WoodReferenceProperties(
++                    bending = 2000.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1550.0.psi,
++                    compressionPerp = 560.0.psi,
++                    tensionParallel = 950.0.psi,
++                    modulusOfElasticity = (1.6 * 1000.0).psi,
++                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    densityPcf = 28.7 // G = 0.46
++                )
++                else -> null
++            }
++            // ESR-1940 Table 1, 20F-E/ES1 & 20F-E8 ES/ES.
++            WoodSpecies.GLULAM_ES_ES -> when (grade) {
++                WoodGrade.G_20F_E_ES1 -> WoodReferenceProperties(
++                    bending = 2000.0.psi,
++                    shear = 200.0.psi,
++                    compressionParallel = 1150.0.psi,
++                    compressionPerp = 560.0.psi,
++                    tensionParallel = 1050.0.psi,
++                    modulusOfElasticity = (1.9 * 1000.0).psi,
++                    shearModulus = (1.9 * 1000.0 / 16.0).psi,
++                    densityPcf = 25.6 // G = 0.41
++                )
++                WoodGrade.G_20F_E8 -> WoodReferenceProperties(
++                    bending = 2000.0.psi,
++                    shear = 200.0.psi,
++                    compressionParallel = 1100.0.psi,
++                    compressionPerp = 450.0.psi,
++                    tensionParallel = 825.0.psi,
++                    modulusOfElasticity = (1.6 * 1000.0).psi,
++                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    densityPcf = 25.6 // G = 0.41
++                )
++                else -> null
++            }
++            // ESR-1940 Table 1, 22F-V/POC1 & 22F-V/POC2 POC/POC.
++            WoodSpecies.GLULAM_POC_POC -> when (grade) {
++                WoodGrade.G_22F_V_POC1 -> WoodReferenceProperties(
++                    bending = 2200.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1950.0.psi,
++                    compressionPerp = 560.0.psi,
++                    tensionParallel = 1150.0.psi,
++                    modulusOfElasticity = (1.9 * 1000.0).psi,
++                    shearModulus = (1.9 * 1000.0 / 16.0).psi,
++                    densityPcf = 28.1 // G = 0.45
++                )
++                WoodGrade.G_22F_V_POC2 -> WoodReferenceProperties(
++                    bending = 2200.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1900.0.psi,
++                    compressionPerp = 560.0.psi,
+                     tensionParallel = 1150.0.psi,
+                     modulusOfElasticity = (1.8 * 1000.0).psi,
+                     shearModulus = (1.8 * 1000.0 / 16.0).psi,
++                    densityPcf = 28.1 // G = 0.45
++                )
++                else -> null
++            }
++            // No NDS Table 5C hardwood data sourced yet.
++            WoodSpecies.GLULAM_HARDWOODS -> null
++            // ESR-1940 Table 1, 20F-E/SPF1 SPF/SPF.
++            WoodSpecies.GLULAM_SPF_SPF -> when (grade) {
++                WoodGrade.G_20F_E_SPF1 -> WoodReferenceProperties(
++                    bending = 2000.0.psi,
++                    shear = 215.0.psi,
++                    compressionParallel = 1100.0.psi,
++                    compressionPerp = 425.0.psi,
++                    tensionParallel = 425.0.psi,
++                    modulusOfElasticity = (1.6 * 1000.0).psi,
++                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    densityPcf = 26.2 // G = 0.42
++                )
++                else -> null
++            }
++            WoodSpecies.GLULAM_SP_SP -> when (grade) {
++                // ESR-1940 Table 1, "24F-1.8E Glulam Header" (species
++                // "WS,SP/WS,SP" — valid across multiple species groupings per
++                // the source, filed here since it's most often specified for
++                // SP headers; not DF/DF-specific as this entry's values were
++                // wrongly assumed to be before this pass).
++                WoodGrade.G_24F_1_8E -> WoodReferenceProperties(
++                    bending = 2400.0.psi,
++                    shear = 215.0.psi,
++                    compressionParallel = 1200.0.psi,
++                    compressionPerp = 500.0.psi,
++                    tensionParallel = 950.0.psi,
++                    modulusOfElasticity = (1.9 * 1000.0).psi,
++                    shearModulus = (1.9 * 1000.0 / 16.0).psi,
++                    densityPcf = 26.2 // G = 0.42
++                )
++                // ESR-1940 Table 1, 16F-V5M1 SP/SP.
++                WoodGrade.G_16F_V5M1 -> WoodReferenceProperties(
++                    bending = 1600.0.psi,
++                    shear = 300.0.psi,
++                    compressionParallel = 1500.0.psi,
++                    compressionPerp = 650.0.psi,
++                    tensionParallel = 1000.0.psi,
++                    modulusOfElasticity = (1.5 * 1000.0).psi,
++                    shearModulus = (1.5 * 1000.0 / 16.0).psi,
+                     densityPcf = 34.3 // G = 0.55
+                 )
+                 else -> null
+diff --git a/core/ui/src/main/java/com/lz/ui/material/WoodMaterialPickerDialog.kt b/core/ui/src/main/java/com/lz/ui/material/WoodMaterialPickerDialog.kt
+index bcac7f7..2ea1a37 100644
+--- a/core/ui/src/main/java/com/lz/ui/material/WoodMaterialPickerDialog.kt
++++ b/core/ui/src/main/java/com/lz/ui/material/WoodMaterialPickerDialog.kt
+@@ -68,21 +68,23 @@ fun WoodMaterialPickerDialog(
+                             RadioButton(
+                                 selected = selectedSpecies == species,
+                                 onClick = {
+-                                    // Reset the grade when crossing the
+-                                    // solid-sawn/glulam boundary so a grade
+-                                    // from the old species group can't
+-                                    // silently linger paired with the new
+-                                    // one (e.g. "No.2" staying selected
+-                                    // after switching to a glulam species).
+-                                    if (species.isGlulam != selectedSpecies.isGlulam) {
+-                                        selectedGrade =
+-                                            if (species.isGlulam) WoodGrade.G_24F_V4 else WoodGrade.NO_2
++                                    // Reset the grade whenever the new
++                                    // species doesn't offer the currently
++                                    // selected grade, so a grade from the
++                                    // old species can't silently linger
++                                    // paired with one it was never valid for
++                                    // (e.g. a DF/DF-only combination symbol
++                                    // staying selected after switching to
++                                    // SP/SP).
++                                    val validGrades = WoodGrade.validGradesFor(species)
++                                    if (selectedGrade !in validGrades) {
++                                        validGrades.firstOrNull()?.let { selectedGrade = it }
+                                     }
+                                     selectedSpecies = species
+                                 }
+                             )
+                             Text(
+-                                text = species.name.replace("_", " "),
++                                text = species.displayName(),
+                                 modifier = Modifier.padding(start = 8.dp)
+                             )
+                         }
+@@ -98,8 +100,15 @@ fun WoodMaterialPickerDialog(
+                         style = MaterialTheme.typography.labelLarge,
+                         fontWeight = FontWeight.Bold
+                     )
+-                    WoodGrade.entries.filter { it.name.startsWith("G_") == selectedSpecies.isGlulam }
+-                        .forEach { grade ->
++                    val validGrades = WoodGrade.validGradesFor(selectedSpecies)
++                    if (validGrades.isEmpty()) {
++                        Text(
++                            "No combination symbols mapped for this species yet.",
++                            style = MaterialTheme.typography.bodySmall,
++                            color = MaterialTheme.colorScheme.error
++                        )
++                    }
++                    validGrades.forEach { grade ->
+                             Row(modifier = Modifier.fillMaxWidth()) {
+                                 RadioButton(
+                                     selected = selectedGrade == grade,
+@@ -131,12 +140,7 @@ fun WoodMaterialPickerDialog(
+                     val resolvedProps = props ?: return@TextButton
+                     val newGrade = MaterialGrade.Wood(
+                         id = "WOOD_${selectedSpecies.name}_${selectedGrade.name}",
+-                        name = "${
+-                            selectedSpecies.name.replace(
+-                                "_",
+-                                " "
+-                            )
+-                        } ${selectedGrade.displayName()}",
++                        name = "${selectedSpecies.displayName()} ${selectedGrade.displayName()}",
+                         species = selectedSpecies,
+                         grade = selectedGrade,
+                         referenceBending = resolvedProps.bending,
+@@ -162,6 +166,19 @@ fun WoodMaterialPickerDialog(
+     )
+ }
+ 
++/**
++ * Renders a [WoodSpecies] the way an engineer would recognize it: plain
++ * species names as-is ("HEM FIR"), glulam species pairings in real
++ * "outer/core" notation ("DF/DF") rather than the raw enum name
++ * ("GLULAM DF DF"). "Hardwoods-Glulam" is its own special case since it
++ * doesn't follow the outer/core pairing pattern.
++ */
++fun WoodSpecies.displayName(): String {
++    if (!isGlulam) return name.replace("_", " ")
++    if (this == WoodSpecies.GLULAM_HARDWOODS) return "Hardwoods-Glulam"
++    return name.removePrefix("GLULAM_").replace("_", "/")
++}
++
+ /**
+  * Renders a [WoodGrade] the way an engineer would recognize it: solid-sawn
+  * grades as their plain name ("No. 2"), glulam combination symbols in their
+@@ -172,6 +189,18 @@ fun WoodGrade.displayName(): String {
+     val raw = name
+     if (!raw.startsWith("G_")) return raw.replace("_", " ")
+ 
++    // A handful of ESR-1940 symbols use a "<stress-species>/<species-code><n>"
++    // form (species abbreviation appears mid-symbol, joined by "/" not "-")
++    // that the generic underscore-to-dash rule below can't distinguish from
++    // an ordinary dash-joined symbol.
++    val speciesSlashOverrides = mapOf(
++        WoodGrade.G_20F_E_ES1 to "20F-E/ES1",
++        WoodGrade.G_20F_E_SPF1 to "20F-E/SPF1",
++        WoodGrade.G_22F_V_POC1 to "22F-V/POC1",
++        WoodGrade.G_22F_V_POC2 to "22F-V/POC2"
++    )
++    speciesSlashOverrides[this]?.let { return it }
++
+     val rest = raw.removePrefix("G_")
+     // Legacy "<stress class>F_<MOE-integer>_<MOE-decimal>E" naming, e.g.
+     // G_24F_1_8E -> "24F-1.8E" (the "." is a decimal point, not a dash).
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 955c5db..3e065bc 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -1129,7 +1129,7 @@ fun GeometryConfiguration(
+                                     fontWeight = FontWeight.Bold
+                                 )
+                                 Text(
+-                                    text = if (woodGrade != null) "${woodGrade.species.name.replace("_", " ")} - ${woodGrade.grade.displayName()}" else "Select to configure",
++                                    text = if (woodGrade != null) "${woodGrade.species.displayName()} - ${woodGrade.grade.displayName()}" else "Select to configure",
+                                     style = MaterialTheme.typography.labelSmall,
+                                     color = MaterialTheme.colorScheme.primary
+                                 )

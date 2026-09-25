@@ -374,7 +374,14 @@ enum class ShapeType {
     ROUND_HSS,
     PIPE,
     SOLID_RECTANGULAR,
+    // Generic glulam tag — superseded by the species-specific values below
+    // (Western vs. Southern Pine glulam use different standard width series
+    // and different lamination thickness, so they're shown as separate
+    // shape-type options rather than one mixed "Glulam" list). Kept, unused,
+    // for backward compatibility rather than removed.
     GLULAM,
+    GLULAM_WESTERN,
+    GLULAM_SOUTHERN_PINE,
     SOLID_ROUND,
     SINGLE_ANGLE,
     DOUBLE_ANGLE

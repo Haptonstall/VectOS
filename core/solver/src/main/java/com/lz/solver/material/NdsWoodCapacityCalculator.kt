@@ -305,7 +305,7 @@ class NdsWoodCapacityCalculator(
 
         if (l <= 0.0 || d <= 0.0 || b <= 0.0) return 1.0
 
-        val x = if (material.species == WoodSpecies.GLULAM_SP) 20.0 else 10.0
+        val x = if (material.species == WoodSpecies.GLULAM_SP_SP) 20.0 else 10.0
 
         val cv = (21.0 / l).pow(1.0 / x) *
                 (12.0 / d).pow(1.0 / x) *
@@ -372,10 +372,11 @@ class NdsWoodCapacityCalculator(
                 }
                 WoodGrade.CONSTRUCTION, WoodGrade.STANDARD -> 1.0
                 WoodGrade.UTILITY -> if (nominalWidthIn <= 3.0) 0.4 else 1.0
-                // Glulam grades never reach this path (isGlulam routes to
-                // computeCV instead), but return 1.0 rather than throw if
-                // ever called with one.
-                WoodGrade.G_24F_1_8E, WoodGrade.G_24F_1_7E, WoodGrade.G_20F_1_5E -> 1.0
+                // Glulam grades (both the legacy MOE-style names and the
+                // newer NDS Table 5A combination symbols) never reach this
+                // path — isGlulam routes to computeCV instead — but return
+                // 1.0 rather than throw if ever called with one.
+                else -> 1.0
             }
         }
     }

@@ -64,6 +64,8 @@ class NdsSectionRepository(private val context: Context) : SectionRepository {
     private fun mapShapeType(raw: String): ShapeType =
         when (raw) {
             "RECTANGULAR" -> ShapeType.SOLID_RECTANGULAR
+            "GLULAM_WESTERN" -> ShapeType.GLULAM_WESTERN
+            "GLULAM_SOUTHERN_PINE" -> ShapeType.GLULAM_SOUTHERN_PINE
             "GLULAM" -> ShapeType.GLULAM
             else -> ShapeType.SOLID_RECTANGULAR
         }

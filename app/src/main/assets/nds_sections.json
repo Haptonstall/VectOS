@@ -304,6 +304,5388 @@
         "zx": 34.4531,
         "rx": 1.0104
       }
+    },
+    {
+      "id": "2.5x6 GL-W",
+      "designation": "2.5x6 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 15.0,
+      "nominalWidth": 2.5,
+      "nominalDepth": 6.0,
+      "depth": 6.0,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 45.0,
+        "sx": 15.0,
+        "zx": 22.5,
+        "rx": 1.7321
+      },
+      "weakAxis": {
+        "ix": 7.8125,
+        "sx": 6.25,
+        "zx": 9.375,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x7.5 GL-W",
+      "designation": "2.5x7.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 18.75,
+      "nominalWidth": 2.5,
+      "nominalDepth": 7.5,
+      "depth": 7.5,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 87.8906,
+        "sx": 23.4375,
+        "zx": 35.1562,
+        "rx": 2.1651
+      },
+      "weakAxis": {
+        "ix": 9.7656,
+        "sx": 7.8125,
+        "zx": 11.7188,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x9 GL-W",
+      "designation": "2.5x9 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 22.5,
+      "nominalWidth": 2.5,
+      "nominalDepth": 9.0,
+      "depth": 9.0,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 151.875,
+        "sx": 33.75,
+        "zx": 50.625,
+        "rx": 2.5981
+      },
+      "weakAxis": {
+        "ix": 11.7188,
+        "sx": 9.375,
+        "zx": 14.0625,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x10.5 GL-W",
+      "designation": "2.5x10.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 26.25,
+      "nominalWidth": 2.5,
+      "nominalDepth": 10.5,
+      "depth": 10.5,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 241.1719,
+        "sx": 45.9375,
+        "zx": 68.9062,
+        "rx": 3.0311
+      },
+      "weakAxis": {
+        "ix": 13.6719,
+        "sx": 10.9375,
+        "zx": 16.4062,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x12 GL-W",
+      "designation": "2.5x12 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 30.0,
+      "nominalWidth": 2.5,
+      "nominalDepth": 12.0,
+      "depth": 12.0,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 360.0,
+        "sx": 60.0,
+        "zx": 90.0,
+        "rx": 3.4641
+      },
+      "weakAxis": {
+        "ix": 15.625,
+        "sx": 12.5,
+        "zx": 18.75,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x13.5 GL-W",
+      "designation": "2.5x13.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 33.75,
+      "nominalWidth": 2.5,
+      "nominalDepth": 13.5,
+      "depth": 13.5,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 512.5781,
+        "sx": 75.9375,
+        "zx": 113.9062,
+        "rx": 3.8971
+      },
+      "weakAxis": {
+        "ix": 17.5781,
+        "sx": 14.0625,
+        "zx": 21.0938,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x15 GL-W",
+      "designation": "2.5x15 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 37.5,
+      "nominalWidth": 2.5,
+      "nominalDepth": 15.0,
+      "depth": 15.0,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 703.125,
+        "sx": 93.75,
+        "zx": 140.625,
+        "rx": 4.3301
+      },
+      "weakAxis": {
+        "ix": 19.5312,
+        "sx": 15.625,
+        "zx": 23.4375,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x16.5 GL-W",
+      "designation": "2.5x16.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 41.25,
+      "nominalWidth": 2.5,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 935.8594,
+        "sx": 113.4375,
+        "zx": 170.1562,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 21.4844,
+        "sx": 17.1875,
+        "zx": 25.7812,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x18 GL-W",
+      "designation": "2.5x18 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 45.0,
+      "nominalWidth": 2.5,
+      "nominalDepth": 18.0,
+      "depth": 18.0,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 1215.0,
+        "sx": 135.0,
+        "zx": 202.5,
+        "rx": 5.1962
+      },
+      "weakAxis": {
+        "ix": 23.4375,
+        "sx": 18.75,
+        "zx": 28.125,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x19.5 GL-W",
+      "designation": "2.5x19.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 48.75,
+      "nominalWidth": 2.5,
+      "nominalDepth": 19.5,
+      "depth": 19.5,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 1544.7656,
+        "sx": 158.4375,
+        "zx": 237.6562,
+        "rx": 5.6292
+      },
+      "weakAxis": {
+        "ix": 25.3906,
+        "sx": 20.3125,
+        "zx": 30.4688,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x21 GL-W",
+      "designation": "2.5x21 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 52.5,
+      "nominalWidth": 2.5,
+      "nominalDepth": 21.0,
+      "depth": 21.0,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 1929.375,
+        "sx": 183.75,
+        "zx": 275.625,
+        "rx": 6.0622
+      },
+      "weakAxis": {
+        "ix": 27.3438,
+        "sx": 21.875,
+        "zx": 32.8125,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x22.5 GL-W",
+      "designation": "2.5x22.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 56.25,
+      "nominalWidth": 2.5,
+      "nominalDepth": 22.5,
+      "depth": 22.5,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 2373.0469,
+        "sx": 210.9375,
+        "zx": 316.4062,
+        "rx": 6.4952
+      },
+      "weakAxis": {
+        "ix": 29.2969,
+        "sx": 23.4375,
+        "zx": 35.1562,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x24 GL-W",
+      "designation": "2.5x24 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 60.0,
+      "nominalWidth": 2.5,
+      "nominalDepth": 24.0,
+      "depth": 24.0,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 2880.0,
+        "sx": 240.0,
+        "zx": 360.0,
+        "rx": 6.9282
+      },
+      "weakAxis": {
+        "ix": 31.25,
+        "sx": 25.0,
+        "zx": 37.5,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "3.125x6 GL-W",
+      "designation": "3.125x6 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 18.75,
+      "nominalWidth": 3.125,
+      "nominalDepth": 6.0,
+      "depth": 6.0,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 56.25,
+        "sx": 18.75,
+        "zx": 28.125,
+        "rx": 1.7321
+      },
+      "weakAxis": {
+        "ix": 15.2588,
+        "sx": 9.7656,
+        "zx": 14.6484,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x7.5 GL-W",
+      "designation": "3.125x7.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 23.4375,
+      "nominalWidth": 3.125,
+      "nominalDepth": 7.5,
+      "depth": 7.5,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 109.8633,
+        "sx": 29.2969,
+        "zx": 43.9453,
+        "rx": 2.1651
+      },
+      "weakAxis": {
+        "ix": 19.0735,
+        "sx": 12.207,
+        "zx": 18.3105,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x9 GL-W",
+      "designation": "3.125x9 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 28.125,
+      "nominalWidth": 3.125,
+      "nominalDepth": 9.0,
+      "depth": 9.0,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 189.8438,
+        "sx": 42.1875,
+        "zx": 63.2812,
+        "rx": 2.5981
+      },
+      "weakAxis": {
+        "ix": 22.8882,
+        "sx": 14.6484,
+        "zx": 21.9727,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x10.5 GL-W",
+      "designation": "3.125x10.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 32.8125,
+      "nominalWidth": 3.125,
+      "nominalDepth": 10.5,
+      "depth": 10.5,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 301.4648,
+        "sx": 57.4219,
+        "zx": 86.1328,
+        "rx": 3.0311
+      },
+      "weakAxis": {
+        "ix": 26.7029,
+        "sx": 17.0898,
+        "zx": 25.6348,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x12 GL-W",
+      "designation": "3.125x12 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 37.5,
+      "nominalWidth": 3.125,
+      "nominalDepth": 12.0,
+      "depth": 12.0,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 450.0,
+        "sx": 75.0,
+        "zx": 112.5,
+        "rx": 3.4641
+      },
+      "weakAxis": {
+        "ix": 30.5176,
+        "sx": 19.5312,
+        "zx": 29.2969,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x13.5 GL-W",
+      "designation": "3.125x13.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 42.1875,
+      "nominalWidth": 3.125,
+      "nominalDepth": 13.5,
+      "depth": 13.5,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 640.7227,
+        "sx": 94.9219,
+        "zx": 142.3828,
+        "rx": 3.8971
+      },
+      "weakAxis": {
+        "ix": 34.3323,
+        "sx": 21.9727,
+        "zx": 32.959,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x15 GL-W",
+      "designation": "3.125x15 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 46.875,
+      "nominalWidth": 3.125,
+      "nominalDepth": 15.0,
+      "depth": 15.0,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 878.9062,
+        "sx": 117.1875,
+        "zx": 175.7812,
+        "rx": 4.3301
+      },
+      "weakAxis": {
+        "ix": 38.147,
+        "sx": 24.4141,
+        "zx": 36.6211,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x16.5 GL-W",
+      "designation": "3.125x16.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 51.5625,
+      "nominalWidth": 3.125,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 1169.8242,
+        "sx": 141.7969,
+        "zx": 212.6953,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 41.9617,
+        "sx": 26.8555,
+        "zx": 40.2832,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x18 GL-W",
+      "designation": "3.125x18 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 56.25,
+      "nominalWidth": 3.125,
+      "nominalDepth": 18.0,
+      "depth": 18.0,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 1518.75,
+        "sx": 168.75,
+        "zx": 253.125,
+        "rx": 5.1962
+      },
+      "weakAxis": {
+        "ix": 45.7764,
+        "sx": 29.2969,
+        "zx": 43.9453,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x19.5 GL-W",
+      "designation": "3.125x19.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 60.9375,
+      "nominalWidth": 3.125,
+      "nominalDepth": 19.5,
+      "depth": 19.5,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 1930.957,
+        "sx": 198.0469,
+        "zx": 297.0703,
+        "rx": 5.6292
+      },
+      "weakAxis": {
+        "ix": 49.5911,
+        "sx": 31.7383,
+        "zx": 47.6074,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x21 GL-W",
+      "designation": "3.125x21 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 65.625,
+      "nominalWidth": 3.125,
+      "nominalDepth": 21.0,
+      "depth": 21.0,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 2411.7188,
+        "sx": 229.6875,
+        "zx": 344.5312,
+        "rx": 6.0622
+      },
+      "weakAxis": {
+        "ix": 53.4058,
+        "sx": 34.1797,
+        "zx": 51.2695,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x22.5 GL-W",
+      "designation": "3.125x22.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 70.3125,
+      "nominalWidth": 3.125,
+      "nominalDepth": 22.5,
+      "depth": 22.5,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 2966.3086,
+        "sx": 263.6719,
+        "zx": 395.5078,
+        "rx": 6.4952
+      },
+      "weakAxis": {
+        "ix": 57.2205,
+        "sx": 36.6211,
+        "zx": 54.9316,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x24 GL-W",
+      "designation": "3.125x24 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 75.0,
+      "nominalWidth": 3.125,
+      "nominalDepth": 24.0,
+      "depth": 24.0,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 3600.0,
+        "sx": 300.0,
+        "zx": 450.0,
+        "rx": 6.9282
+      },
+      "weakAxis": {
+        "ix": 61.0352,
+        "sx": 39.0625,
+        "zx": 58.5938,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.5x6 GL-W",
+      "designation": "3.5x6 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 21.0,
+      "nominalWidth": 3.5,
+      "nominalDepth": 6.0,
+      "depth": 6.0,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 63.0,
+        "sx": 21.0,
+        "zx": 31.5,
+        "rx": 1.7321
+      },
+      "weakAxis": {
+        "ix": 21.4375,
+        "sx": 12.25,
+        "zx": 18.375,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x7.5 GL-W",
+      "designation": "3.5x7.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 26.25,
+      "nominalWidth": 3.5,
+      "nominalDepth": 7.5,
+      "depth": 7.5,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 123.0469,
+        "sx": 32.8125,
+        "zx": 49.2188,
+        "rx": 2.1651
+      },
+      "weakAxis": {
+        "ix": 26.7969,
+        "sx": 15.3125,
+        "zx": 22.9688,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x9 GL-W",
+      "designation": "3.5x9 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 31.5,
+      "nominalWidth": 3.5,
+      "nominalDepth": 9.0,
+      "depth": 9.0,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 212.625,
+        "sx": 47.25,
+        "zx": 70.875,
+        "rx": 2.5981
+      },
+      "weakAxis": {
+        "ix": 32.1562,
+        "sx": 18.375,
+        "zx": 27.5625,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x10.5 GL-W",
+      "designation": "3.5x10.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 36.75,
+      "nominalWidth": 3.5,
+      "nominalDepth": 10.5,
+      "depth": 10.5,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 337.6406,
+        "sx": 64.3125,
+        "zx": 96.4688,
+        "rx": 3.0311
+      },
+      "weakAxis": {
+        "ix": 37.5156,
+        "sx": 21.4375,
+        "zx": 32.1562,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x12 GL-W",
+      "designation": "3.5x12 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 42.0,
+      "nominalWidth": 3.5,
+      "nominalDepth": 12.0,
+      "depth": 12.0,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 504.0,
+        "sx": 84.0,
+        "zx": 126.0,
+        "rx": 3.4641
+      },
+      "weakAxis": {
+        "ix": 42.875,
+        "sx": 24.5,
+        "zx": 36.75,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x13.5 GL-W",
+      "designation": "3.5x13.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 47.25,
+      "nominalWidth": 3.5,
+      "nominalDepth": 13.5,
+      "depth": 13.5,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 717.6094,
+        "sx": 106.3125,
+        "zx": 159.4688,
+        "rx": 3.8971
+      },
+      "weakAxis": {
+        "ix": 48.2344,
+        "sx": 27.5625,
+        "zx": 41.3438,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x15 GL-W",
+      "designation": "3.5x15 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 52.5,
+      "nominalWidth": 3.5,
+      "nominalDepth": 15.0,
+      "depth": 15.0,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 984.375,
+        "sx": 131.25,
+        "zx": 196.875,
+        "rx": 4.3301
+      },
+      "weakAxis": {
+        "ix": 53.5938,
+        "sx": 30.625,
+        "zx": 45.9375,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x16.5 GL-W",
+      "designation": "3.5x16.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 57.75,
+      "nominalWidth": 3.5,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 1310.2031,
+        "sx": 158.8125,
+        "zx": 238.2188,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 58.9531,
+        "sx": 33.6875,
+        "zx": 50.5312,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x18 GL-W",
+      "designation": "3.5x18 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 63.0,
+      "nominalWidth": 3.5,
+      "nominalDepth": 18.0,
+      "depth": 18.0,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 1701.0,
+        "sx": 189.0,
+        "zx": 283.5,
+        "rx": 5.1962
+      },
+      "weakAxis": {
+        "ix": 64.3125,
+        "sx": 36.75,
+        "zx": 55.125,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x19.5 GL-W",
+      "designation": "3.5x19.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 68.25,
+      "nominalWidth": 3.5,
+      "nominalDepth": 19.5,
+      "depth": 19.5,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 2162.6719,
+        "sx": 221.8125,
+        "zx": 332.7188,
+        "rx": 5.6292
+      },
+      "weakAxis": {
+        "ix": 69.6719,
+        "sx": 39.8125,
+        "zx": 59.7188,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x21 GL-W",
+      "designation": "3.5x21 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 73.5,
+      "nominalWidth": 3.5,
+      "nominalDepth": 21.0,
+      "depth": 21.0,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 2701.125,
+        "sx": 257.25,
+        "zx": 385.875,
+        "rx": 6.0622
+      },
+      "weakAxis": {
+        "ix": 75.0312,
+        "sx": 42.875,
+        "zx": 64.3125,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x22.5 GL-W",
+      "designation": "3.5x22.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 78.75,
+      "nominalWidth": 3.5,
+      "nominalDepth": 22.5,
+      "depth": 22.5,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 3322.2656,
+        "sx": 295.3125,
+        "zx": 442.9688,
+        "rx": 6.4952
+      },
+      "weakAxis": {
+        "ix": 80.3906,
+        "sx": 45.9375,
+        "zx": 68.9062,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x24 GL-W",
+      "designation": "3.5x24 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 84.0,
+      "nominalWidth": 3.5,
+      "nominalDepth": 24.0,
+      "depth": 24.0,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 4032.0,
+        "sx": 336.0,
+        "zx": 504.0,
+        "rx": 6.9282
+      },
+      "weakAxis": {
+        "ix": 85.75,
+        "sx": 49.0,
+        "zx": 73.5,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "5.125x6 GL-W",
+      "designation": "5.125x6 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 30.75,
+      "nominalWidth": 5.125,
+      "nominalDepth": 6.0,
+      "depth": 6.0,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 92.25,
+        "sx": 30.75,
+        "zx": 46.125,
+        "rx": 1.7321
+      },
+      "weakAxis": {
+        "ix": 67.3057,
+        "sx": 26.2656,
+        "zx": 39.3984,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x7.5 GL-W",
+      "designation": "5.125x7.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 38.4375,
+      "nominalWidth": 5.125,
+      "nominalDepth": 7.5,
+      "depth": 7.5,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 180.1758,
+        "sx": 48.0469,
+        "zx": 72.0703,
+        "rx": 2.1651
+      },
+      "weakAxis": {
+        "ix": 84.1321,
+        "sx": 32.832,
+        "zx": 49.248,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x9 GL-W",
+      "designation": "5.125x9 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 46.125,
+      "nominalWidth": 5.125,
+      "nominalDepth": 9.0,
+      "depth": 9.0,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 311.3438,
+        "sx": 69.1875,
+        "zx": 103.7812,
+        "rx": 2.5981
+      },
+      "weakAxis": {
+        "ix": 100.9585,
+        "sx": 39.3984,
+        "zx": 59.0977,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x10.5 GL-W",
+      "designation": "5.125x10.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 53.8125,
+      "nominalWidth": 5.125,
+      "nominalDepth": 10.5,
+      "depth": 10.5,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 494.4023,
+        "sx": 94.1719,
+        "zx": 141.2578,
+        "rx": 3.0311
+      },
+      "weakAxis": {
+        "ix": 117.7849,
+        "sx": 45.9648,
+        "zx": 68.9473,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x12 GL-W",
+      "designation": "5.125x12 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 61.5,
+      "nominalWidth": 5.125,
+      "nominalDepth": 12.0,
+      "depth": 12.0,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 738.0,
+        "sx": 123.0,
+        "zx": 184.5,
+        "rx": 3.4641
+      },
+      "weakAxis": {
+        "ix": 134.6113,
+        "sx": 52.5312,
+        "zx": 78.7969,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x13.5 GL-W",
+      "designation": "5.125x13.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 69.1875,
+      "nominalWidth": 5.125,
+      "nominalDepth": 13.5,
+      "depth": 13.5,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 1050.7852,
+        "sx": 155.6719,
+        "zx": 233.5078,
+        "rx": 3.8971
+      },
+      "weakAxis": {
+        "ix": 151.4377,
+        "sx": 59.0977,
+        "zx": 88.6465,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x15 GL-W",
+      "designation": "5.125x15 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 76.875,
+      "nominalWidth": 5.125,
+      "nominalDepth": 15.0,
+      "depth": 15.0,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 1441.4062,
+        "sx": 192.1875,
+        "zx": 288.2812,
+        "rx": 4.3301
+      },
+      "weakAxis": {
+        "ix": 168.2642,
+        "sx": 65.6641,
+        "zx": 98.4961,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x16.5 GL-W",
+      "designation": "5.125x16.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 84.5625,
+      "nominalWidth": 5.125,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 1918.5117,
+        "sx": 232.5469,
+        "zx": 348.8203,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 185.0906,
+        "sx": 72.2305,
+        "zx": 108.3457,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x18 GL-W",
+      "designation": "5.125x18 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 92.25,
+      "nominalWidth": 5.125,
+      "nominalDepth": 18.0,
+      "depth": 18.0,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 2490.75,
+        "sx": 276.75,
+        "zx": 415.125,
+        "rx": 5.1962
+      },
+      "weakAxis": {
+        "ix": 201.917,
+        "sx": 78.7969,
+        "zx": 118.1953,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x19.5 GL-W",
+      "designation": "5.125x19.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 99.9375,
+      "nominalWidth": 5.125,
+      "nominalDepth": 19.5,
+      "depth": 19.5,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 3166.7695,
+        "sx": 324.7969,
+        "zx": 487.1953,
+        "rx": 5.6292
+      },
+      "weakAxis": {
+        "ix": 218.7434,
+        "sx": 85.3633,
+        "zx": 128.0449,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x21 GL-W",
+      "designation": "5.125x21 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 107.625,
+      "nominalWidth": 5.125,
+      "nominalDepth": 21.0,
+      "depth": 21.0,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 3955.2188,
+        "sx": 376.6875,
+        "zx": 565.0312,
+        "rx": 6.0622
+      },
+      "weakAxis": {
+        "ix": 235.5698,
+        "sx": 91.9297,
+        "zx": 137.8945,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x22.5 GL-W",
+      "designation": "5.125x22.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 115.3125,
+      "nominalWidth": 5.125,
+      "nominalDepth": 22.5,
+      "depth": 22.5,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 4864.7461,
+        "sx": 432.4219,
+        "zx": 648.6328,
+        "rx": 6.4952
+      },
+      "weakAxis": {
+        "ix": 252.3962,
+        "sx": 98.4961,
+        "zx": 147.7441,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x24 GL-W",
+      "designation": "5.125x24 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 123.0,
+      "nominalWidth": 5.125,
+      "nominalDepth": 24.0,
+      "depth": 24.0,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 5904.0,
+        "sx": 492.0,
+        "zx": 738.0,
+        "rx": 6.9282
+      },
+      "weakAxis": {
+        "ix": 269.2227,
+        "sx": 105.0625,
+        "zx": 157.5938,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.5x6 GL-W",
+      "designation": "5.5x6 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 33.0,
+      "nominalWidth": 5.5,
+      "nominalDepth": 6.0,
+      "depth": 6.0,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 99.0,
+        "sx": 33.0,
+        "zx": 49.5,
+        "rx": 1.7321
+      },
+      "weakAxis": {
+        "ix": 83.1875,
+        "sx": 30.25,
+        "zx": 45.375,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x7.5 GL-W",
+      "designation": "5.5x7.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 41.25,
+      "nominalWidth": 5.5,
+      "nominalDepth": 7.5,
+      "depth": 7.5,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 193.3594,
+        "sx": 51.5625,
+        "zx": 77.3438,
+        "rx": 2.1651
+      },
+      "weakAxis": {
+        "ix": 103.9844,
+        "sx": 37.8125,
+        "zx": 56.7188,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x9 GL-W",
+      "designation": "5.5x9 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 49.5,
+      "nominalWidth": 5.5,
+      "nominalDepth": 9.0,
+      "depth": 9.0,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 334.125,
+        "sx": 74.25,
+        "zx": 111.375,
+        "rx": 2.5981
+      },
+      "weakAxis": {
+        "ix": 124.7812,
+        "sx": 45.375,
+        "zx": 68.0625,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x10.5 GL-W",
+      "designation": "5.5x10.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 57.75,
+      "nominalWidth": 5.5,
+      "nominalDepth": 10.5,
+      "depth": 10.5,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 530.5781,
+        "sx": 101.0625,
+        "zx": 151.5938,
+        "rx": 3.0311
+      },
+      "weakAxis": {
+        "ix": 145.5781,
+        "sx": 52.9375,
+        "zx": 79.4062,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x12 GL-W",
+      "designation": "5.5x12 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 66.0,
+      "nominalWidth": 5.5,
+      "nominalDepth": 12.0,
+      "depth": 12.0,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 792.0,
+        "sx": 132.0,
+        "zx": 198.0,
+        "rx": 3.4641
+      },
+      "weakAxis": {
+        "ix": 166.375,
+        "sx": 60.5,
+        "zx": 90.75,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x13.5 GL-W",
+      "designation": "5.5x13.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 74.25,
+      "nominalWidth": 5.5,
+      "nominalDepth": 13.5,
+      "depth": 13.5,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 1127.6719,
+        "sx": 167.0625,
+        "zx": 250.5938,
+        "rx": 3.8971
+      },
+      "weakAxis": {
+        "ix": 187.1719,
+        "sx": 68.0625,
+        "zx": 102.0938,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x15 GL-W",
+      "designation": "5.5x15 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 82.5,
+      "nominalWidth": 5.5,
+      "nominalDepth": 15.0,
+      "depth": 15.0,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 1546.875,
+        "sx": 206.25,
+        "zx": 309.375,
+        "rx": 4.3301
+      },
+      "weakAxis": {
+        "ix": 207.9688,
+        "sx": 75.625,
+        "zx": 113.4375,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x16.5 GL-W",
+      "designation": "5.5x16.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 90.75,
+      "nominalWidth": 5.5,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 2058.8906,
+        "sx": 249.5625,
+        "zx": 374.3438,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 228.7656,
+        "sx": 83.1875,
+        "zx": 124.7812,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x18 GL-W",
+      "designation": "5.5x18 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 99.0,
+      "nominalWidth": 5.5,
+      "nominalDepth": 18.0,
+      "depth": 18.0,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 2673.0,
+        "sx": 297.0,
+        "zx": 445.5,
+        "rx": 5.1962
+      },
+      "weakAxis": {
+        "ix": 249.5625,
+        "sx": 90.75,
+        "zx": 136.125,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x19.5 GL-W",
+      "designation": "5.5x19.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 107.25,
+      "nominalWidth": 5.5,
+      "nominalDepth": 19.5,
+      "depth": 19.5,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 3398.4844,
+        "sx": 348.5625,
+        "zx": 522.8438,
+        "rx": 5.6292
+      },
+      "weakAxis": {
+        "ix": 270.3594,
+        "sx": 98.3125,
+        "zx": 147.4688,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x21 GL-W",
+      "designation": "5.5x21 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 115.5,
+      "nominalWidth": 5.5,
+      "nominalDepth": 21.0,
+      "depth": 21.0,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 4244.625,
+        "sx": 404.25,
+        "zx": 606.375,
+        "rx": 6.0622
+      },
+      "weakAxis": {
+        "ix": 291.1562,
+        "sx": 105.875,
+        "zx": 158.8125,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x22.5 GL-W",
+      "designation": "5.5x22.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 123.75,
+      "nominalWidth": 5.5,
+      "nominalDepth": 22.5,
+      "depth": 22.5,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 5220.7031,
+        "sx": 464.0625,
+        "zx": 696.0938,
+        "rx": 6.4952
+      },
+      "weakAxis": {
+        "ix": 311.9531,
+        "sx": 113.4375,
+        "zx": 170.1562,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x24 GL-W",
+      "designation": "5.5x24 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 132.0,
+      "nominalWidth": 5.5,
+      "nominalDepth": 24.0,
+      "depth": 24.0,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 6336.0,
+        "sx": 528.0,
+        "zx": 792.0,
+        "rx": 6.9282
+      },
+      "weakAxis": {
+        "ix": 332.75,
+        "sx": 121.0,
+        "zx": 181.5,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "6.75x6 GL-W",
+      "designation": "6.75x6 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 40.5,
+      "nominalWidth": 6.75,
+      "nominalDepth": 6.0,
+      "depth": 6.0,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 121.5,
+        "sx": 40.5,
+        "zx": 60.75,
+        "rx": 1.7321
+      },
+      "weakAxis": {
+        "ix": 153.7734,
+        "sx": 45.5625,
+        "zx": 68.3438,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x7.5 GL-W",
+      "designation": "6.75x7.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 50.625,
+      "nominalWidth": 6.75,
+      "nominalDepth": 7.5,
+      "depth": 7.5,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 237.3047,
+        "sx": 63.2812,
+        "zx": 94.9219,
+        "rx": 2.1651
+      },
+      "weakAxis": {
+        "ix": 192.2168,
+        "sx": 56.9531,
+        "zx": 85.4297,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x9 GL-W",
+      "designation": "6.75x9 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 60.75,
+      "nominalWidth": 6.75,
+      "nominalDepth": 9.0,
+      "depth": 9.0,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 410.0625,
+        "sx": 91.125,
+        "zx": 136.6875,
+        "rx": 2.5981
+      },
+      "weakAxis": {
+        "ix": 230.6602,
+        "sx": 68.3438,
+        "zx": 102.5156,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x10.5 GL-W",
+      "designation": "6.75x10.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 70.875,
+      "nominalWidth": 6.75,
+      "nominalDepth": 10.5,
+      "depth": 10.5,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 651.1641,
+        "sx": 124.0312,
+        "zx": 186.0469,
+        "rx": 3.0311
+      },
+      "weakAxis": {
+        "ix": 269.1035,
+        "sx": 79.7344,
+        "zx": 119.6016,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x12 GL-W",
+      "designation": "6.75x12 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 81.0,
+      "nominalWidth": 6.75,
+      "nominalDepth": 12.0,
+      "depth": 12.0,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 972.0,
+        "sx": 162.0,
+        "zx": 243.0,
+        "rx": 3.4641
+      },
+      "weakAxis": {
+        "ix": 307.5469,
+        "sx": 91.125,
+        "zx": 136.6875,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x13.5 GL-W",
+      "designation": "6.75x13.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 91.125,
+      "nominalWidth": 6.75,
+      "nominalDepth": 13.5,
+      "depth": 13.5,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 1383.9609,
+        "sx": 205.0312,
+        "zx": 307.5469,
+        "rx": 3.8971
+      },
+      "weakAxis": {
+        "ix": 345.9902,
+        "sx": 102.5156,
+        "zx": 153.7734,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x15 GL-W",
+      "designation": "6.75x15 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 101.25,
+      "nominalWidth": 6.75,
+      "nominalDepth": 15.0,
+      "depth": 15.0,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 1898.4375,
+        "sx": 253.125,
+        "zx": 379.6875,
+        "rx": 4.3301
+      },
+      "weakAxis": {
+        "ix": 384.4336,
+        "sx": 113.9062,
+        "zx": 170.8594,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x16.5 GL-W",
+      "designation": "6.75x16.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 111.375,
+      "nominalWidth": 6.75,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 2526.8203,
+        "sx": 306.2812,
+        "zx": 459.4219,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 422.877,
+        "sx": 125.2969,
+        "zx": 187.9453,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x18 GL-W",
+      "designation": "6.75x18 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 121.5,
+      "nominalWidth": 6.75,
+      "nominalDepth": 18.0,
+      "depth": 18.0,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 3280.5,
+        "sx": 364.5,
+        "zx": 546.75,
+        "rx": 5.1962
+      },
+      "weakAxis": {
+        "ix": 461.3203,
+        "sx": 136.6875,
+        "zx": 205.0312,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x19.5 GL-W",
+      "designation": "6.75x19.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 131.625,
+      "nominalWidth": 6.75,
+      "nominalDepth": 19.5,
+      "depth": 19.5,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 4170.8672,
+        "sx": 427.7812,
+        "zx": 641.6719,
+        "rx": 5.6292
+      },
+      "weakAxis": {
+        "ix": 499.7637,
+        "sx": 148.0781,
+        "zx": 222.1172,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x21 GL-W",
+      "designation": "6.75x21 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 141.75,
+      "nominalWidth": 6.75,
+      "nominalDepth": 21.0,
+      "depth": 21.0,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 5209.3125,
+        "sx": 496.125,
+        "zx": 744.1875,
+        "rx": 6.0622
+      },
+      "weakAxis": {
+        "ix": 538.207,
+        "sx": 159.4688,
+        "zx": 239.2031,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x22.5 GL-W",
+      "designation": "6.75x22.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 151.875,
+      "nominalWidth": 6.75,
+      "nominalDepth": 22.5,
+      "depth": 22.5,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 6407.2266,
+        "sx": 569.5312,
+        "zx": 854.2969,
+        "rx": 6.4952
+      },
+      "weakAxis": {
+        "ix": 576.6504,
+        "sx": 170.8594,
+        "zx": 256.2891,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x24 GL-W",
+      "designation": "6.75x24 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 162.0,
+      "nominalWidth": 6.75,
+      "nominalDepth": 24.0,
+      "depth": 24.0,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 7776.0,
+        "sx": 648.0,
+        "zx": 972.0,
+        "rx": 6.9282
+      },
+      "weakAxis": {
+        "ix": 615.0938,
+        "sx": 182.25,
+        "zx": 273.375,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "8.75x6 GL-W",
+      "designation": "8.75x6 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 52.5,
+      "nominalWidth": 8.75,
+      "nominalDepth": 6.0,
+      "depth": 6.0,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 157.5,
+        "sx": 52.5,
+        "zx": 78.75,
+        "rx": 1.7321
+      },
+      "weakAxis": {
+        "ix": 334.9609,
+        "sx": 76.5625,
+        "zx": 114.8438,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "8.75x7.5 GL-W",
+      "designation": "8.75x7.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 65.625,
+      "nominalWidth": 8.75,
+      "nominalDepth": 7.5,
+      "depth": 7.5,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 307.6172,
+        "sx": 82.0312,
+        "zx": 123.0469,
+        "rx": 2.1651
+      },
+      "weakAxis": {
+        "ix": 418.7012,
+        "sx": 95.7031,
+        "zx": 143.5547,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "8.75x9 GL-W",
+      "designation": "8.75x9 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 78.75,
+      "nominalWidth": 8.75,
+      "nominalDepth": 9.0,
+      "depth": 9.0,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 531.5625,
+        "sx": 118.125,
+        "zx": 177.1875,
+        "rx": 2.5981
+      },
+      "weakAxis": {
+        "ix": 502.4414,
+        "sx": 114.8438,
+        "zx": 172.2656,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "8.75x10.5 GL-W",
+      "designation": "8.75x10.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 91.875,
+      "nominalWidth": 8.75,
+      "nominalDepth": 10.5,
+      "depth": 10.5,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 844.1016,
+        "sx": 160.7812,
+        "zx": 241.1719,
+        "rx": 3.0311
+      },
+      "weakAxis": {
+        "ix": 586.1816,
+        "sx": 133.9844,
+        "zx": 200.9766,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "8.75x12 GL-W",
+      "designation": "8.75x12 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 105.0,
+      "nominalWidth": 8.75,
+      "nominalDepth": 12.0,
+      "depth": 12.0,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 1260.0,
+        "sx": 210.0,
+        "zx": 315.0,
+        "rx": 3.4641
+      },
+      "weakAxis": {
+        "ix": 669.9219,
+        "sx": 153.125,
+        "zx": 229.6875,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "8.75x13.5 GL-W",
+      "designation": "8.75x13.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 118.125,
+      "nominalWidth": 8.75,
+      "nominalDepth": 13.5,
+      "depth": 13.5,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 1794.0234,
+        "sx": 265.7812,
+        "zx": 398.6719,
+        "rx": 3.8971
+      },
+      "weakAxis": {
+        "ix": 753.6621,
+        "sx": 172.2656,
+        "zx": 258.3984,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "8.75x15 GL-W",
+      "designation": "8.75x15 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 131.25,
+      "nominalWidth": 8.75,
+      "nominalDepth": 15.0,
+      "depth": 15.0,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 2460.9375,
+        "sx": 328.125,
+        "zx": 492.1875,
+        "rx": 4.3301
+      },
+      "weakAxis": {
+        "ix": 837.4023,
+        "sx": 191.4062,
+        "zx": 287.1094,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "8.75x16.5 GL-W",
+      "designation": "8.75x16.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 144.375,
+      "nominalWidth": 8.75,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 3275.5078,
+        "sx": 397.0312,
+        "zx": 595.5469,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 921.1426,
+        "sx": 210.5469,
+        "zx": 315.8203,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "8.75x18 GL-W",
+      "designation": "8.75x18 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 157.5,
+      "nominalWidth": 8.75,
+      "nominalDepth": 18.0,
+      "depth": 18.0,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 4252.5,
+        "sx": 472.5,
+        "zx": 708.75,
+        "rx": 5.1962
+      },
+      "weakAxis": {
+        "ix": 1004.8828,
+        "sx": 229.6875,
+        "zx": 344.5312,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "8.75x19.5 GL-W",
+      "designation": "8.75x19.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 170.625,
+      "nominalWidth": 8.75,
+      "nominalDepth": 19.5,
+      "depth": 19.5,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 5406.6797,
+        "sx": 554.5312,
+        "zx": 831.7969,
+        "rx": 5.6292
+      },
+      "weakAxis": {
+        "ix": 1088.623,
+        "sx": 248.8281,
+        "zx": 373.2422,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "8.75x21 GL-W",
+      "designation": "8.75x21 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 183.75,
+      "nominalWidth": 8.75,
+      "nominalDepth": 21.0,
+      "depth": 21.0,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 6752.8125,
+        "sx": 643.125,
+        "zx": 964.6875,
+        "rx": 6.0622
+      },
+      "weakAxis": {
+        "ix": 1172.3633,
+        "sx": 267.9688,
+        "zx": 401.9531,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "8.75x22.5 GL-W",
+      "designation": "8.75x22.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 196.875,
+      "nominalWidth": 8.75,
+      "nominalDepth": 22.5,
+      "depth": 22.5,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 8305.6641,
+        "sx": 738.2812,
+        "zx": 1107.4219,
+        "rx": 6.4952
+      },
+      "weakAxis": {
+        "ix": 1256.1035,
+        "sx": 287.1094,
+        "zx": 430.6641,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "8.75x24 GL-W",
+      "designation": "8.75x24 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 210.0,
+      "nominalWidth": 8.75,
+      "nominalDepth": 24.0,
+      "depth": 24.0,
+      "width": 8.75,
+      "strongAxis": {
+        "ix": 10080.0,
+        "sx": 840.0,
+        "zx": 1260.0,
+        "rx": 6.9282
+      },
+      "weakAxis": {
+        "ix": 1339.8438,
+        "sx": 306.25,
+        "zx": 459.375,
+        "rx": 2.5259
+      }
+    },
+    {
+      "id": "10.75x6 GL-W",
+      "designation": "10.75x6 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 64.5,
+      "nominalWidth": 10.75,
+      "nominalDepth": 6.0,
+      "depth": 6.0,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 193.5,
+        "sx": 64.5,
+        "zx": 96.75,
+        "rx": 1.7321
+      },
+      "weakAxis": {
+        "ix": 621.1484,
+        "sx": 115.5625,
+        "zx": 173.3438,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "10.75x7.5 GL-W",
+      "designation": "10.75x7.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 80.625,
+      "nominalWidth": 10.75,
+      "nominalDepth": 7.5,
+      "depth": 7.5,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 377.9297,
+        "sx": 100.7812,
+        "zx": 151.1719,
+        "rx": 2.1651
+      },
+      "weakAxis": {
+        "ix": 776.4355,
+        "sx": 144.4531,
+        "zx": 216.6797,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "10.75x9 GL-W",
+      "designation": "10.75x9 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 96.75,
+      "nominalWidth": 10.75,
+      "nominalDepth": 9.0,
+      "depth": 9.0,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 653.0625,
+        "sx": 145.125,
+        "zx": 217.6875,
+        "rx": 2.5981
+      },
+      "weakAxis": {
+        "ix": 931.7227,
+        "sx": 173.3438,
+        "zx": 260.0156,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "10.75x10.5 GL-W",
+      "designation": "10.75x10.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 112.875,
+      "nominalWidth": 10.75,
+      "nominalDepth": 10.5,
+      "depth": 10.5,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 1037.0391,
+        "sx": 197.5312,
+        "zx": 296.2969,
+        "rx": 3.0311
+      },
+      "weakAxis": {
+        "ix": 1087.0098,
+        "sx": 202.2344,
+        "zx": 303.3516,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "10.75x12 GL-W",
+      "designation": "10.75x12 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 129.0,
+      "nominalWidth": 10.75,
+      "nominalDepth": 12.0,
+      "depth": 12.0,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 1548.0,
+        "sx": 258.0,
+        "zx": 387.0,
+        "rx": 3.4641
+      },
+      "weakAxis": {
+        "ix": 1242.2969,
+        "sx": 231.125,
+        "zx": 346.6875,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "10.75x13.5 GL-W",
+      "designation": "10.75x13.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 145.125,
+      "nominalWidth": 10.75,
+      "nominalDepth": 13.5,
+      "depth": 13.5,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 2204.0859,
+        "sx": 326.5312,
+        "zx": 489.7969,
+        "rx": 3.8971
+      },
+      "weakAxis": {
+        "ix": 1397.584,
+        "sx": 260.0156,
+        "zx": 390.0234,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "10.75x15 GL-W",
+      "designation": "10.75x15 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 161.25,
+      "nominalWidth": 10.75,
+      "nominalDepth": 15.0,
+      "depth": 15.0,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 3023.4375,
+        "sx": 403.125,
+        "zx": 604.6875,
+        "rx": 4.3301
+      },
+      "weakAxis": {
+        "ix": 1552.8711,
+        "sx": 288.9062,
+        "zx": 433.3594,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "10.75x16.5 GL-W",
+      "designation": "10.75x16.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 177.375,
+      "nominalWidth": 10.75,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 4024.1953,
+        "sx": 487.7812,
+        "zx": 731.6719,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 1708.1582,
+        "sx": 317.7969,
+        "zx": 476.6953,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "10.75x18 GL-W",
+      "designation": "10.75x18 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 193.5,
+      "nominalWidth": 10.75,
+      "nominalDepth": 18.0,
+      "depth": 18.0,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 5224.5,
+        "sx": 580.5,
+        "zx": 870.75,
+        "rx": 5.1962
+      },
+      "weakAxis": {
+        "ix": 1863.4453,
+        "sx": 346.6875,
+        "zx": 520.0312,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "10.75x19.5 GL-W",
+      "designation": "10.75x19.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 209.625,
+      "nominalWidth": 10.75,
+      "nominalDepth": 19.5,
+      "depth": 19.5,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 6642.4922,
+        "sx": 681.2812,
+        "zx": 1021.9219,
+        "rx": 5.6292
+      },
+      "weakAxis": {
+        "ix": 2018.7324,
+        "sx": 375.5781,
+        "zx": 563.3672,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "10.75x21 GL-W",
+      "designation": "10.75x21 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 225.75,
+      "nominalWidth": 10.75,
+      "nominalDepth": 21.0,
+      "depth": 21.0,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 8296.3125,
+        "sx": 790.125,
+        "zx": 1185.1875,
+        "rx": 6.0622
+      },
+      "weakAxis": {
+        "ix": 2174.0195,
+        "sx": 404.4688,
+        "zx": 606.7031,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "10.75x22.5 GL-W",
+      "designation": "10.75x22.5 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 241.875,
+      "nominalWidth": 10.75,
+      "nominalDepth": 22.5,
+      "depth": 22.5,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 10204.1016,
+        "sx": 907.0312,
+        "zx": 1360.5469,
+        "rx": 6.4952
+      },
+      "weakAxis": {
+        "ix": 2329.3066,
+        "sx": 433.3594,
+        "zx": 650.0391,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "10.75x24 GL-W",
+      "designation": "10.75x24 GL-W",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_WESTERN",
+      "area": 258.0,
+      "nominalWidth": 10.75,
+      "nominalDepth": 24.0,
+      "depth": 24.0,
+      "width": 10.75,
+      "strongAxis": {
+        "ix": 12384.0,
+        "sx": 1032.0,
+        "zx": 1548.0,
+        "rx": 6.9282
+      },
+      "weakAxis": {
+        "ix": 2484.5938,
+        "sx": 462.25,
+        "zx": 693.375,
+        "rx": 3.1033
+      }
+    },
+    {
+      "id": "2.5x5.5 GL-SP",
+      "designation": "2.5x5.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 13.75,
+      "nominalWidth": 2.5,
+      "nominalDepth": 5.5,
+      "depth": 5.5,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 34.6615,
+        "sx": 12.6042,
+        "zx": 18.9062,
+        "rx": 1.5877
+      },
+      "weakAxis": {
+        "ix": 7.1615,
+        "sx": 5.7292,
+        "zx": 8.5938,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x6.875 GL-SP",
+      "designation": "2.5x6.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 17.1875,
+      "nominalWidth": 2.5,
+      "nominalDepth": 6.875,
+      "depth": 6.875,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 67.6982,
+        "sx": 19.694,
+        "zx": 29.541,
+        "rx": 1.9846
+      },
+      "weakAxis": {
+        "ix": 8.9518,
+        "sx": 7.1615,
+        "zx": 10.7422,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x8.25 GL-SP",
+      "designation": "2.5x8.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 20.625,
+      "nominalWidth": 2.5,
+      "nominalDepth": 8.25,
+      "depth": 8.25,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 116.9824,
+        "sx": 28.3594,
+        "zx": 42.5391,
+        "rx": 2.3816
+      },
+      "weakAxis": {
+        "ix": 10.7422,
+        "sx": 8.5938,
+        "zx": 12.8906,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x9.625 GL-SP",
+      "designation": "2.5x9.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 24.0625,
+      "nominalWidth": 2.5,
+      "nominalDepth": 9.625,
+      "depth": 9.625,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 185.7638,
+        "sx": 38.6003,
+        "zx": 57.9004,
+        "rx": 2.7785
+      },
+      "weakAxis": {
+        "ix": 12.5326,
+        "sx": 10.026,
+        "zx": 15.0391,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x11 GL-SP",
+      "designation": "2.5x11 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 27.5,
+      "nominalWidth": 2.5,
+      "nominalDepth": 11.0,
+      "depth": 11.0,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 277.2917,
+        "sx": 50.4167,
+        "zx": 75.625,
+        "rx": 3.1754
+      },
+      "weakAxis": {
+        "ix": 14.3229,
+        "sx": 11.4583,
+        "zx": 17.1875,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x12.375 GL-SP",
+      "designation": "2.5x12.375 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 30.9375,
+      "nominalWidth": 2.5,
+      "nominalDepth": 12.375,
+      "depth": 12.375,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 394.8157,
+        "sx": 63.8086,
+        "zx": 95.7129,
+        "rx": 3.5724
+      },
+      "weakAxis": {
+        "ix": 16.1133,
+        "sx": 12.8906,
+        "zx": 19.3359,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x13.75 GL-SP",
+      "designation": "2.5x13.75 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 34.375,
+      "nominalWidth": 2.5,
+      "nominalDepth": 13.75,
+      "depth": 13.75,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 541.5853,
+        "sx": 78.776,
+        "zx": 118.1641,
+        "rx": 3.9693
+      },
+      "weakAxis": {
+        "ix": 17.9036,
+        "sx": 14.3229,
+        "zx": 21.4844,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x15.125 GL-SP",
+      "designation": "2.5x15.125 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 37.8125,
+      "nominalWidth": 2.5,
+      "nominalDepth": 15.125,
+      "depth": 15.125,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 720.85,
+        "sx": 95.319,
+        "zx": 142.9785,
+        "rx": 4.3662
+      },
+      "weakAxis": {
+        "ix": 19.694,
+        "sx": 15.7552,
+        "zx": 23.6328,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x16.5 GL-SP",
+      "designation": "2.5x16.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 41.25,
+      "nominalWidth": 2.5,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 935.8594,
+        "sx": 113.4375,
+        "zx": 170.1562,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 21.4844,
+        "sx": 17.1875,
+        "zx": 25.7812,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x17.875 GL-SP",
+      "designation": "2.5x17.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 44.6875,
+      "nominalWidth": 2.5,
+      "nominalDepth": 17.875,
+      "depth": 17.875,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 1189.8629,
+        "sx": 133.1315,
+        "zx": 199.6973,
+        "rx": 5.1601
+      },
+      "weakAxis": {
+        "ix": 23.2747,
+        "sx": 18.6198,
+        "zx": 27.9297,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x19.25 GL-SP",
+      "designation": "2.5x19.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 48.125,
+      "nominalWidth": 2.5,
+      "nominalDepth": 19.25,
+      "depth": 19.25,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 1486.11,
+        "sx": 154.401,
+        "zx": 231.6016,
+        "rx": 5.557
+      },
+      "weakAxis": {
+        "ix": 25.0651,
+        "sx": 20.0521,
+        "zx": 30.0781,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x20.625 GL-SP",
+      "designation": "2.5x20.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 51.5625,
+      "nominalWidth": 2.5,
+      "nominalDepth": 20.625,
+      "depth": 20.625,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 1827.8503,
+        "sx": 177.2461,
+        "zx": 265.8691,
+        "rx": 5.9539
+      },
+      "weakAxis": {
+        "ix": 26.8555,
+        "sx": 21.4844,
+        "zx": 32.2266,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "2.5x22 GL-SP",
+      "designation": "2.5x22 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 55.0,
+      "nominalWidth": 2.5,
+      "nominalDepth": 22.0,
+      "depth": 22.0,
+      "width": 2.5,
+      "strongAxis": {
+        "ix": 2218.3333,
+        "sx": 201.6667,
+        "zx": 302.5,
+        "rx": 6.3509
+      },
+      "weakAxis": {
+        "ix": 28.6458,
+        "sx": 22.9167,
+        "zx": 34.375,
+        "rx": 0.7217
+      }
+    },
+    {
+      "id": "3x5.5 GL-SP",
+      "designation": "3x5.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 16.5,
+      "nominalWidth": 3,
+      "nominalDepth": 5.5,
+      "depth": 5.5,
+      "width": 3,
+      "strongAxis": {
+        "ix": 41.5938,
+        "sx": 15.125,
+        "zx": 22.6875,
+        "rx": 1.5877
+      },
+      "weakAxis": {
+        "ix": 12.375,
+        "sx": 8.25,
+        "zx": 12.375,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3x6.875 GL-SP",
+      "designation": "3x6.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 20.625,
+      "nominalWidth": 3,
+      "nominalDepth": 6.875,
+      "depth": 6.875,
+      "width": 3,
+      "strongAxis": {
+        "ix": 81.2378,
+        "sx": 23.6328,
+        "zx": 35.4492,
+        "rx": 1.9846
+      },
+      "weakAxis": {
+        "ix": 15.4688,
+        "sx": 10.3125,
+        "zx": 15.4688,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3x8.25 GL-SP",
+      "designation": "3x8.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 24.75,
+      "nominalWidth": 3,
+      "nominalDepth": 8.25,
+      "depth": 8.25,
+      "width": 3,
+      "strongAxis": {
+        "ix": 140.3789,
+        "sx": 34.0312,
+        "zx": 51.0469,
+        "rx": 2.3816
+      },
+      "weakAxis": {
+        "ix": 18.5625,
+        "sx": 12.375,
+        "zx": 18.5625,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3x9.625 GL-SP",
+      "designation": "3x9.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 28.875,
+      "nominalWidth": 3,
+      "nominalDepth": 9.625,
+      "depth": 9.625,
+      "width": 3,
+      "strongAxis": {
+        "ix": 222.9165,
+        "sx": 46.3203,
+        "zx": 69.4805,
+        "rx": 2.7785
+      },
+      "weakAxis": {
+        "ix": 21.6562,
+        "sx": 14.4375,
+        "zx": 21.6562,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3x11 GL-SP",
+      "designation": "3x11 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 33.0,
+      "nominalWidth": 3,
+      "nominalDepth": 11.0,
+      "depth": 11.0,
+      "width": 3,
+      "strongAxis": {
+        "ix": 332.75,
+        "sx": 60.5,
+        "zx": 90.75,
+        "rx": 3.1754
+      },
+      "weakAxis": {
+        "ix": 24.75,
+        "sx": 16.5,
+        "zx": 24.75,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3x12.375 GL-SP",
+      "designation": "3x12.375 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 37.125,
+      "nominalWidth": 3,
+      "nominalDepth": 12.375,
+      "depth": 12.375,
+      "width": 3,
+      "strongAxis": {
+        "ix": 473.7788,
+        "sx": 76.5703,
+        "zx": 114.8555,
+        "rx": 3.5724
+      },
+      "weakAxis": {
+        "ix": 27.8438,
+        "sx": 18.5625,
+        "zx": 27.8438,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3x13.75 GL-SP",
+      "designation": "3x13.75 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 41.25,
+      "nominalWidth": 3,
+      "nominalDepth": 13.75,
+      "depth": 13.75,
+      "width": 3,
+      "strongAxis": {
+        "ix": 649.9023,
+        "sx": 94.5312,
+        "zx": 141.7969,
+        "rx": 3.9693
+      },
+      "weakAxis": {
+        "ix": 30.9375,
+        "sx": 20.625,
+        "zx": 30.9375,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3x15.125 GL-SP",
+      "designation": "3x15.125 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 45.375,
+      "nominalWidth": 3,
+      "nominalDepth": 15.125,
+      "depth": 15.125,
+      "width": 3,
+      "strongAxis": {
+        "ix": 865.02,
+        "sx": 114.3828,
+        "zx": 171.5742,
+        "rx": 4.3662
+      },
+      "weakAxis": {
+        "ix": 34.0312,
+        "sx": 22.6875,
+        "zx": 34.0312,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3x16.5 GL-SP",
+      "designation": "3x16.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 49.5,
+      "nominalWidth": 3,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 3,
+      "strongAxis": {
+        "ix": 1123.0312,
+        "sx": 136.125,
+        "zx": 204.1875,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 37.125,
+        "sx": 24.75,
+        "zx": 37.125,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3x17.875 GL-SP",
+      "designation": "3x17.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 53.625,
+      "nominalWidth": 3,
+      "nominalDepth": 17.875,
+      "depth": 17.875,
+      "width": 3,
+      "strongAxis": {
+        "ix": 1427.8354,
+        "sx": 159.7578,
+        "zx": 239.6367,
+        "rx": 5.1601
+      },
+      "weakAxis": {
+        "ix": 40.2188,
+        "sx": 26.8125,
+        "zx": 40.2188,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3x19.25 GL-SP",
+      "designation": "3x19.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 57.75,
+      "nominalWidth": 3,
+      "nominalDepth": 19.25,
+      "depth": 19.25,
+      "width": 3,
+      "strongAxis": {
+        "ix": 1783.332,
+        "sx": 185.2812,
+        "zx": 277.9219,
+        "rx": 5.557
+      },
+      "weakAxis": {
+        "ix": 43.3125,
+        "sx": 28.875,
+        "zx": 43.3125,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3x20.625 GL-SP",
+      "designation": "3x20.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 61.875,
+      "nominalWidth": 3,
+      "nominalDepth": 20.625,
+      "depth": 20.625,
+      "width": 3,
+      "strongAxis": {
+        "ix": 2193.4204,
+        "sx": 212.6953,
+        "zx": 319.043,
+        "rx": 5.9539
+      },
+      "weakAxis": {
+        "ix": 46.4062,
+        "sx": 30.9375,
+        "zx": 46.4062,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3x22 GL-SP",
+      "designation": "3x22 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 66.0,
+      "nominalWidth": 3,
+      "nominalDepth": 22.0,
+      "depth": 22.0,
+      "width": 3,
+      "strongAxis": {
+        "ix": 2662.0,
+        "sx": 242.0,
+        "zx": 363.0,
+        "rx": 6.3509
+      },
+      "weakAxis": {
+        "ix": 49.5,
+        "sx": 33.0,
+        "zx": 49.5,
+        "rx": 0.866
+      }
+    },
+    {
+      "id": "3.125x5.5 GL-SP",
+      "designation": "3.125x5.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 17.1875,
+      "nominalWidth": 3.125,
+      "nominalDepth": 5.5,
+      "depth": 5.5,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 43.3268,
+        "sx": 15.7552,
+        "zx": 23.6328,
+        "rx": 1.5877
+      },
+      "weakAxis": {
+        "ix": 13.9872,
+        "sx": 8.9518,
+        "zx": 13.4277,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x6.875 GL-SP",
+      "designation": "3.125x6.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 21.4844,
+      "nominalWidth": 3.125,
+      "nominalDepth": 6.875,
+      "depth": 6.875,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 84.6227,
+        "sx": 24.6175,
+        "zx": 36.9263,
+        "rx": 1.9846
+      },
+      "weakAxis": {
+        "ix": 17.484,
+        "sx": 11.1898,
+        "zx": 16.7847,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x8.25 GL-SP",
+      "designation": "3.125x8.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 25.7812,
+      "nominalWidth": 3.125,
+      "nominalDepth": 8.25,
+      "depth": 8.25,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 146.228,
+        "sx": 35.4492,
+        "zx": 53.1738,
+        "rx": 2.3816
+      },
+      "weakAxis": {
+        "ix": 20.9808,
+        "sx": 13.4277,
+        "zx": 20.1416,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x9.625 GL-SP",
+      "designation": "3.125x9.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 30.0781,
+      "nominalWidth": 3.125,
+      "nominalDepth": 9.625,
+      "depth": 9.625,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 232.2047,
+        "sx": 48.2503,
+        "zx": 72.3755,
+        "rx": 2.7785
+      },
+      "weakAxis": {
+        "ix": 24.4776,
+        "sx": 15.6657,
+        "zx": 23.4985,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x11 GL-SP",
+      "designation": "3.125x11 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 34.375,
+      "nominalWidth": 3.125,
+      "nominalDepth": 11.0,
+      "depth": 11.0,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 346.6146,
+        "sx": 63.0208,
+        "zx": 94.5312,
+        "rx": 3.1754
+      },
+      "weakAxis": {
+        "ix": 27.9744,
+        "sx": 17.9036,
+        "zx": 26.8555,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x12.375 GL-SP",
+      "designation": "3.125x12.375 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 38.6719,
+      "nominalWidth": 3.125,
+      "nominalDepth": 12.375,
+      "depth": 12.375,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 493.5196,
+        "sx": 79.7607,
+        "zx": 119.6411,
+        "rx": 3.5724
+      },
+      "weakAxis": {
+        "ix": 31.4713,
+        "sx": 20.1416,
+        "zx": 30.2124,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x13.75 GL-SP",
+      "designation": "3.125x13.75 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 42.9688,
+      "nominalWidth": 3.125,
+      "nominalDepth": 13.75,
+      "depth": 13.75,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 676.9816,
+        "sx": 98.4701,
+        "zx": 147.7051,
+        "rx": 3.9693
+      },
+      "weakAxis": {
+        "ix": 34.9681,
+        "sx": 22.3796,
+        "zx": 33.5693,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x15.125 GL-SP",
+      "designation": "3.125x15.125 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 47.2656,
+      "nominalWidth": 3.125,
+      "nominalDepth": 15.125,
+      "depth": 15.125,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 901.0625,
+        "sx": 119.1488,
+        "zx": 178.7231,
+        "rx": 4.3662
+      },
+      "weakAxis": {
+        "ix": 38.4649,
+        "sx": 24.6175,
+        "zx": 36.9263,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x16.5 GL-SP",
+      "designation": "3.125x16.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 51.5625,
+      "nominalWidth": 3.125,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 1169.8242,
+        "sx": 141.7969,
+        "zx": 212.6953,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 41.9617,
+        "sx": 26.8555,
+        "zx": 40.2832,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x17.875 GL-SP",
+      "designation": "3.125x17.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 55.8594,
+      "nominalWidth": 3.125,
+      "nominalDepth": 17.875,
+      "depth": 17.875,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 1487.3286,
+        "sx": 166.4144,
+        "zx": 249.6216,
+        "rx": 5.1601
+      },
+      "weakAxis": {
+        "ix": 45.4585,
+        "sx": 29.0934,
+        "zx": 43.6401,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x19.25 GL-SP",
+      "designation": "3.125x19.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 60.1562,
+      "nominalWidth": 3.125,
+      "nominalDepth": 19.25,
+      "depth": 19.25,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 1857.6375,
+        "sx": 193.0013,
+        "zx": 289.502,
+        "rx": 5.557
+      },
+      "weakAxis": {
+        "ix": 48.9553,
+        "sx": 31.3314,
+        "zx": 46.9971,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x20.625 GL-SP",
+      "designation": "3.125x20.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 64.4531,
+      "nominalWidth": 3.125,
+      "nominalDepth": 20.625,
+      "depth": 20.625,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 2284.8129,
+        "sx": 221.5576,
+        "zx": 332.3364,
+        "rx": 5.9539
+      },
+      "weakAxis": {
+        "ix": 52.4521,
+        "sx": 33.5693,
+        "zx": 50.354,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.125x22 GL-SP",
+      "designation": "3.125x22 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 68.75,
+      "nominalWidth": 3.125,
+      "nominalDepth": 22.0,
+      "depth": 22.0,
+      "width": 3.125,
+      "strongAxis": {
+        "ix": 2772.9167,
+        "sx": 252.0833,
+        "zx": 378.125,
+        "rx": 6.3509
+      },
+      "weakAxis": {
+        "ix": 55.9489,
+        "sx": 35.8073,
+        "zx": 53.7109,
+        "rx": 0.9021
+      }
+    },
+    {
+      "id": "3.5x5.5 GL-SP",
+      "designation": "3.5x5.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 19.25,
+      "nominalWidth": 3.5,
+      "nominalDepth": 5.5,
+      "depth": 5.5,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 48.526,
+        "sx": 17.6458,
+        "zx": 26.4688,
+        "rx": 1.5877
+      },
+      "weakAxis": {
+        "ix": 19.651,
+        "sx": 11.2292,
+        "zx": 16.8438,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x6.875 GL-SP",
+      "designation": "3.5x6.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 24.0625,
+      "nominalWidth": 3.5,
+      "nominalDepth": 6.875,
+      "depth": 6.875,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 94.7774,
+        "sx": 27.5716,
+        "zx": 41.3574,
+        "rx": 1.9846
+      },
+      "weakAxis": {
+        "ix": 24.5638,
+        "sx": 14.0365,
+        "zx": 21.0547,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x8.25 GL-SP",
+      "designation": "3.5x8.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 28.875,
+      "nominalWidth": 3.5,
+      "nominalDepth": 8.25,
+      "depth": 8.25,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 163.7754,
+        "sx": 39.7031,
+        "zx": 59.5547,
+        "rx": 2.3816
+      },
+      "weakAxis": {
+        "ix": 29.4766,
+        "sx": 16.8438,
+        "zx": 25.2656,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x9.625 GL-SP",
+      "designation": "3.5x9.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 33.6875,
+      "nominalWidth": 3.5,
+      "nominalDepth": 9.625,
+      "depth": 9.625,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 260.0693,
+        "sx": 54.0404,
+        "zx": 81.0605,
+        "rx": 2.7785
+      },
+      "weakAxis": {
+        "ix": 34.3893,
+        "sx": 19.651,
+        "zx": 29.4766,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x11 GL-SP",
+      "designation": "3.5x11 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 38.5,
+      "nominalWidth": 3.5,
+      "nominalDepth": 11.0,
+      "depth": 11.0,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 388.2083,
+        "sx": 70.5833,
+        "zx": 105.875,
+        "rx": 3.1754
+      },
+      "weakAxis": {
+        "ix": 39.3021,
+        "sx": 22.4583,
+        "zx": 33.6875,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x12.375 GL-SP",
+      "designation": "3.5x12.375 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 43.3125,
+      "nominalWidth": 3.5,
+      "nominalDepth": 12.375,
+      "depth": 12.375,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 552.7419,
+        "sx": 89.332,
+        "zx": 133.998,
+        "rx": 3.5724
+      },
+      "weakAxis": {
+        "ix": 44.2148,
+        "sx": 25.2656,
+        "zx": 37.8984,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x13.75 GL-SP",
+      "designation": "3.5x13.75 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 48.125,
+      "nominalWidth": 3.5,
+      "nominalDepth": 13.75,
+      "depth": 13.75,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 758.2194,
+        "sx": 110.2865,
+        "zx": 165.4297,
+        "rx": 3.9693
+      },
+      "weakAxis": {
+        "ix": 49.1276,
+        "sx": 28.0729,
+        "zx": 42.1094,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x15.125 GL-SP",
+      "designation": "3.5x15.125 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 52.9375,
+      "nominalWidth": 3.5,
+      "nominalDepth": 15.125,
+      "depth": 15.125,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 1009.19,
+        "sx": 133.4466,
+        "zx": 200.1699,
+        "rx": 4.3662
+      },
+      "weakAxis": {
+        "ix": 54.0404,
+        "sx": 30.8802,
+        "zx": 46.3203,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x16.5 GL-SP",
+      "designation": "3.5x16.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 57.75,
+      "nominalWidth": 3.5,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 1310.2031,
+        "sx": 158.8125,
+        "zx": 238.2188,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 58.9531,
+        "sx": 33.6875,
+        "zx": 50.5312,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x17.875 GL-SP",
+      "designation": "3.5x17.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 62.5625,
+      "nominalWidth": 3.5,
+      "nominalDepth": 17.875,
+      "depth": 17.875,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 1665.808,
+        "sx": 186.3841,
+        "zx": 279.5762,
+        "rx": 5.1601
+      },
+      "weakAxis": {
+        "ix": 63.8659,
+        "sx": 36.4948,
+        "zx": 54.7422,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x19.25 GL-SP",
+      "designation": "3.5x19.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 67.375,
+      "nominalWidth": 3.5,
+      "nominalDepth": 19.25,
+      "depth": 19.25,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 2080.554,
+        "sx": 216.1615,
+        "zx": 324.2422,
+        "rx": 5.557
+      },
+      "weakAxis": {
+        "ix": 68.7786,
+        "sx": 39.3021,
+        "zx": 58.9531,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x20.625 GL-SP",
+      "designation": "3.5x20.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 72.1875,
+      "nominalWidth": 3.5,
+      "nominalDepth": 20.625,
+      "depth": 20.625,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 2558.9905,
+        "sx": 248.1445,
+        "zx": 372.2168,
+        "rx": 5.9539
+      },
+      "weakAxis": {
+        "ix": 73.6914,
+        "sx": 42.1094,
+        "zx": 63.1641,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "3.5x22 GL-SP",
+      "designation": "3.5x22 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 77.0,
+      "nominalWidth": 3.5,
+      "nominalDepth": 22.0,
+      "depth": 22.0,
+      "width": 3.5,
+      "strongAxis": {
+        "ix": 3105.6667,
+        "sx": 282.3333,
+        "zx": 423.5,
+        "rx": 6.3509
+      },
+      "weakAxis": {
+        "ix": 78.6042,
+        "sx": 44.9167,
+        "zx": 67.375,
+        "rx": 1.0104
+      }
+    },
+    {
+      "id": "5x5.5 GL-SP",
+      "designation": "5x5.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 27.5,
+      "nominalWidth": 5,
+      "nominalDepth": 5.5,
+      "depth": 5.5,
+      "width": 5,
+      "strongAxis": {
+        "ix": 69.3229,
+        "sx": 25.2083,
+        "zx": 37.8125,
+        "rx": 1.5877
+      },
+      "weakAxis": {
+        "ix": 57.2917,
+        "sx": 22.9167,
+        "zx": 34.375,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5x6.875 GL-SP",
+      "designation": "5x6.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 34.375,
+      "nominalWidth": 5,
+      "nominalDepth": 6.875,
+      "depth": 6.875,
+      "width": 5,
+      "strongAxis": {
+        "ix": 135.3963,
+        "sx": 39.388,
+        "zx": 59.082,
+        "rx": 1.9846
+      },
+      "weakAxis": {
+        "ix": 71.6146,
+        "sx": 28.6458,
+        "zx": 42.9688,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5x8.25 GL-SP",
+      "designation": "5x8.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 41.25,
+      "nominalWidth": 5,
+      "nominalDepth": 8.25,
+      "depth": 8.25,
+      "width": 5,
+      "strongAxis": {
+        "ix": 233.9648,
+        "sx": 56.7188,
+        "zx": 85.0781,
+        "rx": 2.3816
+      },
+      "weakAxis": {
+        "ix": 85.9375,
+        "sx": 34.375,
+        "zx": 51.5625,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5x9.625 GL-SP",
+      "designation": "5x9.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 48.125,
+      "nominalWidth": 5,
+      "nominalDepth": 9.625,
+      "depth": 9.625,
+      "width": 5,
+      "strongAxis": {
+        "ix": 371.5275,
+        "sx": 77.2005,
+        "zx": 115.8008,
+        "rx": 2.7785
+      },
+      "weakAxis": {
+        "ix": 100.2604,
+        "sx": 40.1042,
+        "zx": 60.1562,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5x11 GL-SP",
+      "designation": "5x11 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 55.0,
+      "nominalWidth": 5,
+      "nominalDepth": 11.0,
+      "depth": 11.0,
+      "width": 5,
+      "strongAxis": {
+        "ix": 554.5833,
+        "sx": 100.8333,
+        "zx": 151.25,
+        "rx": 3.1754
+      },
+      "weakAxis": {
+        "ix": 114.5833,
+        "sx": 45.8333,
+        "zx": 68.75,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5x12.375 GL-SP",
+      "designation": "5x12.375 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 61.875,
+      "nominalWidth": 5,
+      "nominalDepth": 12.375,
+      "depth": 12.375,
+      "width": 5,
+      "strongAxis": {
+        "ix": 789.6313,
+        "sx": 127.6172,
+        "zx": 191.4258,
+        "rx": 3.5724
+      },
+      "weakAxis": {
+        "ix": 128.9062,
+        "sx": 51.5625,
+        "zx": 77.3438,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5x13.75 GL-SP",
+      "designation": "5x13.75 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 68.75,
+      "nominalWidth": 5,
+      "nominalDepth": 13.75,
+      "depth": 13.75,
+      "width": 5,
+      "strongAxis": {
+        "ix": 1083.1706,
+        "sx": 157.5521,
+        "zx": 236.3281,
+        "rx": 3.9693
+      },
+      "weakAxis": {
+        "ix": 143.2292,
+        "sx": 57.2917,
+        "zx": 85.9375,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5x15.125 GL-SP",
+      "designation": "5x15.125 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 75.625,
+      "nominalWidth": 5,
+      "nominalDepth": 15.125,
+      "depth": 15.125,
+      "width": 5,
+      "strongAxis": {
+        "ix": 1441.7,
+        "sx": 190.638,
+        "zx": 285.957,
+        "rx": 4.3662
+      },
+      "weakAxis": {
+        "ix": 157.5521,
+        "sx": 63.0208,
+        "zx": 94.5312,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5x16.5 GL-SP",
+      "designation": "5x16.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 82.5,
+      "nominalWidth": 5,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 5,
+      "strongAxis": {
+        "ix": 1871.7188,
+        "sx": 226.875,
+        "zx": 340.3125,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 171.875,
+        "sx": 68.75,
+        "zx": 103.125,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5x17.875 GL-SP",
+      "designation": "5x17.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 89.375,
+      "nominalWidth": 5,
+      "nominalDepth": 17.875,
+      "depth": 17.875,
+      "width": 5,
+      "strongAxis": {
+        "ix": 2379.7257,
+        "sx": 266.263,
+        "zx": 399.3945,
+        "rx": 5.1601
+      },
+      "weakAxis": {
+        "ix": 186.1979,
+        "sx": 74.4792,
+        "zx": 111.7188,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5x19.25 GL-SP",
+      "designation": "5x19.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 96.25,
+      "nominalWidth": 5,
+      "nominalDepth": 19.25,
+      "depth": 19.25,
+      "width": 5,
+      "strongAxis": {
+        "ix": 2972.2201,
+        "sx": 308.8021,
+        "zx": 463.2031,
+        "rx": 5.557
+      },
+      "weakAxis": {
+        "ix": 200.5208,
+        "sx": 80.2083,
+        "zx": 120.3125,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5x20.625 GL-SP",
+      "designation": "5x20.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 103.125,
+      "nominalWidth": 5,
+      "nominalDepth": 20.625,
+      "depth": 20.625,
+      "width": 5,
+      "strongAxis": {
+        "ix": 3655.7007,
+        "sx": 354.4922,
+        "zx": 531.7383,
+        "rx": 5.9539
+      },
+      "weakAxis": {
+        "ix": 214.8438,
+        "sx": 85.9375,
+        "zx": 128.9062,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5x22 GL-SP",
+      "designation": "5x22 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 110.0,
+      "nominalWidth": 5,
+      "nominalDepth": 22.0,
+      "depth": 22.0,
+      "width": 5,
+      "strongAxis": {
+        "ix": 4436.6667,
+        "sx": 403.3333,
+        "zx": 605.0,
+        "rx": 6.3509
+      },
+      "weakAxis": {
+        "ix": 229.1667,
+        "sx": 91.6667,
+        "zx": 137.5,
+        "rx": 1.4434
+      }
+    },
+    {
+      "id": "5.125x5.5 GL-SP",
+      "designation": "5.125x5.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 28.1875,
+      "nominalWidth": 5.125,
+      "nominalDepth": 5.5,
+      "depth": 5.5,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 71.056,
+        "sx": 25.8385,
+        "zx": 38.7578,
+        "rx": 1.5877
+      },
+      "weakAxis": {
+        "ix": 61.6969,
+        "sx": 24.0768,
+        "zx": 36.1152,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x6.875 GL-SP",
+      "designation": "5.125x6.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 35.2344,
+      "nominalWidth": 5.125,
+      "nominalDepth": 6.875,
+      "depth": 6.875,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 138.7812,
+        "sx": 40.3727,
+        "zx": 60.5591,
+        "rx": 1.9846
+      },
+      "weakAxis": {
+        "ix": 77.1211,
+        "sx": 30.096,
+        "zx": 45.144,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x8.25 GL-SP",
+      "designation": "5.125x8.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 42.2812,
+      "nominalWidth": 5.125,
+      "nominalDepth": 8.25,
+      "depth": 8.25,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 239.814,
+        "sx": 58.1367,
+        "zx": 87.2051,
+        "rx": 2.3816
+      },
+      "weakAxis": {
+        "ix": 92.5453,
+        "sx": 36.1152,
+        "zx": 54.1729,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x9.625 GL-SP",
+      "designation": "5.125x9.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 49.3281,
+      "nominalWidth": 5.125,
+      "nominalDepth": 9.625,
+      "depth": 9.625,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 380.8157,
+        "sx": 79.1305,
+        "zx": 118.6958,
+        "rx": 2.7785
+      },
+      "weakAxis": {
+        "ix": 107.9695,
+        "sx": 42.1344,
+        "zx": 63.2017,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x11 GL-SP",
+      "designation": "5.125x11 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 56.375,
+      "nominalWidth": 5.125,
+      "nominalDepth": 11.0,
+      "depth": 11.0,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 568.4479,
+        "sx": 103.3542,
+        "zx": 155.0312,
+        "rx": 3.1754
+      },
+      "weakAxis": {
+        "ix": 123.3937,
+        "sx": 48.1536,
+        "zx": 72.2305,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x12.375 GL-SP",
+      "designation": "5.125x12.375 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 63.4219,
+      "nominalWidth": 5.125,
+      "nominalDepth": 12.375,
+      "depth": 12.375,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 809.3721,
+        "sx": 130.8076,
+        "zx": 196.2114,
+        "rx": 3.5724
+      },
+      "weakAxis": {
+        "ix": 138.8179,
+        "sx": 54.1729,
+        "zx": 81.2593,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x13.75 GL-SP",
+      "designation": "5.125x13.75 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 70.4688,
+      "nominalWidth": 5.125,
+      "nominalDepth": 13.75,
+      "depth": 13.75,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 1110.2498,
+        "sx": 161.4909,
+        "zx": 242.2363,
+        "rx": 3.9693
+      },
+      "weakAxis": {
+        "ix": 154.2421,
+        "sx": 60.1921,
+        "zx": 90.2881,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x15.125 GL-SP",
+      "designation": "5.125x15.125 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 77.5156,
+      "nominalWidth": 5.125,
+      "nominalDepth": 15.125,
+      "depth": 15.125,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 1477.7425,
+        "sx": 195.404,
+        "zx": 293.106,
+        "rx": 4.3662
+      },
+      "weakAxis": {
+        "ix": 169.6664,
+        "sx": 66.2113,
+        "zx": 99.3169,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x16.5 GL-SP",
+      "designation": "5.125x16.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 84.5625,
+      "nominalWidth": 5.125,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 1918.5117,
+        "sx": 232.5469,
+        "zx": 348.8203,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 185.0906,
+        "sx": 72.2305,
+        "zx": 108.3457,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x17.875 GL-SP",
+      "designation": "5.125x17.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 91.6094,
+      "nominalWidth": 5.125,
+      "nominalDepth": 17.875,
+      "depth": 17.875,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 2439.2189,
+        "sx": 272.9196,
+        "zx": 409.3794,
+        "rx": 5.1601
+      },
+      "weakAxis": {
+        "ix": 200.5148,
+        "sx": 78.2497,
+        "zx": 117.3745,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x19.25 GL-SP",
+      "designation": "5.125x19.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 98.6562,
+      "nominalWidth": 5.125,
+      "nominalDepth": 19.25,
+      "depth": 19.25,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 3046.5256,
+        "sx": 316.5221,
+        "zx": 474.7832,
+        "rx": 5.557
+      },
+      "weakAxis": {
+        "ix": 215.939,
+        "sx": 84.2689,
+        "zx": 126.4033,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x20.625 GL-SP",
+      "designation": "5.125x20.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 105.7031,
+      "nominalWidth": 5.125,
+      "nominalDepth": 20.625,
+      "depth": 20.625,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 3747.0932,
+        "sx": 363.3545,
+        "zx": 545.0317,
+        "rx": 5.9539
+      },
+      "weakAxis": {
+        "ix": 231.3632,
+        "sx": 90.2881,
+        "zx": 135.4321,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.125x22 GL-SP",
+      "designation": "5.125x22 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 112.75,
+      "nominalWidth": 5.125,
+      "nominalDepth": 22.0,
+      "depth": 22.0,
+      "width": 5.125,
+      "strongAxis": {
+        "ix": 4547.5833,
+        "sx": 413.4167,
+        "zx": 620.125,
+        "rx": 6.3509
+      },
+      "weakAxis": {
+        "ix": 246.7874,
+        "sx": 96.3073,
+        "zx": 144.4609,
+        "rx": 1.4795
+      }
+    },
+    {
+      "id": "5.5x5.5 GL-SP",
+      "designation": "5.5x5.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 30.25,
+      "nominalWidth": 5.5,
+      "nominalDepth": 5.5,
+      "depth": 5.5,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 76.2552,
+        "sx": 27.7292,
+        "zx": 41.5938,
+        "rx": 1.5877
+      },
+      "weakAxis": {
+        "ix": 76.2552,
+        "sx": 27.7292,
+        "zx": 41.5938,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x6.875 GL-SP",
+      "designation": "5.5x6.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 37.8125,
+      "nominalWidth": 5.5,
+      "nominalDepth": 6.875,
+      "depth": 6.875,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 148.936,
+        "sx": 43.3268,
+        "zx": 64.9902,
+        "rx": 1.9846
+      },
+      "weakAxis": {
+        "ix": 95.319,
+        "sx": 34.6615,
+        "zx": 51.9922,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x8.25 GL-SP",
+      "designation": "5.5x8.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 45.375,
+      "nominalWidth": 5.5,
+      "nominalDepth": 8.25,
+      "depth": 8.25,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 257.3613,
+        "sx": 62.3906,
+        "zx": 93.5859,
+        "rx": 2.3816
+      },
+      "weakAxis": {
+        "ix": 114.3828,
+        "sx": 41.5938,
+        "zx": 62.3906,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x9.625 GL-SP",
+      "designation": "5.5x9.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 52.9375,
+      "nominalWidth": 5.5,
+      "nominalDepth": 9.625,
+      "depth": 9.625,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 408.6803,
+        "sx": 84.9206,
+        "zx": 127.3809,
+        "rx": 2.7785
+      },
+      "weakAxis": {
+        "ix": 133.4466,
+        "sx": 48.526,
+        "zx": 72.7891,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x11 GL-SP",
+      "designation": "5.5x11 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 60.5,
+      "nominalWidth": 5.5,
+      "nominalDepth": 11.0,
+      "depth": 11.0,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 610.0417,
+        "sx": 110.9167,
+        "zx": 166.375,
+        "rx": 3.1754
+      },
+      "weakAxis": {
+        "ix": 152.5104,
+        "sx": 55.4583,
+        "zx": 83.1875,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x12.375 GL-SP",
+      "designation": "5.5x12.375 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 68.0625,
+      "nominalWidth": 5.5,
+      "nominalDepth": 12.375,
+      "depth": 12.375,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 868.5945,
+        "sx": 140.3789,
+        "zx": 210.5684,
+        "rx": 3.5724
+      },
+      "weakAxis": {
+        "ix": 171.5742,
+        "sx": 62.3906,
+        "zx": 93.5859,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x13.75 GL-SP",
+      "designation": "5.5x13.75 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 75.625,
+      "nominalWidth": 5.5,
+      "nominalDepth": 13.75,
+      "depth": 13.75,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 1191.4876,
+        "sx": 173.3073,
+        "zx": 259.9609,
+        "rx": 3.9693
+      },
+      "weakAxis": {
+        "ix": 190.638,
+        "sx": 69.3229,
+        "zx": 103.9844,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x15.125 GL-SP",
+      "designation": "5.5x15.125 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 83.1875,
+      "nominalWidth": 5.5,
+      "nominalDepth": 15.125,
+      "depth": 15.125,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 1585.87,
+        "sx": 209.7018,
+        "zx": 314.5527,
+        "rx": 4.3662
+      },
+      "weakAxis": {
+        "ix": 209.7018,
+        "sx": 76.2552,
+        "zx": 114.3828,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x16.5 GL-SP",
+      "designation": "5.5x16.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 90.75,
+      "nominalWidth": 5.5,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 2058.8906,
+        "sx": 249.5625,
+        "zx": 374.3438,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 228.7656,
+        "sx": 83.1875,
+        "zx": 124.7812,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x17.875 GL-SP",
+      "designation": "5.5x17.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 98.3125,
+      "nominalWidth": 5.5,
+      "nominalDepth": 17.875,
+      "depth": 17.875,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 2617.6983,
+        "sx": 292.8893,
+        "zx": 439.334,
+        "rx": 5.1601
+      },
+      "weakAxis": {
+        "ix": 247.8294,
+        "sx": 90.1198,
+        "zx": 135.1797,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x19.25 GL-SP",
+      "designation": "5.5x19.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 105.875,
+      "nominalWidth": 5.5,
+      "nominalDepth": 19.25,
+      "depth": 19.25,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 3269.4421,
+        "sx": 339.6823,
+        "zx": 509.5234,
+        "rx": 5.557
+      },
+      "weakAxis": {
+        "ix": 266.8932,
+        "sx": 97.0521,
+        "zx": 145.5781,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x20.625 GL-SP",
+      "designation": "5.5x20.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 113.4375,
+      "nominalWidth": 5.5,
+      "nominalDepth": 20.625,
+      "depth": 20.625,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 4021.2708,
+        "sx": 389.9414,
+        "zx": 584.9121,
+        "rx": 5.9539
+      },
+      "weakAxis": {
+        "ix": 285.957,
+        "sx": 103.9844,
+        "zx": 155.9766,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "5.5x22 GL-SP",
+      "designation": "5.5x22 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 121.0,
+      "nominalWidth": 5.5,
+      "nominalDepth": 22.0,
+      "depth": 22.0,
+      "width": 5.5,
+      "strongAxis": {
+        "ix": 4880.3333,
+        "sx": 443.6667,
+        "zx": 665.5,
+        "rx": 6.3509
+      },
+      "weakAxis": {
+        "ix": 305.0208,
+        "sx": 110.9167,
+        "zx": 166.375,
+        "rx": 1.5877
+      }
+    },
+    {
+      "id": "6.75x5.5 GL-SP",
+      "designation": "6.75x5.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 37.125,
+      "nominalWidth": 6.75,
+      "nominalDepth": 5.5,
+      "depth": 5.5,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 93.5859,
+        "sx": 34.0312,
+        "zx": 51.0469,
+        "rx": 1.5877
+      },
+      "weakAxis": {
+        "ix": 140.959,
+        "sx": 41.7656,
+        "zx": 62.6484,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x6.875 GL-SP",
+      "designation": "6.75x6.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 46.4062,
+      "nominalWidth": 6.75,
+      "nominalDepth": 6.875,
+      "depth": 6.875,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 182.785,
+        "sx": 53.1738,
+        "zx": 79.7607,
+        "rx": 1.9846
+      },
+      "weakAxis": {
+        "ix": 176.1987,
+        "sx": 52.207,
+        "zx": 78.3105,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x8.25 GL-SP",
+      "designation": "6.75x8.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 55.6875,
+      "nominalWidth": 6.75,
+      "nominalDepth": 8.25,
+      "depth": 8.25,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 315.8525,
+        "sx": 76.5703,
+        "zx": 114.8555,
+        "rx": 2.3816
+      },
+      "weakAxis": {
+        "ix": 211.4385,
+        "sx": 62.6484,
+        "zx": 93.9727,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x9.625 GL-SP",
+      "designation": "6.75x9.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 64.9688,
+      "nominalWidth": 6.75,
+      "nominalDepth": 9.625,
+      "depth": 9.625,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 501.5621,
+        "sx": 104.2207,
+        "zx": 156.3311,
+        "rx": 2.7785
+      },
+      "weakAxis": {
+        "ix": 246.6782,
+        "sx": 73.0898,
+        "zx": 109.6348,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x11 GL-SP",
+      "designation": "6.75x11 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 74.25,
+      "nominalWidth": 6.75,
+      "nominalDepth": 11.0,
+      "depth": 11.0,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 748.6875,
+        "sx": 136.125,
+        "zx": 204.1875,
+        "rx": 3.1754
+      },
+      "weakAxis": {
+        "ix": 281.918,
+        "sx": 83.5312,
+        "zx": 125.2969,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x12.375 GL-SP",
+      "designation": "6.75x12.375 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 83.5312,
+      "nominalWidth": 6.75,
+      "nominalDepth": 12.375,
+      "depth": 12.375,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 1066.0023,
+        "sx": 172.2832,
+        "zx": 258.4248,
+        "rx": 3.5724
+      },
+      "weakAxis": {
+        "ix": 317.1577,
+        "sx": 93.9727,
+        "zx": 140.959,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x13.75 GL-SP",
+      "designation": "6.75x13.75 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 92.8125,
+      "nominalWidth": 6.75,
+      "nominalDepth": 13.75,
+      "depth": 13.75,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 1462.2803,
+        "sx": 212.6953,
+        "zx": 319.043,
+        "rx": 3.9693
+      },
+      "weakAxis": {
+        "ix": 352.3975,
+        "sx": 104.4141,
+        "zx": 156.6211,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x15.125 GL-SP",
+      "designation": "6.75x15.125 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 102.0938,
+      "nominalWidth": 6.75,
+      "nominalDepth": 15.125,
+      "depth": 15.125,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 1946.295,
+        "sx": 257.3613,
+        "zx": 386.042,
+        "rx": 4.3662
+      },
+      "weakAxis": {
+        "ix": 387.6372,
+        "sx": 114.8555,
+        "zx": 172.2832,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x16.5 GL-SP",
+      "designation": "6.75x16.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 111.375,
+      "nominalWidth": 6.75,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 2526.8203,
+        "sx": 306.2812,
+        "zx": 459.4219,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 422.877,
+        "sx": 125.2969,
+        "zx": 187.9453,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x17.875 GL-SP",
+      "designation": "6.75x17.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 120.6562,
+      "nominalWidth": 6.75,
+      "nominalDepth": 17.875,
+      "depth": 17.875,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 3212.6298,
+        "sx": 359.4551,
+        "zx": 539.1826,
+        "rx": 5.1601
+      },
+      "weakAxis": {
+        "ix": 458.1167,
+        "sx": 135.7383,
+        "zx": 203.6074,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x19.25 GL-SP",
+      "designation": "6.75x19.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 129.9375,
+      "nominalWidth": 6.75,
+      "nominalDepth": 19.25,
+      "depth": 19.25,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 4012.4971,
+        "sx": 416.8828,
+        "zx": 625.3242,
+        "rx": 5.557
+      },
+      "weakAxis": {
+        "ix": 493.3564,
+        "sx": 146.1797,
+        "zx": 219.2695,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x20.625 GL-SP",
+      "designation": "6.75x20.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 139.2188,
+      "nominalWidth": 6.75,
+      "nominalDepth": 20.625,
+      "depth": 20.625,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 4935.1959,
+        "sx": 478.5645,
+        "zx": 717.8467,
+        "rx": 5.9539
+      },
+      "weakAxis": {
+        "ix": 528.5962,
+        "sx": 156.6211,
+        "zx": 234.9316,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "6.75x22 GL-SP",
+      "designation": "6.75x22 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 148.5,
+      "nominalWidth": 6.75,
+      "nominalDepth": 22.0,
+      "depth": 22.0,
+      "width": 6.75,
+      "strongAxis": {
+        "ix": 5989.5,
+        "sx": 544.5,
+        "zx": 816.75,
+        "rx": 6.3509
+      },
+      "weakAxis": {
+        "ix": 563.8359,
+        "sx": 167.0625,
+        "zx": 250.5938,
+        "rx": 1.9486
+      }
+    },
+    {
+      "id": "8.5x5.5 GL-SP",
+      "designation": "8.5x5.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 46.75,
+      "nominalWidth": 8.5,
+      "nominalDepth": 5.5,
+      "depth": 5.5,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 117.849,
+        "sx": 42.8542,
+        "zx": 64.2812,
+        "rx": 1.5877
+      },
+      "weakAxis": {
+        "ix": 281.474,
+        "sx": 66.2292,
+        "zx": 99.3438,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "8.5x6.875 GL-SP",
+      "designation": "8.5x6.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 58.4375,
+      "nominalWidth": 8.5,
+      "nominalDepth": 6.875,
+      "depth": 6.875,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 230.1737,
+        "sx": 66.9596,
+        "zx": 100.4395,
+        "rx": 1.9846
+      },
+      "weakAxis": {
+        "ix": 351.8424,
+        "sx": 82.7865,
+        "zx": 124.1797,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "8.5x8.25 GL-SP",
+      "designation": "8.5x8.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 70.125,
+      "nominalWidth": 8.5,
+      "nominalDepth": 8.25,
+      "depth": 8.25,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 397.7402,
+        "sx": 96.4219,
+        "zx": 144.6328,
+        "rx": 2.3816
+      },
+      "weakAxis": {
+        "ix": 422.2109,
+        "sx": 99.3438,
+        "zx": 149.0156,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "8.5x9.625 GL-SP",
+      "designation": "8.5x9.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 81.8125,
+      "nominalWidth": 8.5,
+      "nominalDepth": 9.625,
+      "depth": 9.625,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 631.5968,
+        "sx": 131.2409,
+        "zx": 196.8613,
+        "rx": 2.7785
+      },
+      "weakAxis": {
+        "ix": 492.5794,
+        "sx": 115.901,
+        "zx": 173.8516,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "8.5x11 GL-SP",
+      "designation": "8.5x11 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 93.5,
+      "nominalWidth": 8.5,
+      "nominalDepth": 11.0,
+      "depth": 11.0,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 942.7917,
+        "sx": 171.4167,
+        "zx": 257.125,
+        "rx": 3.1754
+      },
+      "weakAxis": {
+        "ix": 562.9479,
+        "sx": 132.4583,
+        "zx": 198.6875,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "8.5x12.375 GL-SP",
+      "designation": "8.5x12.375 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 105.1875,
+      "nominalWidth": 8.5,
+      "nominalDepth": 12.375,
+      "depth": 12.375,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 1342.3733,
+        "sx": 216.9492,
+        "zx": 325.4238,
+        "rx": 3.5724
+      },
+      "weakAxis": {
+        "ix": 633.3164,
+        "sx": 149.0156,
+        "zx": 223.5234,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "8.5x13.75 GL-SP",
+      "designation": "8.5x13.75 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 116.875,
+      "nominalWidth": 8.5,
+      "nominalDepth": 13.75,
+      "depth": 13.75,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 1841.39,
+        "sx": 267.8385,
+        "zx": 401.7578,
+        "rx": 3.9693
+      },
+      "weakAxis": {
+        "ix": 703.6849,
+        "sx": 165.5729,
+        "zx": 248.3594,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "8.5x15.125 GL-SP",
+      "designation": "8.5x15.125 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 128.5625,
+      "nominalWidth": 8.5,
+      "nominalDepth": 15.125,
+      "depth": 15.125,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 2450.8901,
+        "sx": 324.0846,
+        "zx": 486.127,
+        "rx": 4.3662
+      },
+      "weakAxis": {
+        "ix": 774.0534,
+        "sx": 182.1302,
+        "zx": 273.1953,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "8.5x16.5 GL-SP",
+      "designation": "8.5x16.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 140.25,
+      "nominalWidth": 8.5,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 3181.9219,
+        "sx": 385.6875,
+        "zx": 578.5312,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 844.4219,
+        "sx": 198.6875,
+        "zx": 298.0312,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "8.5x17.875 GL-SP",
+      "designation": "8.5x17.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 151.9375,
+      "nominalWidth": 8.5,
+      "nominalDepth": 17.875,
+      "depth": 17.875,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 4045.5338,
+        "sx": 452.6471,
+        "zx": 678.9707,
+        "rx": 5.1601
+      },
+      "weakAxis": {
+        "ix": 914.7904,
+        "sx": 215.2448,
+        "zx": 322.8672,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "8.5x19.25 GL-SP",
+      "designation": "8.5x19.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 163.625,
+      "nominalWidth": 8.5,
+      "nominalDepth": 19.25,
+      "depth": 19.25,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 5052.7741,
+        "sx": 524.9635,
+        "zx": 787.4453,
+        "rx": 5.557
+      },
+      "weakAxis": {
+        "ix": 985.1589,
+        "sx": 231.8021,
+        "zx": 347.7031,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "8.5x20.625 GL-SP",
+      "designation": "8.5x20.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 175.3125,
+      "nominalWidth": 8.5,
+      "nominalDepth": 20.625,
+      "depth": 20.625,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 6214.6912,
+        "sx": 602.6367,
+        "zx": 903.9551,
+        "rx": 5.9539
+      },
+      "weakAxis": {
+        "ix": 1055.5273,
+        "sx": 248.3594,
+        "zx": 372.5391,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "8.5x22 GL-SP",
+      "designation": "8.5x22 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 187.0,
+      "nominalWidth": 8.5,
+      "nominalDepth": 22.0,
+      "depth": 22.0,
+      "width": 8.5,
+      "strongAxis": {
+        "ix": 7542.3333,
+        "sx": 685.6667,
+        "zx": 1028.5,
+        "rx": 6.3509
+      },
+      "weakAxis": {
+        "ix": 1125.8958,
+        "sx": 264.9167,
+        "zx": 397.375,
+        "rx": 2.4537
+      }
+    },
+    {
+      "id": "10.5x5.5 GL-SP",
+      "designation": "10.5x5.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 57.75,
+      "nominalWidth": 10.5,
+      "nominalDepth": 5.5,
+      "depth": 5.5,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 145.5781,
+        "sx": 52.9375,
+        "zx": 79.4062,
+        "rx": 1.5877
+      },
+      "weakAxis": {
+        "ix": 530.5781,
+        "sx": 101.0625,
+        "zx": 151.5938,
+        "rx": 3.0311
+      }
+    },
+    {
+      "id": "10.5x6.875 GL-SP",
+      "designation": "10.5x6.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 72.1875,
+      "nominalWidth": 10.5,
+      "nominalDepth": 6.875,
+      "depth": 6.875,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 284.3323,
+        "sx": 82.7148,
+        "zx": 124.0723,
+        "rx": 1.9846
+      },
+      "weakAxis": {
+        "ix": 663.2227,
+        "sx": 126.3281,
+        "zx": 189.4922,
+        "rx": 3.0311
+      }
+    },
+    {
+      "id": "10.5x8.25 GL-SP",
+      "designation": "10.5x8.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 86.625,
+      "nominalWidth": 10.5,
+      "nominalDepth": 8.25,
+      "depth": 8.25,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 491.3262,
+        "sx": 119.1094,
+        "zx": 178.6641,
+        "rx": 2.3816
+      },
+      "weakAxis": {
+        "ix": 795.8672,
+        "sx": 151.5938,
+        "zx": 227.3906,
+        "rx": 3.0311
+      }
+    },
+    {
+      "id": "10.5x9.625 GL-SP",
+      "designation": "10.5x9.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 101.0625,
+      "nominalWidth": 10.5,
+      "nominalDepth": 9.625,
+      "depth": 9.625,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 780.2078,
+        "sx": 162.1211,
+        "zx": 243.1816,
+        "rx": 2.7785
+      },
+      "weakAxis": {
+        "ix": 928.5117,
+        "sx": 176.8594,
+        "zx": 265.2891,
+        "rx": 3.0311
+      }
+    },
+    {
+      "id": "10.5x11 GL-SP",
+      "designation": "10.5x11 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 115.5,
+      "nominalWidth": 10.5,
+      "nominalDepth": 11.0,
+      "depth": 11.0,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 1164.625,
+        "sx": 211.75,
+        "zx": 317.625,
+        "rx": 3.1754
+      },
+      "weakAxis": {
+        "ix": 1061.1562,
+        "sx": 202.125,
+        "zx": 303.1875,
+        "rx": 3.0311
+      }
+    },
+    {
+      "id": "10.5x12.375 GL-SP",
+      "designation": "10.5x12.375 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 129.9375,
+      "nominalWidth": 10.5,
+      "nominalDepth": 12.375,
+      "depth": 12.375,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 1658.2258,
+        "sx": 267.9961,
+        "zx": 401.9941,
+        "rx": 3.5724
+      },
+      "weakAxis": {
+        "ix": 1193.8008,
+        "sx": 227.3906,
+        "zx": 341.0859,
+        "rx": 3.0311
+      }
+    },
+    {
+      "id": "10.5x13.75 GL-SP",
+      "designation": "10.5x13.75 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 144.375,
+      "nominalWidth": 10.5,
+      "nominalDepth": 13.75,
+      "depth": 13.75,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 2274.6582,
+        "sx": 330.8594,
+        "zx": 496.2891,
+        "rx": 3.9693
+      },
+      "weakAxis": {
+        "ix": 1326.4453,
+        "sx": 252.6562,
+        "zx": 378.9844,
+        "rx": 3.0311
+      }
+    },
+    {
+      "id": "10.5x15.125 GL-SP",
+      "designation": "10.5x15.125 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 158.8125,
+      "nominalWidth": 10.5,
+      "nominalDepth": 15.125,
+      "depth": 15.125,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 3027.5701,
+        "sx": 400.3398,
+        "zx": 600.5098,
+        "rx": 4.3662
+      },
+      "weakAxis": {
+        "ix": 1459.0898,
+        "sx": 277.9219,
+        "zx": 416.8828,
+        "rx": 3.0311
+      }
+    },
+    {
+      "id": "10.5x16.5 GL-SP",
+      "designation": "10.5x16.5 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 173.25,
+      "nominalWidth": 10.5,
+      "nominalDepth": 16.5,
+      "depth": 16.5,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 3930.6094,
+        "sx": 476.4375,
+        "zx": 714.6562,
+        "rx": 4.7631
+      },
+      "weakAxis": {
+        "ix": 1591.7344,
+        "sx": 303.1875,
+        "zx": 454.7812,
+        "rx": 3.0311
+      }
+    },
+    {
+      "id": "10.5x17.875 GL-SP",
+      "designation": "10.5x17.875 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 187.6875,
+      "nominalWidth": 10.5,
+      "nominalDepth": 17.875,
+      "depth": 17.875,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 4997.4241,
+        "sx": 559.1523,
+        "zx": 838.7285,
+        "rx": 5.1601
+      },
+      "weakAxis": {
+        "ix": 1724.3789,
+        "sx": 328.4531,
+        "zx": 492.6797,
+        "rx": 3.0311
+      }
+    },
+    {
+      "id": "10.5x19.25 GL-SP",
+      "designation": "10.5x19.25 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 202.125,
+      "nominalWidth": 10.5,
+      "nominalDepth": 19.25,
+      "depth": 19.25,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 6241.6621,
+        "sx": 648.4844,
+        "zx": 972.7266,
+        "rx": 5.557
+      },
+      "weakAxis": {
+        "ix": 1857.0234,
+        "sx": 353.7188,
+        "zx": 530.5781,
+        "rx": 3.0311
+      }
+    },
+    {
+      "id": "10.5x20.625 GL-SP",
+      "designation": "10.5x20.625 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 216.5625,
+      "nominalWidth": 10.5,
+      "nominalDepth": 20.625,
+      "depth": 20.625,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 7676.9714,
+        "sx": 744.4336,
+        "zx": 1116.6504,
+        "rx": 5.9539
+      },
+      "weakAxis": {
+        "ix": 1989.668,
+        "sx": 378.9844,
+        "zx": 568.4766,
+        "rx": 3.0311
+      }
+    },
+    {
+      "id": "10.5x22 GL-SP",
+      "designation": "10.5x22 GL-SP",
+      "materialType": "WOOD",
+      "shapeType": "GLULAM_SOUTHERN_PINE",
+      "area": 231.0,
+      "nominalWidth": 10.5,
+      "nominalDepth": 22.0,
+      "depth": 22.0,
+      "width": 10.5,
+      "strongAxis": {
+        "ix": 9317.0,
+        "sx": 847.0,
+        "zx": 1270.5,
+        "rx": 6.3509
+      },
+      "weakAxis": {
+        "ix": 2122.3125,
+        "sx": 404.25,
+        "zx": 606.375,
+        "rx": 3.0311
+      }
     }
   ]
 }
