@@ -402,8 +402,39 @@ object WoodPropertyService {
                 )
                 else -> null
             }
-            // No NDS Table 5C hardwood data sourced yet.
-            WoodSpecies.GLULAM_HARDWOODS -> null
+            // NDS Table 5C, structural glued laminated hardwood timber —
+            // 2018 NDS Supplement (Cody-supplied PDF, p. 69). NOT yet
+            // reconciled against the 2024 Supplement, which is treated as
+            // authoritative for the softwood species above; if hardwood
+            // values changed between editions, branch on NdsEdition.
+            // Same positive-bending, x-axis convention as the other glulam
+            // species: Fbx+, Fvx, Fc, Fc-perp-x, Ft, Ex. Density = 62.4 * G
+            // (G = the table's specific gravity for fastener design).
+            WoodSpecies.GLULAM_HARDWOODS -> when (grade) {
+                //                        Fbx+  Fvx   Fc    Fc-perp Ft   Ex    G
+                WoodGrade.G_12F_V1    -> hardwoodGlulam(1200, 125,  800,  285,   600, 1.2, 0.39)
+                WoodGrade.G_12F_V2    -> hardwoodGlulam(1200, 125,  860,  285,   625, 1.2, 0.39)
+                WoodGrade.G_14F_V1    -> hardwoodGlulam(1400, 155,  950,  405,   700, 1.3, 0.45)
+                WoodGrade.G_14F_V2    -> hardwoodGlulam(1400, 180, 1200,  590,   750, 1.3, 0.53)
+                WoodGrade.G_14F_V3    -> hardwoodGlulam(1400, 155,  950,  405,   725, 1.3, 0.45)
+                WoodGrade.G_14F_V4    -> hardwoodGlulam(1400, 180, 1200,  590,   775, 1.3, 0.53)
+                WoodGrade.G_16F_V1    -> hardwoodGlulam(1600, 180, 1200,  590,   800, 1.4, 0.53)
+                WoodGrade.G_16F_V2    -> hardwoodGlulam(1600, 200, 1250,  835,   875, 1.5, 0.63)
+                WoodGrade.G_16F_V3    -> hardwoodGlulam(1600, 180, 1200,  590,   850, 1.4, 0.53)
+                WoodGrade.G_16F_V4    -> hardwoodGlulam(1600, 200, 1300,  835,   900, 1.6, 0.63)
+                WoodGrade.G_20F_V1    -> hardwoodGlulam(2000, 200, 1400,  835,   975, 1.7, 0.63)
+                WoodGrade.G_20F_V2    -> hardwoodGlulam(2000, 200, 1400,  835,  1000, 1.7, 0.63)
+                WoodGrade.G_16F_E1    -> hardwoodGlulam(1600, 125,  975,  440,   825, 1.4, 0.39)
+                WoodGrade.G_16F_E2    -> hardwoodGlulam(1600, 125, 1000,  440,   900, 1.4, 0.39)
+                WoodGrade.G_20F_E1    -> hardwoodGlulam(2000, 155, 1050,  590,   950, 1.6, 0.45)
+                WoodGrade.G_20F_E2    -> hardwoodGlulam(2000, 155, 1100,  590,  1050, 1.6, 0.45)
+                WoodGrade.G_24F_E1    -> hardwoodGlulam(2400, 180, 1400,  770,  1050, 1.8, 0.53)
+                WoodGrade.G_24F_E2    -> hardwoodGlulam(2400, 180, 1400,  770,  1050, 1.8, 0.53)
+                WoodGrade.G_24F_E3_YP -> hardwoodGlulam(2400, 155, 1200,  590,   975, 1.8, 0.45)
+                WoodGrade.G_24F_E4_RM -> hardwoodGlulam(2400, 220, 1350,  895,  1050, 1.8, 0.53)
+                WoodGrade.G_24F_E5_RO -> hardwoodGlulam(2400, 235, 1450, 1075,  1100, 1.8, 0.63)
+                else -> null
+            }
             // ESR-1940 Table 1, 20F-E/SPF1 SPF/SPF.
             WoodSpecies.GLULAM_SPF_SPF -> when (grade) {
                 WoodGrade.G_20F_E_SPF1 -> WoodReferenceProperties(
@@ -472,4 +503,24 @@ object WoodPropertyService {
             }
         }
     }
+
+    /**
+     * One NDS Table 5C row. Kept as a helper (unlike the softwood entries,
+     * which spell each field out) so all 21 hardwood rows stay one line
+     * each and can be checked directly against the printed table.
+     * Shear modulus follows the same E/16 convention as every other entry.
+     */
+    private fun hardwoodGlulam(
+        fbxPositive: Int, fvx: Int, fc: Int, fcPerpX: Int, ft: Int,
+        exMillionPsi: Double, specificGravity: Double
+    ) = WoodReferenceProperties(
+        bending = fbxPositive.toDouble().psi,
+        shear = fvx.toDouble().psi,
+        compressionParallel = fc.toDouble().psi,
+        compressionPerp = fcPerpX.toDouble().psi,
+        tensionParallel = ft.toDouble().psi,
+        modulusOfElasticity = (exMillionPsi * 1_000_000.0).psi,
+        shearModulus = (exMillionPsi * 1_000_000.0 / 16.0).psi,
+        densityPcf = Math.round(62.4 * specificGravity * 10.0) / 10.0
+    )
 }

@@ -21,6 +21,7 @@ import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.LoadCombinationSet
 import com.lz.model.regulatory.codes.BuildingCode
 import com.lz.model.regulatory.codes.ServiceabilityCriterion
+import com.lz.model.regulatory.nds.NdsAdjustmentFactors
 import com.lz.model.structural.BracingInput
 import com.lz.model.structural.BracingResolver
 import com.lz.model.structural.DesignMethodology
@@ -119,6 +120,18 @@ class BeamViewModel @Inject constructor(
     var methodology by mutableStateOf(DesignMethodology.LRFD)
     var isStrongAxis by mutableStateOf(true)
 
+    // Manual overrides for the NDS 4.3.1 wood adjustment factors (CD, CM,
+    // Ct, CL, CF, Cfu, Ci, Cr, CP, Cb). Default (all 1.0) leaves every
+    // factor either unapplied or auto-calculated by the solver (CL/CF/CP).
+    // Only meaningful for wood materials — steel/aluminum/masonry calculators
+    // never read this.
+    var ndsAdjustmentFactors by mutableStateOf(NdsAdjustmentFactors())
+        private set
+
+    fun onAdjustmentFactorsChanged(factors: NdsAdjustmentFactors) {
+        ndsAdjustmentFactors = factors
+    }
+
     // Prompted once on entry for a brand-new Quick Calc calculation so the
     // ASD/LRFD choice is front-and-center rather than left to silently
     // default to LRFD and only discoverable buried in settings. Suppressed
@@ -212,7 +225,10 @@ class BeamViewModel @Inject constructor(
 
             val calculator = when (val mat = activeMaterialGrade) {
                 is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
-                is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(section, mat)
+                is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
+                    section, mat,
+                    adjustmentFactors = ndsAdjustmentFactors
+                )
                 else                   -> null
             } ?: return null
 
@@ -646,7 +662,8 @@ class BeamViewModel @Inject constructor(
             },
             spanDeflectionOverrides = spanDeflectionOverrides.map { (spanId, criteria) ->
                 SpanDeflectionOverride(spanId, criteria)
-            }
+            },
+            ndsAdjustmentFactors = ndsAdjustmentFactors
         )
     }
 
@@ -712,7 +729,8 @@ class BeamViewModel @Inject constructor(
                 sectionProfile = selectedSection,
                 material = activeMaterialGrade,
                 buildingCode = code,
-                isStrongAxis = isStrongAxis
+                isStrongAxis = isStrongAxis,
+                ndsAdjustmentFactors = ndsAdjustmentFactors
             )
         )
 
@@ -761,6 +779,7 @@ class BeamViewModel @Inject constructor(
         spanDeflectionOverrides = inputs.spanDeflectionOverrides
             .filter { override -> member.spans.any { it.id == override.spanId } }
             .associate { it.spanId to it.criteria }
+        ndsAdjustmentFactors = inputs.ndsAdjustmentFactors
 
         selectedMaterial = inputs.selectedMaterial
         availableGrades = materialRepository.getMaterialsByType(selectedMaterial)
@@ -835,7 +854,8 @@ class BeamViewModel @Inject constructor(
         selectedCombinationSet = selectedCombinationSet,
         enabledCombinations = enabledCombinations,
         methodology = methodology,
-        activeBuildingCode = activeBuildingCode
+        activeBuildingCode = activeBuildingCode,
+        ndsAdjustmentFactors = ndsAdjustmentFactors
     )
 
     /**
@@ -855,6 +875,7 @@ class BeamViewModel @Inject constructor(
         val selectedCombinationSet: LoadCombinationSet?,
         val enabledCombinations: Set<String>,
         val methodology: DesignMethodology,
-        val activeBuildingCode: BuildingCode?
+        val activeBuildingCode: BuildingCode?,
+        val ndsAdjustmentFactors: NdsAdjustmentFactors
     )
 }

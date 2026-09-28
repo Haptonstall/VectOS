@@ -325,20 +325,11 @@ class NdsWoodCapacityCalculator(
      * this shares one `cf` value across Fb/Ft/Fc rather than splitting
      * [NdsAdjustmentFactors] into three separate size-factor fields — a
      * documented simplification, not an oversight.
-     * Returns adjustmentFactors.cf if explicitly set (non-default),
-     * otherwise looks up the tabulated value from the section's nominal
-     * width (falls back to the physical/dressed depth for a non-WoodProfile
-     * section, which should not occur on the sawn-lumber path in practice).
+     * Delegates to [resolveSawnCf] — the single source of truth shared
+     * with [computeNdsCL]'s F*b and this class's own compression/tension
+     * paths, so all of them agree on the same resolved CF.
      */
-    private fun computeSawnCF(): Double {
-        // If caller explicitly set CF, use it
-        if (adjustmentFactors.cf != 1.0) return adjustmentFactors.cf
-
-        val nominalWidthIn =
-            if (profile is WoodProfile) profile.nominalDepth.inInches else profile.depth.inInches
-
-        return ndsTable4ASizeFactor(material.grade, nominalWidthIn)
-    }
+    private fun computeSawnCF(): Double = resolveSawnCf(adjustmentFactors, material, profile)
 
     companion object {
         /**
@@ -415,7 +406,7 @@ class NdsWoodCapacityCalculator(
         val cp = computeCP(lu)
 
         val fcAdj = fc * adjustmentFactors.cd * adjustmentFactors.cm *
-                adjustmentFactors.ct * adjustmentFactors.cf *
+                adjustmentFactors.ct * computeSawnCF() *
                 adjustmentFactors.ci * cp
 
         return (fcAdj * area) to "Compression (NDS 3.7, CP=${String.format(Locale.US, "%.3f", cp)})"
@@ -445,7 +436,7 @@ class NdsWoodCapacityCalculator(
         // F*c = Fc with all adjustments except CP
         val fcStar    = material.referenceCompressionParallel.inPsi *
                 adjustmentFactors.cd * adjustmentFactors.cm *
-                adjustmentFactors.ct * adjustmentFactors.cf * adjustmentFactors.ci
+                adjustmentFactors.ct * computeSawnCF() * adjustmentFactors.ci
 
         if (fcStar <= 0.0) return 1.0
 
@@ -464,12 +455,14 @@ class NdsWoodCapacityCalculator(
      * NDS 3.8 tension capacity.
      * F't = Ft * CD * CM * Ct * CF * Ci
      * Net section area reduction for connections is a connection-level
-     * check and not applied here.
+     * check and not applied here. Computed inline (not via
+     * [NdsAdjustmentFactors.adjustedTension]) because that helper uses
+     * the raw, un-resolved CF field — see [resolveSawnCf].
      */
     private fun calculateTension(): Pair<Double, String> {
-        val ftAdj = adjustmentFactors.adjustedTension(
-            material.referenceTensionParallel.inPsi
-        )
+        val ft = material.referenceTensionParallel.inPsi
+        val ftAdj = ft * adjustmentFactors.cd * adjustmentFactors.cm *
+                adjustmentFactors.ct * computeSawnCF() * adjustmentFactors.ci
         val area = profile.area.inIn2
         return (ftAdj * area) to "Tension (NDS 3.8)"
     }

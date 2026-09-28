@@ -1,0 +1,240 @@
+diff --git a/core/model/src/main/java/com/lz/model/structural/MaterialModels.kt b/core/model/src/main/java/com/lz/model/structural/MaterialModels.kt
+index 450dd0f..1d77a80 100644
+--- a/core/model/src/main/java/com/lz/model/structural/MaterialModels.kt
++++ b/core/model/src/main/java/com/lz/model/structural/MaterialModels.kt
+@@ -26,11 +26,10 @@ enum class WoodSpecies(val isGlulam: Boolean = false) {
+     GLULAM_DF_DF(isGlulam = true),
+     GLULAM_DF_HF(isGlulam = true),
+     GLULAM_ES_ES(isGlulam = true),
+-    // NDS Table 5C hardwood glulam combinations — not yet sourced (ESR-1940
+-    // and the other softwood-combination sources used elsewhere in this file
+-    // don't cover hardwoods at all). Present as a selectable species so the
+-    // full reference tree is browsable, but has zero WoodGrade entries
+-    // mapped to it yet — see validGradesFor().
++    // NDS Table 5C hardwood glulam combinations (12F-V1 .. 24F-E5 RO),
++    // sourced from the 2018 NDS Supplement PDF Cody supplied. Note this is
++    // the 2018 edition, not the 2024 one treated as authoritative elsewhere
++    // in this file — see WoodPropertyService.
+     GLULAM_HARDWOODS(isGlulam = true),
+     GLULAM_HF_HF(isGlulam = true),
+     GLULAM_POC_POC(isGlulam = true),
+@@ -114,7 +113,32 @@ enum class WoodGrade {
+     G_24F_E18,
+     G_24F_E15M1,
+     G_26F_V1,
+-    G_26F_V2;
++    G_26F_V2,
++
++    // NDS Table 5C hardwood glulam combination symbols. G_16F_V2 / G_16F_V3
++    // (also used by SP/SP and DF/DF) are reused for the hardwood 16F-V2 /
++    // 16F-V3 — safe, since WoodPropertyService branches on species first.
++    // The three species-suffixed 24F-E symbols get distinct names so they
++    // can't collide with DF/DF's G_24F_E4.
++    G_12F_V1,
++    G_12F_V2,
++    G_14F_V1,
++    G_14F_V2,
++    G_14F_V3,
++    G_14F_V4,
++    G_16F_V1,
++    G_16F_V4,
++    G_20F_V1,
++    G_20F_V2,
++    G_16F_E1,
++    G_16F_E2,
++    G_20F_E1,
++    G_20F_E2,
++    G_24F_E1,
++    G_24F_E2,
++    G_24F_E3_YP,
++    G_24F_E4_RM,
++    G_24F_E5_RO;
+ 
+     companion object {
+         fun fromString(value: String): WoodGrade = entries.find { it.name == value } ?: NO_2
+@@ -147,8 +171,12 @@ enum class WoodGrade {
+                 WoodSpecies.GLULAM_POC_POC -> listOf(G_22F_V_POC1, G_22F_V_POC2, G_20F_V14, G_20F_V15)
+                 WoodSpecies.GLULAM_SPF_SPF -> listOf(G_20F_E_SPF1)
+                 WoodSpecies.GLULAM_SP_SP -> listOf(G_24F_1_8E, G_16F_V5M1, G_16F_V2, G_16F_G1)
+-                // No NDS Table 5C hardwood data sourced yet.
+-                WoodSpecies.GLULAM_HARDWOODS -> emptyList()
++                WoodSpecies.GLULAM_HARDWOODS -> listOf(
++                    G_12F_V1, G_12F_V2, G_14F_V1, G_14F_V2, G_14F_V3, G_14F_V4,
++                    G_16F_V1, G_16F_V2, G_16F_V3, G_16F_V4, G_20F_V1, G_20F_V2,
++                    G_16F_E1, G_16F_E2, G_20F_E1, G_20F_E2,
++                    G_24F_E1, G_24F_E2, G_24F_E3_YP, G_24F_E4_RM, G_24F_E5_RO
++                )
+                 else -> emptyList()
+             }
+         }
+diff --git a/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt b/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
+index 8170dae..6bd7696 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
+@@ -402,8 +402,39 @@ object WoodPropertyService {
+                 )
+                 else -> null
+             }
+-            // No NDS Table 5C hardwood data sourced yet.
+-            WoodSpecies.GLULAM_HARDWOODS -> null
++            // NDS Table 5C, structural glued laminated hardwood timber —
++            // 2018 NDS Supplement (Cody-supplied PDF, p. 69). NOT yet
++            // reconciled against the 2024 Supplement, which is treated as
++            // authoritative for the softwood species above; if hardwood
++            // values changed between editions, branch on NdsEdition.
++            // Same positive-bending, x-axis convention as the other glulam
++            // species: Fbx+, Fvx, Fc, Fc-perp-x, Ft, Ex. Density = 62.4 * G
++            // (G = the table's specific gravity for fastener design).
++            WoodSpecies.GLULAM_HARDWOODS -> when (grade) {
++                //                        Fbx+  Fvx   Fc    Fc-perp Ft   Ex    G
++                WoodGrade.G_12F_V1    -> hardwoodGlulam(1200, 125,  800,  285,   600, 1.2, 0.39)
++                WoodGrade.G_12F_V2    -> hardwoodGlulam(1200, 125,  860,  285,   625, 1.2, 0.39)
++                WoodGrade.G_14F_V1    -> hardwoodGlulam(1400, 155,  950,  405,   700, 1.3, 0.45)
++                WoodGrade.G_14F_V2    -> hardwoodGlulam(1400, 180, 1200,  590,   750, 1.3, 0.53)
++                WoodGrade.G_14F_V3    -> hardwoodGlulam(1400, 155,  950,  405,   725, 1.3, 0.45)
++                WoodGrade.G_14F_V4    -> hardwoodGlulam(1400, 180, 1200,  590,   775, 1.3, 0.53)
++                WoodGrade.G_16F_V1    -> hardwoodGlulam(1600, 180, 1200,  590,   800, 1.4, 0.53)
++                WoodGrade.G_16F_V2    -> hardwoodGlulam(1600, 200, 1250,  835,   875, 1.5, 0.63)
++                WoodGrade.G_16F_V3    -> hardwoodGlulam(1600, 180, 1200,  590,   850, 1.4, 0.53)
++                WoodGrade.G_16F_V4    -> hardwoodGlulam(1600, 200, 1300,  835,   900, 1.6, 0.63)
++                WoodGrade.G_20F_V1    -> hardwoodGlulam(2000, 200, 1400,  835,   975, 1.7, 0.63)
++                WoodGrade.G_20F_V2    -> hardwoodGlulam(2000, 200, 1400,  835,  1000, 1.7, 0.63)
++                WoodGrade.G_16F_E1    -> hardwoodGlulam(1600, 125,  975,  440,   825, 1.4, 0.39)
++                WoodGrade.G_16F_E2    -> hardwoodGlulam(1600, 125, 1000,  440,   900, 1.4, 0.39)
++                WoodGrade.G_20F_E1    -> hardwoodGlulam(2000, 155, 1050,  590,   950, 1.6, 0.45)
++                WoodGrade.G_20F_E2    -> hardwoodGlulam(2000, 155, 1100,  590,  1050, 1.6, 0.45)
++                WoodGrade.G_24F_E1    -> hardwoodGlulam(2400, 180, 1400,  770,  1050, 1.8, 0.53)
++                WoodGrade.G_24F_E2    -> hardwoodGlulam(2400, 180, 1400,  770,  1050, 1.8, 0.53)
++                WoodGrade.G_24F_E3_YP -> hardwoodGlulam(2400, 155, 1200,  590,   975, 1.8, 0.45)
++                WoodGrade.G_24F_E4_RM -> hardwoodGlulam(2400, 220, 1350,  895,  1050, 1.8, 0.53)
++                WoodGrade.G_24F_E5_RO -> hardwoodGlulam(2400, 235, 1450, 1075,  1100, 1.8, 0.63)
++                else -> null
++            }
+             // ESR-1940 Table 1, 20F-E/SPF1 SPF/SPF.
+             WoodSpecies.GLULAM_SPF_SPF -> when (grade) {
+                 WoodGrade.G_20F_E_SPF1 -> WoodReferenceProperties(
+@@ -472,4 +503,24 @@ object WoodPropertyService {
+             }
+         }
+     }
++
++    /**
++     * One NDS Table 5C row. Kept as a helper (unlike the softwood entries,
++     * which spell each field out) so all 21 hardwood rows stay one line
++     * each and can be checked directly against the printed table.
++     * Shear modulus follows the same E/16 convention as every other entry.
++     */
++    private fun hardwoodGlulam(
++        fbxPositive: Int, fvx: Int, fc: Int, fcPerpX: Int, ft: Int,
++        exMillionPsi: Double, specificGravity: Double
++    ) = WoodReferenceProperties(
++        bending = fbxPositive.toDouble().psi,
++        shear = fvx.toDouble().psi,
++        compressionParallel = fc.toDouble().psi,
++        compressionPerp = fcPerpX.toDouble().psi,
++        tensionParallel = ft.toDouble().psi,
++        modulusOfElasticity = (exMillionPsi * 1000.0).psi,
++        shearModulus = (exMillionPsi * 1000.0 / 16.0).psi,
++        densityPcf = Math.round(62.4 * specificGravity * 10.0) / 10.0
++    )
+ }
+\ No newline at end of file
+diff --git a/core/solver/src/test/java/com/lz/solver/material/WoodPropertyServiceHardwoodGlulamTest.kt b/core/solver/src/test/java/com/lz/solver/material/WoodPropertyServiceHardwoodGlulamTest.kt
+new file mode 100644
+index 0000000..907a628
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/material/WoodPropertyServiceHardwoodGlulamTest.kt
+@@ -0,0 +1,57 @@
++package com.lz.solver.material
++
++import com.lz.model.structural.WoodGrade
++import com.lz.model.structural.WoodSpecies
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Test
++
++class WoodPropertyServiceHardwoodGlulamTest {
++
++    private fun props(grade: WoodGrade) =
++        WoodPropertyService.getReferenceProperties(WoodSpecies.GLULAM_HARDWOODS, grade)!!
++
++    @Test
++    fun `every hardwood symbol the picker offers has verified data`() {
++        val offered = WoodGrade.validGradesFor(WoodSpecies.GLULAM_HARDWOODS)
++        assertEquals(21, offered.size)
++        offered.forEach { grade ->
++            assertNotNull("No Table 5C data for $grade", 
++                WoodPropertyService.getReferenceProperties(WoodSpecies.GLULAM_HARDWOODS, grade))
++        }
++    }
++
++    @Test
++    fun `12F-V1 matches Table 5C`() {
++        val p = props(WoodGrade.G_12F_V1)
++        assertEquals(1200.0, p.bending.inPsi, 1e-9)
++        assertEquals(125.0, p.shear.inPsi, 1e-9)
++        assertEquals(800.0, p.compressionParallel.inPsi, 1e-9)
++        assertEquals(285.0, p.compressionPerp.inPsi, 1e-9)
++        assertEquals(600.0, p.tensionParallel.inPsi, 1e-9)
++        assertEquals(1_200_000.0, p.modulusOfElasticity.inPsi, 1e-6)
++        assertEquals(24.3, p.densityPcf, 1e-9)
++    }
++
++    @Test
++    fun `24F-E5 RO matches Table 5C`() {
++        val p = props(WoodGrade.G_24F_E5_RO)
++        assertEquals(2400.0, p.bending.inPsi, 1e-9)
++        assertEquals(235.0, p.shear.inPsi, 1e-9)
++        assertEquals(1450.0, p.compressionParallel.inPsi, 1e-9)
++        assertEquals(1075.0, p.compressionPerp.inPsi, 1e-9)
++        assertEquals(1100.0, p.tensionParallel.inPsi, 1e-9)
++        assertEquals(1_800_000.0, p.modulusOfElasticity.inPsi, 1e-6)
++        assertEquals(39.3, p.densityPcf, 1e-9)
++    }
++
++    @Test
++    fun `reused symbol names resolve per species, not globally`() {
++        // 16F-V2 exists for SP/SP and hardwoods with different values.
++        val sp = WoodPropertyService.getReferenceProperties(
++            WoodSpecies.GLULAM_SP_SP, WoodGrade.G_16F_V2)!!
++        val hw = props(WoodGrade.G_16F_V2)
++        assertEquals(1300.0, sp.compressionParallel.inPsi, 1e-9)
++        assertEquals(1250.0, hw.compressionParallel.inPsi, 1e-9)
++    }
++}
+diff --git a/core/ui/src/main/java/com/lz/ui/material/WoodMaterialPickerDialog.kt b/core/ui/src/main/java/com/lz/ui/material/WoodMaterialPickerDialog.kt
+index 69d2fcd..31e9719 100644
+--- a/core/ui/src/main/java/com/lz/ui/material/WoodMaterialPickerDialog.kt
++++ b/core/ui/src/main/java/com/lz/ui/material/WoodMaterialPickerDialog.kt
+@@ -33,15 +33,15 @@ import com.lz.solver.material.WoodPropertyService
+  * covers every glulam species pairing except Southern Pine (they all share
+  * the same 1.5"-lamination standard sizing — see the size catalog); Southern
+  * Pine Glulam is just SP/SP (1.375" laminations, its own width series).
+- * Hardwoods-Glulam isn't tied to either size series yet (no data sourced),
+- * so it's deliberately left out of both — picking it isn't possible via a
+- * glulam ShapeType today.
++ * Hardwoods-Glulam is grouped under Western Glulam for now, ASSUMING it
++ * shares the 1.5"-lamination standard sizing — NDS Table 5C doesn't state
++ * a lamination thickness, so this is unconfirmed. Move it if that's wrong.
+  */
+ private fun glulamSpeciesFor(shapeType: ShapeType?): List<WoodSpecies> = when (shapeType) {
+     ShapeType.GLULAM_WESTERN -> listOf(
+         WoodSpecies.GLULAM_AC_AC, WoodSpecies.GLULAM_DF_DF, WoodSpecies.GLULAM_DF_HF,
+         WoodSpecies.GLULAM_ES_ES, WoodSpecies.GLULAM_HF_HF, WoodSpecies.GLULAM_POC_POC,
+-        WoodSpecies.GLULAM_SPF_SPF
++        WoodSpecies.GLULAM_SPF_SPF, WoodSpecies.GLULAM_HARDWOODS
+     )
+     ShapeType.GLULAM_SOUTHERN_PINE -> listOf(WoodSpecies.GLULAM_SP_SP)
+     else -> emptyList()
+@@ -280,7 +280,10 @@ fun WoodGrade.displayName(): String {
+         WoodGrade.G_20F_E_ES1 to "20F-E/ES1",
+         WoodGrade.G_20F_E_SPF1 to "20F-E/SPF1",
+         WoodGrade.G_22F_V_POC1 to "22F-V/POC1",
+-        WoodGrade.G_22F_V_POC2 to "22F-V/POC2"
++        WoodGrade.G_22F_V_POC2 to "22F-V/POC2",
++        WoodGrade.G_24F_E3_YP to "24F-E3 YP",
++        WoodGrade.G_24F_E4_RM to "24F-E4 RM",
++        WoodGrade.G_24F_E5_RO to "24F-E5 RO"
+     )
+     speciesSlashOverrides[this]?.let { return it }
+ 

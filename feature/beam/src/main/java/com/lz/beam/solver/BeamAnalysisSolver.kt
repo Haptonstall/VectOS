@@ -148,6 +148,7 @@ object BeamAnalysisSolver {
             )
             is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
                 profile, material,
+                adjustmentFactors = config.ndsAdjustmentFactors,
                 edition = resolveNdsEdition(config) ?: NdsEdition.NDS_2018
             )
             else                   -> null

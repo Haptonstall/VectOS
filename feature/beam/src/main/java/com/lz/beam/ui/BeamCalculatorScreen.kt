@@ -95,6 +95,7 @@ import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.InteractionStatus
 import com.lz.model.structural.Load
 import com.lz.model.structural.LoadCase
+import com.lz.model.regulatory.nds.NdsAdjustmentFactors
 import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.MaterialType
 import com.lz.model.structural.NodeBoundaryCondition
@@ -132,6 +133,7 @@ import com.lz.ui.boundary.BoundaryConditionPicker
 import com.lz.ui.boundary.BoundaryConditionPickerConfig
 import com.lz.ui.loads.LoadEditor
 import com.lz.ui.material.WoodMaterialPickerDialog
+import com.lz.ui.material.AdjustmentFactorsEditDialog
 import com.lz.ui.material.displayName
 import com.lz.ui.member.BracingPickerDialog
 import com.lz.ui.member.DeflectionCriteriaPickerDialog
@@ -969,7 +971,10 @@ fun DesignTab(viewModel: BeamViewModel) {
             serviceabilityResults = scopedServiceabilityResults,
             allServiceabilityResults = results.serviceabilityResults,
             member = viewModel.structuralMember,
-            unitSystem = viewModel.unitSystem
+            unitSystem = viewModel.unitSystem,
+            isWoodMaterial = viewModel.activeMaterialGrade is MaterialGrade.Wood,
+            ndsAdjustmentFactors = viewModel.ndsAdjustmentFactors,
+            onAdjustmentFactorsChanged = viewModel::onAdjustmentFactorsChanged
         )
     }
 }
@@ -1620,7 +1625,13 @@ fun DesignSummary(
     serviceabilityResults: List<ServiceabilityResult>,
     allServiceabilityResults: List<ServiceabilityResult>,
     member: StructuralMember,
-    unitSystem: UnitSystem
+    unitSystem: UnitSystem,
+    // Only meaningful for wood materials — null/no-op for steel, aluminum,
+    // masonry. When non-null, an "Edit Adjustment Factors" entry point is
+    // shown next to the read-only Design Parameters summary below.
+    isWoodMaterial: Boolean = false,
+    ndsAdjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors(),
+    onAdjustmentFactorsChanged: ((NdsAdjustmentFactors) -> Unit)? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
         // 1. Critical Strength Check (Governing)
@@ -1654,6 +1665,23 @@ fun DesignSummary(
             )
 
             DesignParameterSummary(detailedResult, unitSystem)
+
+            if (isWoodMaterial && onAdjustmentFactorsChanged != null) {
+                var isAdjustmentFactorsDialogVisible by remember { mutableStateOf(false) }
+                TextButton(onClick = { isAdjustmentFactorsDialogVisible = true }) {
+                    Text("Edit Adjustment Factors")
+                }
+                if (isAdjustmentFactorsDialogVisible) {
+                    AdjustmentFactorsEditDialog(
+                        currentFactors = ndsAdjustmentFactors,
+                        onDismiss = { isAdjustmentFactorsDialogVisible = false },
+                        onConfirm = { factors ->
+                            onAdjustmentFactorsChanged(factors)
+                            isAdjustmentFactorsDialogVisible = false
+                        }
+                    )
+                }
+            }
         }
 
         // 2. Serviceability Checks

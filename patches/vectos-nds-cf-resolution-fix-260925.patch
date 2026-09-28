@@ -1,0 +1,149 @@
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
+index c69ab22..51656bb 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
+@@ -20,15 +20,24 @@ data class NdsAdjustmentFactors(
+     val cp: Double = 1.0,   // Column stability factor — NDS Section 3.7.1
+     val cb: Double = 1.0    // Bearing area factor — NDS Section 3.10.4
+ ) {
+-    /** Adjusted bending design value F'b */
++    /**
++     * Adjusted bending design value F'b.
++     * CAUTION: `cf` here is the raw, un-resolved field — 1.0 unless the
++     * caller explicitly overrode it. It does NOT apply the NDS Table 4A
++     * tabulated lookup by nominal width/grade for sawn lumber. Wood
++     * capacity code (`core:solver`'s `NdsWoodCapacityCalculator` /
++     * `NdsBeamStability`) resolves the real CF via `resolveSawnCf` and
++     * should not call these `adjusted*` helpers for any factor that
++     * includes `cf` — see that resolver's doc for why.
++     */
+     fun adjustedBending(fb: Double)              = fb * cd * cm * ct * cl * cf * cfu * ci * cr
+     /** Adjusted shear design value F'v */
+     fun adjustedShear(fv: Double)                = fv * cd * cm * ct * ci
+-    /** Adjusted compression parallel F'c */
++    /** Adjusted compression parallel F'c. CAUTION: raw `cf` — see [adjustedBending]. */
+     fun adjustedCompressionParallel(fc: Double)  = fc * cd * cm * ct * cf * ci * cp
+     /** Adjusted compression perpendicular F'c⊥ */
+     fun adjustedCompressionPerp(fcPerp: Double)  = fcPerp * cm * ct * ci * cb
+-    /** Adjusted tension parallel F't */
++    /** Adjusted tension parallel F't. CAUTION: raw `cf` — see [adjustedBending]. */
+     fun adjustedTension(ft: Double)              = ft * cd * cm * ct * cf * ci
+     /** Adjusted modulus of elasticity E' */
+     fun adjustedModulus(e: Double)               = e * cm * ct * ci
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+index b736ce2..4777f46 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+@@ -11,6 +11,37 @@ import com.lz.model.units.inPsi
+ import kotlin.math.pow
+ import kotlin.math.sqrt
+ 
++/**
++ * Resolves the effective NDS Table 4A Size Factor CF — the caller's
++ * explicit override if they set one (non-default), otherwise the
++ * tabulated lookup by nominal width and grade. Single source of truth so
++ * every capacity path that includes CF — bending's F'b, beam stability's
++ * F*b (CL, below), compression's F'c and CP's F*c, and tension's F't —
++ * agrees on the same value. Previously only bending resolved CF this way;
++ * every other path read the raw, un-resolved [NdsAdjustmentFactors.cf]
++ * directly (1.0 unless the user manually overrode it), silently ignoring
++ * the tabulated size factor and understating/overstating capacity for any
++ * sawn member where the true CF isn't 1.0 — and, for CL specifically,
++ * corrupting the beam-stability factor that bending's own F'b then
++ * multiplies by, compounding the error.
++ *
++ * Glulam never uses CF (bending substitutes CV per NDS 5.3.6; axial
++ * NDS Table 5A values already reflect full-size laminated members) —
++ * glulam [com.lz.model.structural.WoodGrade] values don't match any case
++ * in [NdsWoodCapacityCalculator.ndsTable4ASizeFactor]'s `when`, so they
++ * fall through to its `else -> 1.0`. Safe to call unconditionally.
++ */
++internal fun resolveSawnCf(
++    adjustmentFactors: NdsAdjustmentFactors,
++    material: MaterialGrade.Wood,
++    profile: SectionProfile
++): Double {
++    if (adjustmentFactors.cf != 1.0) return adjustmentFactors.cf
++    val nominalWidthIn =
++        if (profile is WoodProfile) profile.nominalDepth.inInches else profile.depth.inInches
++    return NdsWoodCapacityCalculator.ndsTable4ASizeFactor(material.grade, nominalWidthIn)
++}
++
+ /**
+  * NDS 3.3.3 Beam Stability Factor CL — single source of truth.
+  *
+@@ -54,7 +85,7 @@ internal fun computeNdsCL(
+ 
+     val fbStar = material.referenceBending.inPsi *
+             adjustmentFactors.cd * adjustmentFactors.cm *
+-            adjustmentFactors.ct * adjustmentFactors.cf *
++            adjustmentFactors.ct * resolveSawnCf(adjustmentFactors, material, profile) *
+             adjustmentFactors.ci * adjustmentFactors.cr
+ 
+     if (fbStar <= 0.0) return 1.0
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index 1dd36a6..a3b2580 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -325,20 +325,11 @@ class NdsWoodCapacityCalculator(
+      * this shares one `cf` value across Fb/Ft/Fc rather than splitting
+      * [NdsAdjustmentFactors] into three separate size-factor fields — a
+      * documented simplification, not an oversight.
+-     * Returns adjustmentFactors.cf if explicitly set (non-default),
+-     * otherwise looks up the tabulated value from the section's nominal
+-     * width (falls back to the physical/dressed depth for a non-WoodProfile
+-     * section, which should not occur on the sawn-lumber path in practice).
++     * Delegates to [resolveSawnCf] — the single source of truth shared
++     * with [computeNdsCL]'s F*b and this class's own compression/tension
++     * paths, so all of them agree on the same resolved CF.
+      */
+-    private fun computeSawnCF(): Double {
+-        // If caller explicitly set CF, use it
+-        if (adjustmentFactors.cf != 1.0) return adjustmentFactors.cf
+-
+-        val nominalWidthIn =
+-            if (profile is WoodProfile) profile.nominalDepth.inInches else profile.depth.inInches
+-
+-        return ndsTable4ASizeFactor(material.grade, nominalWidthIn)
+-    }
++    private fun computeSawnCF(): Double = resolveSawnCf(adjustmentFactors, material, profile)
+ 
+     companion object {
+         /**
+@@ -415,7 +406,7 @@ class NdsWoodCapacityCalculator(
+         val cp = computeCP(lu)
+ 
+         val fcAdj = fc * adjustmentFactors.cd * adjustmentFactors.cm *
+-                adjustmentFactors.ct * adjustmentFactors.cf *
++                adjustmentFactors.ct * computeSawnCF() *
+                 adjustmentFactors.ci * cp
+ 
+         return (fcAdj * area) to "Compression (NDS 3.7, CP=${String.format(Locale.US, "%.3f", cp)})"
+@@ -445,7 +436,7 @@ class NdsWoodCapacityCalculator(
+         // F*c = Fc with all adjustments except CP
+         val fcStar    = material.referenceCompressionParallel.inPsi *
+                 adjustmentFactors.cd * adjustmentFactors.cm *
+-                adjustmentFactors.ct * adjustmentFactors.cf * adjustmentFactors.ci
++                adjustmentFactors.ct * computeSawnCF() * adjustmentFactors.ci
+ 
+         if (fcStar <= 0.0) return 1.0
+ 
+@@ -464,12 +455,14 @@ class NdsWoodCapacityCalculator(
+      * NDS 3.8 tension capacity.
+      * F't = Ft * CD * CM * Ct * CF * Ci
+      * Net section area reduction for connections is a connection-level
+-     * check and not applied here.
++     * check and not applied here. Computed inline (not via
++     * [NdsAdjustmentFactors.adjustedTension]) because that helper uses
++     * the raw, un-resolved CF field — see [resolveSawnCf].
+      */
+     private fun calculateTension(): Pair<Double, String> {
+-        val ftAdj = adjustmentFactors.adjustedTension(
+-            material.referenceTensionParallel.inPsi
+-        )
++        val ft = material.referenceTensionParallel.inPsi
++        val ftAdj = ft * adjustmentFactors.cd * adjustmentFactors.cm *
++                adjustmentFactors.ct * computeSawnCF() * adjustmentFactors.ci
+         val area = profile.area.inIn2
+         return (ftAdj * area) to "Tension (NDS 3.8)"
+     }

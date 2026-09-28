@@ -26,11 +26,10 @@ enum class WoodSpecies(val isGlulam: Boolean = false) {
     GLULAM_DF_DF(isGlulam = true),
     GLULAM_DF_HF(isGlulam = true),
     GLULAM_ES_ES(isGlulam = true),
-    // NDS Table 5C hardwood glulam combinations — not yet sourced (ESR-1940
-    // and the other softwood-combination sources used elsewhere in this file
-    // don't cover hardwoods at all). Present as a selectable species so the
-    // full reference tree is browsable, but has zero WoodGrade entries
-    // mapped to it yet — see validGradesFor().
+    // NDS Table 5C hardwood glulam combinations (12F-V1 .. 24F-E5 RO),
+    // sourced from the 2018 NDS Supplement PDF Cody supplied. Note this is
+    // the 2018 edition, not the 2024 one treated as authoritative elsewhere
+    // in this file — see WoodPropertyService.
     GLULAM_HARDWOODS(isGlulam = true),
     GLULAM_HF_HF(isGlulam = true),
     GLULAM_POC_POC(isGlulam = true),
@@ -114,7 +113,32 @@ enum class WoodGrade {
     G_24F_E18,
     G_24F_E15M1,
     G_26F_V1,
-    G_26F_V2;
+    G_26F_V2,
+
+    // NDS Table 5C hardwood glulam combination symbols. G_16F_V2 / G_16F_V3
+    // (also used by SP/SP and DF/DF) are reused for the hardwood 16F-V2 /
+    // 16F-V3 — safe, since WoodPropertyService branches on species first.
+    // The three species-suffixed 24F-E symbols get distinct names so they
+    // can't collide with DF/DF's G_24F_E4.
+    G_12F_V1,
+    G_12F_V2,
+    G_14F_V1,
+    G_14F_V2,
+    G_14F_V3,
+    G_14F_V4,
+    G_16F_V1,
+    G_16F_V4,
+    G_20F_V1,
+    G_20F_V2,
+    G_16F_E1,
+    G_16F_E2,
+    G_20F_E1,
+    G_20F_E2,
+    G_24F_E1,
+    G_24F_E2,
+    G_24F_E3_YP,
+    G_24F_E4_RM,
+    G_24F_E5_RO;
 
     companion object {
         fun fromString(value: String): WoodGrade = entries.find { it.name == value } ?: NO_2
@@ -147,8 +171,12 @@ enum class WoodGrade {
                 WoodSpecies.GLULAM_POC_POC -> listOf(G_22F_V_POC1, G_22F_V_POC2, G_20F_V14, G_20F_V15)
                 WoodSpecies.GLULAM_SPF_SPF -> listOf(G_20F_E_SPF1)
                 WoodSpecies.GLULAM_SP_SP -> listOf(G_24F_1_8E, G_16F_V5M1, G_16F_V2, G_16F_G1)
-                // No NDS Table 5C hardwood data sourced yet.
-                WoodSpecies.GLULAM_HARDWOODS -> emptyList()
+                WoodSpecies.GLULAM_HARDWOODS -> listOf(
+                    G_12F_V1, G_12F_V2, G_14F_V1, G_14F_V2, G_14F_V3, G_14F_V4,
+                    G_16F_V1, G_16F_V2, G_16F_V3, G_16F_V4, G_20F_V1, G_20F_V2,
+                    G_16F_E1, G_16F_E2, G_20F_E1, G_20F_E2,
+                    G_24F_E1, G_24F_E2, G_24F_E3_YP, G_24F_E4_RM, G_24F_E5_RO
+                )
                 else -> emptyList()
             }
         }

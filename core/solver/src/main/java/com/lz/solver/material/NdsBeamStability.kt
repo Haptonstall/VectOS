@@ -12,6 +12,37 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
+ * Resolves the effective NDS Table 4A Size Factor CF — the caller's
+ * explicit override if they set one (non-default), otherwise the
+ * tabulated lookup by nominal width and grade. Single source of truth so
+ * every capacity path that includes CF — bending's F'b, beam stability's
+ * F*b (CL, below), compression's F'c and CP's F*c, and tension's F't —
+ * agrees on the same value. Previously only bending resolved CF this way;
+ * every other path read the raw, un-resolved [NdsAdjustmentFactors.cf]
+ * directly (1.0 unless the user manually overrode it), silently ignoring
+ * the tabulated size factor and understating/overstating capacity for any
+ * sawn member where the true CF isn't 1.0 — and, for CL specifically,
+ * corrupting the beam-stability factor that bending's own F'b then
+ * multiplies by, compounding the error.
+ *
+ * Glulam never uses CF (bending substitutes CV per NDS 5.3.6; axial
+ * NDS Table 5A values already reflect full-size laminated members) —
+ * glulam [com.lz.model.structural.WoodGrade] values don't match any case
+ * in [NdsWoodCapacityCalculator.ndsTable4ASizeFactor]'s `when`, so they
+ * fall through to its `else -> 1.0`. Safe to call unconditionally.
+ */
+internal fun resolveSawnCf(
+    adjustmentFactors: NdsAdjustmentFactors,
+    material: MaterialGrade.Wood,
+    profile: SectionProfile
+): Double {
+    if (adjustmentFactors.cf != 1.0) return adjustmentFactors.cf
+    val nominalWidthIn =
+        if (profile is WoodProfile) profile.nominalDepth.inInches else profile.depth.inInches
+    return NdsWoodCapacityCalculator.ndsTable4ASizeFactor(material.grade, nominalWidthIn)
+}
+
+/**
  * NDS 3.3.3 Beam Stability Factor CL — single source of truth.
  *
  * Shared by [NdsWoodCapacityCalculator] (applies CL to F'b for the actual
@@ -54,7 +85,7 @@ internal fun computeNdsCL(
 
     val fbStar = material.referenceBending.inPsi *
             adjustmentFactors.cd * adjustmentFactors.cm *
-            adjustmentFactors.ct * adjustmentFactors.cf *
+            adjustmentFactors.ct * resolveSawnCf(adjustmentFactors, material, profile) *
             adjustmentFactors.ci * adjustmentFactors.cr
 
     if (fbStar <= 0.0) return 1.0

@@ -1,0 +1,490 @@
+diff --git a/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt b/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt
+new file mode 100644
+index 0000000..0ab8dc5
+--- /dev/null
++++ b/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt
+@@ -0,0 +1,260 @@
++package com.lz.ui.material
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.verticalScroll
++import androidx.compose.material3.AlertDialog
++import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.HorizontalDivider
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.OutlinedTextField
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.input.KeyboardType
++import androidx.compose.ui.unit.dp
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++
++/**
++ * One editable NDS adjustment factor. Description text is always visible
++ * (not a tap/hover tooltip) — more reliable on mobile, and lets the user
++ * see the NDS section reference and typical values without an extra tap.
++ */
++private data class FactorField(
++    val label: String,
++    val symbol: String,
++    val description: String,
++    val value: Double,
++    val onValueChange: (Double) -> Unit
++)
++
++/**
++ * Editable form for all 10 [NdsAdjustmentFactors]. Each factor defaults to
++ * 1.0 (no adjustment); CL, CF, and CP are flagged as auto-calculated by the
++ * solver when left at 1.0, since those three are only ever manually
++ * overridden when the user wants to bypass the automatic NDS 3.3.3 / Table
++ * 4A / 3.7.1 calculation with a known value of their own.
++ */
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++fun AdjustmentFactorsEditDialog(
++    currentFactors: NdsAdjustmentFactors,
++    onDismiss: () -> Unit,
++    onConfirm: (NdsAdjustmentFactors) -> Unit
++) {
++    var cd by remember(currentFactors) { mutableStateOf(currentFactors.cd.toString()) }
++    var cm by remember(currentFactors) { mutableStateOf(currentFactors.cm.toString()) }
++    var ct by remember(currentFactors) { mutableStateOf(currentFactors.ct.toString()) }
++    var cl by remember(currentFactors) { mutableStateOf(currentFactors.cl.toString()) }
++    var cf by remember(currentFactors) { mutableStateOf(currentFactors.cf.toString()) }
++    var cfu by remember(currentFactors) { mutableStateOf(currentFactors.cfu.toString()) }
++    var ci by remember(currentFactors) { mutableStateOf(currentFactors.ci.toString()) }
++    var cr by remember(currentFactors) { mutableStateOf(currentFactors.cr.toString()) }
++    var cp by remember(currentFactors) { mutableStateOf(currentFactors.cp.toString()) }
++    var cb by remember(currentFactors) { mutableStateOf(currentFactors.cb.toString()) }
++
++    val fields = listOf(
++        FactorField(
++            label = "Load Duration Factor",
++            symbol = "CD",
++            description = "NDS Section 2.3.2. Adjusts for how long the governing load is " +
++                "sustained — shorter-duration loads permit a higher design value. " +
++                "Typical: 0.9 (permanent/dead), 1.0 (10-year/normal occupancy live), " +
++                "1.15 (2-month/snow), 1.25 (7-day/construction), 1.6 (10-min/wind or " +
++                "seismic), 2.0 (impact). Does not apply to modulus of elasticity.",
++            value = cd.toDoubleOrNull() ?: 1.0,
++            onValueChange = { cd = it }
++        ),
++        FactorField(
++            label = "Wet Service Factor",
++            symbol = "CM",
++            description = "NDS Table 4A/4B/5A. Reduces design values when in-service " +
++                "moisture content exceeds 19% (sawn lumber) or 16% (glulam) for an " +
++                "extended period. Typical: 1.0 (dry service), 0.7–0.85 (wet service, " +
++                "varies by property and species group).",
++            value = cm.toDoubleOrNull() ?: 1.0,
++            onValueChange = { cm = it }
++        ),
++        FactorField(
++            label = "Temperature Factor",
++            symbol = "Ct",
++            description = "NDS Table 2.3.3. Reduces design values for sustained exposure " +
++                "above 100°F. Typical: 1.0 (T ≤ 100°F, the overwhelming majority of " +
++                "cases), 0.8–0.9 (100°F < T ≤ 125°F), 0.5–0.7 (125°F < T ≤ 150°F).",
++            value = ct.toDoubleOrNull() ?: 1.0,
++            onValueChange = { ct = it }
++        ),
++        FactorField(
++            label = "Beam Stability Factor",
++            symbol = "CL",
++            description = "NDS Section 3.3.3. Accounts for lateral-torsional buckling of " +
++                "the compression edge between points of lateral support. Auto-calculated " +
++                "by the solver from unbraced length and section geometry when left at " +
++                "1.0 — only override this if you want to force a known value instead of " +
++                "the automatic calculation. Range: 0 < CL ≤ 1.0.",
++            value = cl.toDoubleOrNull() ?: 1.0,
++            onValueChange = { cl = it }
++        ),
++        FactorField(
++            label = "Size Factor",
++            symbol = "CF",
++            description = "NDS Table 4A (sawn lumber only — glulam uses CV/volume factor " +
++                "instead, not user-editable here). Adjusts bending, tension, and " +
++                "compression values for member size per NDS 4.3.6. Auto-calculated by " +
++                "the solver from nominal width and grade group when left at 1.0. " +
++                "Typical range: 0.9–1.5 depending on width and grade.",
++            value = cf.toDoubleOrNull() ?: 1.0,
++            onValueChange = { cf = it }
++        ),
++        FactorField(
++            label = "Flat Use Factor",
++            symbol = "Cfu",
++            description = "NDS Table 4A. Applies when a rectangular sawn member is loaded " +
++                "on its wide face (flatwise) rather than the standard edgewise " +
++                "orientation. Typical: 1.0 (edgewise, standard orientation), 1.0–1.2 " +
++                "(flatwise, varies by nominal thickness).",
++            value = cfu.toDoubleOrNull() ?: 1.0,
++            onValueChange = { cfu = it }
++        ),
++        FactorField(
++            label = "Incising Factor",
++            symbol = "Ci",
++            description = "NDS Section 4.3.8. Reduces design values for lumber that has " +
++                "been incised for preservative treatment. Typical: 1.0 (not incised), " +
++                "0.8–0.95 (incised, varies by property — E is reduced least, shear-related " +
++                "properties most).",
++            value = ci.toDoubleOrNull() ?: 1.0,
++            onValueChange = { ci = it }
++        ),
++        FactorField(
++            label = "Repetitive Member Factor",
++            symbol = "Cr",
++            description = "NDS Section 4.3.9. Applies a bending-value increase for sawn " +
++                "dimension lumber (2\"–4\" thick) in a repetitive-member system — 3 or " +
++                "more parallel members, ≤ 24\" spacing, joined by sheathing or similar " +
++                "load-distributing elements. Typical: 1.0 (not repetitive), 1.15 " +
++                "(qualifying repetitive-member system).",
++            value = cr.toDoubleOrNull() ?: 1.0,
++            onValueChange = { cr = it }
++        ),
++        FactorField(
++            label = "Column Stability Factor",
++            symbol = "CP",
++            description = "NDS Section 3.7.1. Accounts for buckling of compression " +
++                "members about their weak axis, computed from the member's slenderness " +
++                "ratio (Le/d). Auto-calculated by the solver from unbraced length and " +
++                "section geometry when left at 1.0 — only override this if you want to " +
++                "force a known value instead of the automatic calculation. Range: " +
++                "0 < CP ≤ 1.0.",
++            value = cp.toDoubleOrNull() ?: 1.0,
++            onValueChange = { cp = it }
++        ),
++        FactorField(
++            label = "Bearing Area Factor",
++            symbol = "Cb",
++            description = "NDS Section 3.10.4. Increases the perpendicular-to-grain " +
++                "compression value for a bearing length less than 6\", away from the " +
++                "member end. Typical: 1.0 (bearing length ≥ 6\", or at the member end), " +
++                "up to 1.75 (bearing length as short as 0.5\", away from the end).",
++            value = cb.toDoubleOrNull() ?: 1.0,
++            onValueChange = { cb = it }
++        )
++    )
++
++    AlertDialog(
++        onDismissRequest = onDismiss,
++        title = { Text("Edit Adjustment Factors") },
++        text = {
++            Column(
++                modifier = Modifier
++                    .fillMaxWidth()
++                    .verticalScroll(rememberScrollState()),
++                verticalArrangement = Arrangement.spacedBy(16.dp)
++            ) {
++                Text(
++                    "NDS Table 4.3.1 adjustment factors applied to reference design " +
++                        "values. All factors default to 1.0 (no adjustment).",
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.outline
++                )
++                fields.forEachIndexed { index, field ->
++                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
++                        Text(
++                            "${field.label} (${field.symbol})",
++                            style = MaterialTheme.typography.labelLarge,
++                            fontWeight = FontWeight.Bold
++                        )
++                        Text(
++                            field.description,
++                            style = MaterialTheme.typography.bodySmall,
++                            color = MaterialTheme.colorScheme.onSurfaceVariant
++                        )
++                        // Reflects the raw text-field state (which may be mid-edit
++                        // / not yet a valid Double) rather than the parsed value,
++                        // so the user can type "1." or clear the field without it
++                        // snapping back.
++                        val rawText = when (field.symbol) {
++                            "CD" -> cd
++                            "CM" -> cm
++                            "Ct" -> ct
++                            "CL" -> cl
++                            "CF" -> cf
++                            "Cfu" -> cfu
++                            "Ci" -> ci
++                            "Cr" -> cr
++                            "CP" -> cp
++                            else -> cb
++                        }
++                        OutlinedTextField(
++                            value = rawText,
++                            onValueChange = field.onValueChange,
++                            label = { Text(field.symbol) },
++                            singleLine = true,
++                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
++                                keyboardType = KeyboardType.Decimal
++                            ),
++                            modifier = Modifier.fillMaxWidth()
++                        )
++                    }
++                    if (index != fields.lastIndex) {
++                        HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
++                    }
++                }
++            }
++        },
++        confirmButton = {
++            TextButton(onClick = {
++                onConfirm(
++                    NdsAdjustmentFactors(
++                        cd = cd.toDoubleOrNull() ?: 1.0,
++                        cm = cm.toDoubleOrNull() ?: 1.0,
++                        ct = ct.toDoubleOrNull() ?: 1.0,
++                        cl = cl.toDoubleOrNull() ?: 1.0,
++                        cf = cf.toDoubleOrNull() ?: 1.0,
++                        cfu = cfu.toDoubleOrNull() ?: 1.0,
++                        ci = ci.toDoubleOrNull() ?: 1.0,
++                        cr = cr.toDoubleOrNull() ?: 1.0,
++                        cp = cp.toDoubleOrNull() ?: 1.0,
++                        cb = cb.toDoubleOrNull() ?: 1.0
++                    )
++                )
++            }) {
++                Text("Confirm")
++            }
++        },
++        dismissButton = {
++            TextButton(onClick = onDismiss) {
++                Text("Cancel")
++            }
++        }
++    )
++}
+diff --git a/feature/beam/src/main/java/com/lz/beam/model/BeamModels.kt b/feature/beam/src/main/java/com/lz/beam/model/BeamModels.kt
+index 6784f0a..743a303 100644
+--- a/feature/beam/src/main/java/com/lz/beam/model/BeamModels.kt
++++ b/feature/beam/src/main/java/com/lz/beam/model/BeamModels.kt
+@@ -3,6 +3,7 @@ package com.lz.beam.model
+ import com.lz.domain.calculation.CalculationMetadata
+ import com.lz.domain.project.Project
+ import com.lz.model.regulatory.codes.ServiceabilityCriterion
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.structural.BracingInput
+ import com.lz.model.structural.DesignMethodology
+ import com.lz.model.structural.LoadCase
+@@ -54,7 +55,8 @@ data class BeamCalculationInputs(
+     val methodology: DesignMethodology = DesignMethodology.LRFD,
+     val isStrongAxis: Boolean = true,
+     val spanBracingInputs: List<SpanBracingInput> = emptyList(),
+-    val spanDeflectionOverrides: List<SpanDeflectionOverride> = emptyList()
++    val spanDeflectionOverrides: List<SpanDeflectionOverride> = emptyList(),
++    val ndsAdjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors()
+ )
+ 
+ @Serializable
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 090373c..33bfbaa 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -21,6 +21,7 @@ import com.lz.model.regulatory.LoadCombination
+ import com.lz.model.regulatory.LoadCombinationSet
+ import com.lz.model.regulatory.codes.BuildingCode
+ import com.lz.model.regulatory.codes.ServiceabilityCriterion
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.structural.BracingInput
+ import com.lz.model.structural.BracingResolver
+ import com.lz.model.structural.DesignMethodology
+@@ -119,6 +120,18 @@ class BeamViewModel @Inject constructor(
+     var methodology by mutableStateOf(DesignMethodology.LRFD)
+     var isStrongAxis by mutableStateOf(true)
+ 
++    // Manual overrides for the NDS 4.3.1 wood adjustment factors (CD, CM,
++    // Ct, CL, CF, Cfu, Ci, Cr, CP, Cb). Default (all 1.0) leaves every
++    // factor either unapplied or auto-calculated by the solver (CL/CF/CP).
++    // Only meaningful for wood materials — steel/aluminum/masonry calculators
++    // never read this.
++    var ndsAdjustmentFactors by mutableStateOf(NdsAdjustmentFactors())
++        private set
++
++    fun onAdjustmentFactorsChanged(factors: NdsAdjustmentFactors) {
++        ndsAdjustmentFactors = factors
++    }
++
+     // Prompted once on entry for a brand-new Quick Calc calculation so the
+     // ASD/LRFD choice is front-and-center rather than left to silently
+     // default to LRFD and only discoverable buried in settings. Suppressed
+@@ -212,7 +225,10 @@ class BeamViewModel @Inject constructor(
+ 
+             val calculator = when (val mat = activeMaterialGrade) {
+                 is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
+-                is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(section, mat)
++                is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
++                    section, mat,
++                    adjustmentFactors = ndsAdjustmentFactors
++                )
+                 else                   -> null
+             } ?: return null
+ 
+@@ -646,7 +662,8 @@ class BeamViewModel @Inject constructor(
+             },
+             spanDeflectionOverrides = spanDeflectionOverrides.map { (spanId, criteria) ->
+                 SpanDeflectionOverride(spanId, criteria)
+-            }
++            },
++            ndsAdjustmentFactors = ndsAdjustmentFactors
+         )
+     }
+ 
+@@ -712,7 +729,8 @@ class BeamViewModel @Inject constructor(
+                 sectionProfile = selectedSection,
+                 material = activeMaterialGrade,
+                 buildingCode = code,
+-                isStrongAxis = isStrongAxis
++                isStrongAxis = isStrongAxis,
++                ndsAdjustmentFactors = ndsAdjustmentFactors
+             )
+         )
+ 
+@@ -761,6 +779,7 @@ class BeamViewModel @Inject constructor(
+         spanDeflectionOverrides = inputs.spanDeflectionOverrides
+             .filter { override -> member.spans.any { it.id == override.spanId } }
+             .associate { it.spanId to it.criteria }
++        ndsAdjustmentFactors = inputs.ndsAdjustmentFactors
+ 
+         selectedMaterial = inputs.selectedMaterial
+         availableGrades = materialRepository.getMaterialsByType(selectedMaterial)
+@@ -835,7 +854,8 @@ class BeamViewModel @Inject constructor(
+         selectedCombinationSet = selectedCombinationSet,
+         enabledCombinations = enabledCombinations,
+         methodology = methodology,
+-        activeBuildingCode = activeBuildingCode
++        activeBuildingCode = activeBuildingCode,
++        ndsAdjustmentFactors = ndsAdjustmentFactors
+     )
+ 
+     /**
+@@ -855,6 +875,7 @@ class BeamViewModel @Inject constructor(
+         val selectedCombinationSet: LoadCombinationSet?,
+         val enabledCombinations: Set<String>,
+         val methodology: DesignMethodology,
+-        val activeBuildingCode: BuildingCode?
++        val activeBuildingCode: BuildingCode?,
++        val ndsAdjustmentFactors: NdsAdjustmentFactors
+     )
+ }
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt
+index 97987cf..ef6b680 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt
+@@ -2,6 +2,7 @@ package com.lz.beam.solver
+ 
+ import com.lz.model.regulatory.LoadCombination
+ import com.lz.model.regulatory.codes.BuildingCode
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.structural.DesignMethodology
+ import com.lz.model.structural.Load
+ import com.lz.model.structural.LoadCase
+@@ -51,7 +52,15 @@ data class BeamAnalysisConfig(
+      * -> Standard.edition). Null falls back to each calculator's own
+      * default edition (currently AISC 360-22 / NDS 2018).
+      */
+-    val buildingCode: BuildingCode? = null
++    val buildingCode: BuildingCode? = null,
++    /**
++     * Manual overrides for the NDS 4.3.1 wood adjustment factors (CD, CM,
++     * Ct, CL, CF, Cfu, Ci, Cr, CP, Cb). Only read by the wood capacity
++     * path — see [NdsWoodCapacityCalculator]. Default (all 1.0) leaves
++     * every factor either unapplied or auto-calculated by the solver
++     * (CL/CF/CP).
++     */
++    val ndsAdjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors()
+ ) {
+     /**
+      * All loads across all load cases.
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+index 08ed147..687df4b 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+@@ -148,6 +148,7 @@ object BeamAnalysisSolver {
+             )
+             is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
+                 profile, material,
++                adjustmentFactors = config.ndsAdjustmentFactors,
+                 edition = resolveNdsEdition(config) ?: NdsEdition.NDS_2018
+             )
+             else                   -> null
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index dea2a03..f6c260c 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -95,6 +95,7 @@ import com.lz.model.structural.DesignMethodology
+ import com.lz.model.structural.InteractionStatus
+ import com.lz.model.structural.Load
+ import com.lz.model.structural.LoadCase
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.structural.MaterialGrade
+ import com.lz.model.structural.MaterialType
+ import com.lz.model.structural.NodeBoundaryCondition
+@@ -132,6 +133,7 @@ import com.lz.ui.boundary.BoundaryConditionPicker
+ import com.lz.ui.boundary.BoundaryConditionPickerConfig
+ import com.lz.ui.loads.LoadEditor
+ import com.lz.ui.material.WoodMaterialPickerDialog
++import com.lz.ui.material.AdjustmentFactorsEditDialog
+ import com.lz.ui.material.displayName
+ import com.lz.ui.member.BracingPickerDialog
+ import com.lz.ui.member.DeflectionCriteriaPickerDialog
+@@ -969,7 +971,10 @@ fun DesignTab(viewModel: BeamViewModel) {
+             serviceabilityResults = scopedServiceabilityResults,
+             allServiceabilityResults = results.serviceabilityResults,
+             member = viewModel.structuralMember,
+-            unitSystem = viewModel.unitSystem
++            unitSystem = viewModel.unitSystem,
++            isWoodMaterial = viewModel.activeMaterialGrade is MaterialGrade.Wood,
++            ndsAdjustmentFactors = viewModel.ndsAdjustmentFactors,
++            onAdjustmentFactorsChanged = viewModel::onAdjustmentFactorsChanged
+         )
+     }
+ }
+@@ -1620,7 +1625,13 @@ fun DesignSummary(
+     serviceabilityResults: List<ServiceabilityResult>,
+     allServiceabilityResults: List<ServiceabilityResult>,
+     member: StructuralMember,
+-    unitSystem: UnitSystem
++    unitSystem: UnitSystem,
++    // Only meaningful for wood materials — null/no-op for steel, aluminum,
++    // masonry. When non-null, an "Edit Adjustment Factors" entry point is
++    // shown next to the read-only Design Parameters summary below.
++    isWoodMaterial: Boolean = false,
++    ndsAdjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors(),
++    onAdjustmentFactorsChanged: ((NdsAdjustmentFactors) -> Unit)? = null
+ ) {
+     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+         // 1. Critical Strength Check (Governing)
+@@ -1654,6 +1665,23 @@ fun DesignSummary(
+             )
+ 
+             DesignParameterSummary(detailedResult, unitSystem)
++
++            if (isWoodMaterial && onAdjustmentFactorsChanged != null) {
++                var isAdjustmentFactorsDialogVisible by remember { mutableStateOf(false) }
++                TextButton(onClick = { isAdjustmentFactorsDialogVisible = true }) {
++                    Text("Edit Adjustment Factors")
++                }
++                if (isAdjustmentFactorsDialogVisible) {
++                    AdjustmentFactorsEditDialog(
++                        currentFactors = ndsAdjustmentFactors,
++                        onDismiss = { isAdjustmentFactorsDialogVisible = false },
++                        onConfirm = { factors ->
++                            onAdjustmentFactorsChanged(factors)
++                            isAdjustmentFactorsDialogVisible = false
++                        }
++                    )
++                }
++            }
+         }
+ 
+         // 2. Serviceability Checks

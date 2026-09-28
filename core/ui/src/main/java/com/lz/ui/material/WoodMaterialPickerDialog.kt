@@ -33,15 +33,15 @@ import com.lz.solver.material.WoodPropertyService
  * covers every glulam species pairing except Southern Pine (they all share
  * the same 1.5"-lamination standard sizing — see the size catalog); Southern
  * Pine Glulam is just SP/SP (1.375" laminations, its own width series).
- * Hardwoods-Glulam isn't tied to either size series yet (no data sourced),
- * so it's deliberately left out of both — picking it isn't possible via a
- * glulam ShapeType today.
+ * Hardwoods-Glulam is grouped under Western Glulam for now, ASSUMING it
+ * shares the 1.5"-lamination standard sizing — NDS Table 5C doesn't state
+ * a lamination thickness, so this is unconfirmed. Move it if that's wrong.
  */
 private fun glulamSpeciesFor(shapeType: ShapeType?): List<WoodSpecies> = when (shapeType) {
     ShapeType.GLULAM_WESTERN -> listOf(
         WoodSpecies.GLULAM_AC_AC, WoodSpecies.GLULAM_DF_DF, WoodSpecies.GLULAM_DF_HF,
         WoodSpecies.GLULAM_ES_ES, WoodSpecies.GLULAM_HF_HF, WoodSpecies.GLULAM_POC_POC,
-        WoodSpecies.GLULAM_SPF_SPF
+        WoodSpecies.GLULAM_SPF_SPF, WoodSpecies.GLULAM_HARDWOODS
     )
     ShapeType.GLULAM_SOUTHERN_PINE -> listOf(WoodSpecies.GLULAM_SP_SP)
     else -> emptyList()
@@ -280,7 +280,10 @@ fun WoodGrade.displayName(): String {
         WoodGrade.G_20F_E_ES1 to "20F-E/ES1",
         WoodGrade.G_20F_E_SPF1 to "20F-E/SPF1",
         WoodGrade.G_22F_V_POC1 to "22F-V/POC1",
-        WoodGrade.G_22F_V_POC2 to "22F-V/POC2"
+        WoodGrade.G_22F_V_POC2 to "22F-V/POC2",
+        WoodGrade.G_24F_E3_YP to "24F-E3 YP",
+        WoodGrade.G_24F_E4_RM to "24F-E4 RM",
+        WoodGrade.G_24F_E5_RO to "24F-E5 RO"
     )
     speciesSlashOverrides[this]?.let { return it }
 

@@ -3,6 +3,7 @@ package com.lz.beam.model
 import com.lz.domain.calculation.CalculationMetadata
 import com.lz.domain.project.Project
 import com.lz.model.regulatory.codes.ServiceabilityCriterion
+import com.lz.model.regulatory.nds.NdsAdjustmentFactors
 import com.lz.model.structural.BracingInput
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.LoadCase
@@ -54,7 +55,8 @@ data class BeamCalculationInputs(
     val methodology: DesignMethodology = DesignMethodology.LRFD,
     val isStrongAxis: Boolean = true,
     val spanBracingInputs: List<SpanBracingInput> = emptyList(),
-    val spanDeflectionOverrides: List<SpanDeflectionOverride> = emptyList()
+    val spanDeflectionOverrides: List<SpanDeflectionOverride> = emptyList(),
+    val ndsAdjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors()
 )
 
 @Serializable

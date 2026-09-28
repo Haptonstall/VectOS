@@ -2,6 +2,7 @@ package com.lz.beam.solver
 
 import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.codes.BuildingCode
+import com.lz.model.regulatory.nds.NdsAdjustmentFactors
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.Load
 import com.lz.model.structural.LoadCase
@@ -51,7 +52,15 @@ data class BeamAnalysisConfig(
      * -> Standard.edition). Null falls back to each calculator's own
      * default edition (currently AISC 360-22 / NDS 2018).
      */
-    val buildingCode: BuildingCode? = null
+    val buildingCode: BuildingCode? = null,
+    /**
+     * Manual overrides for the NDS 4.3.1 wood adjustment factors (CD, CM,
+     * Ct, CL, CF, Cfu, Ci, Cr, CP, Cb). Only read by the wood capacity
+     * path — see [NdsWoodCapacityCalculator]. Default (all 1.0) leaves
+     * every factor either unapplied or auto-calculated by the solver
+     * (CL/CF/CP).
+     */
+    val ndsAdjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors()
 ) {
     /**
      * All loads across all load cases.
