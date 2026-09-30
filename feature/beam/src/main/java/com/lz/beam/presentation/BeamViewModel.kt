@@ -54,6 +54,7 @@ import com.lz.model.units.lbPerFt
 import com.lz.model.units.psiModulus
 import com.lz.solver.material.AiscSteelCapacityCalculator
 import com.lz.solver.material.NdsWoodCapacityCalculator
+import com.lz.solver.material.WoodPropertyService
 import com.lz.solver.envelope.ServiceabilityEvaluationService
 import com.lz.beam.solver.BeamAnalysisSolver
 import com.lz.beam.solver.BeamAnalysisConfig
@@ -783,7 +784,16 @@ class BeamViewModel @Inject constructor(
 
         selectedMaterial = inputs.selectedMaterial
         availableGrades = materialRepository.getMaterialsByType(selectedMaterial)
-        activeMaterialGrade = inputs.activeMaterialGrade
+        // A wood material saved before a WoodPropertyService table
+        // correction (e.g. the E / shear-modulus values that were off by
+        // 1000x for every species) carries the old numbers verbatim —
+        // this isn't re-derived from species+grade at load time otherwise.
+        // Re-resolve against the current tables so restoring an old
+        // calculation picks up the fix rather than silently keeping the
+        // wrong stiffness.
+        activeMaterialGrade = (inputs.activeMaterialGrade as? MaterialGrade.Wood)
+            ?.let { WoodPropertyService.refreshed(it) }
+            ?: inputs.activeMaterialGrade
             ?: availableGrades.firstOrNull()
 
         availableShapeTypes = sectionRepository.getShapeTypes(selectedMaterial)

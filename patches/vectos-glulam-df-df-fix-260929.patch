@@ -1,0 +1,240 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt b/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
+index c77a42e..953b0e0 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
+@@ -226,6 +226,182 @@ object WoodPropertyService {
+                     shearModulus = (1.7 * 1000.0 / 16.0).psi,
+                     densityPcf = 31.2 // G = 0.5
+                 )
++                // NDS 2018 Supplement Table 5A, 16F-E3 DF/DF. Was offered by
++                // validGradesFor() with no data behind it (Confirm silently
++                // stayed disabled) until this pass. Table Ex,min = 0.85e6
++                // psi -- not recorded here; WoodReferenceProperties has no
++                // eMin field on this branch yet (falls back to E/1.76 in
++                // the meantime).
++                WoodGrade.G_16F_E3 -> WoodReferenceProperties(
++                    bending = 1600.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1600.0.psi,
++                    compressionPerp = 560.0.psi,
++                    tensionParallel = 975.0.psi,
++                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
++                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.50
++                )
++                // NDS 2018 Supplement Table 5A, 16F-E6 DF/DF. Was offered by
++                // validGradesFor() with no data behind it (Confirm silently
++                // stayed disabled) until this pass. Table Ex,min = 0.85e6
++                // psi -- not recorded here; WoodReferenceProperties has no
++                // eMin field on this branch yet (falls back to E/1.76 in
++                // the meantime).
++                WoodGrade.G_16F_E6 -> WoodReferenceProperties(
++                    bending = 1600.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1600.0.psi,
++                    compressionPerp = 560.0.psi,
++                    tensionParallel = 1000.0.psi,
++                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
++                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.50
++                )
++                // NDS 2018 Supplement Table 5A, 20F-E3 DF/DF. Was offered by
++                // validGradesFor() with no data behind it (Confirm silently
++                // stayed disabled) until this pass. Table Ex,min = 0.9e6
++                // psi -- not recorded here; WoodReferenceProperties has no
++                // eMin field on this branch yet (falls back to E/1.76 in
++                // the meantime).
++                WoodGrade.G_20F_E3 -> WoodReferenceProperties(
++                    bending = 2000.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1600.0.psi,
++                    compressionPerp = 560.0.psi,
++                    tensionParallel = 1050.0.psi,
++                    modulusOfElasticity = (1.8 * 1_000_000.0).psi,
++                    shearModulus = (1.8 * 1_000_000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.50
++                )
++                // NDS 2018 Supplement Table 5A, 20F-E6 DF/DF. Was offered by
++                // validGradesFor() with no data behind it (Confirm silently
++                // stayed disabled) until this pass. Table Ex,min = 0.9e6
++                // psi -- not recorded here; WoodReferenceProperties has no
++                // eMin field on this branch yet (falls back to E/1.76 in
++                // the meantime).
++                WoodGrade.G_20F_E6 -> WoodReferenceProperties(
++                    bending = 2000.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1650.0.psi,
++                    compressionPerp = 560.0.psi,
++                    tensionParallel = 1150.0.psi,
++                    modulusOfElasticity = (1.8 * 1_000_000.0).psi,
++                    shearModulus = (1.8 * 1_000_000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.50
++                )
++                // NDS 2018 Supplement Table 5A, 24F-V4 DF/DF (unbalanced layup, simple-span use). Was offered by
++                // validGradesFor() with no data behind it (Confirm silently
++                // stayed disabled) until this pass. Table Ex,min = 0.95e6
++                // psi -- not recorded here; WoodReferenceProperties has no
++                // eMin field on this branch yet (falls back to E/1.76 in
++                // the meantime).
++                WoodGrade.G_24F_V4 -> WoodReferenceProperties(
++                    bending = 2400.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1650.0.psi,
++                    compressionPerp = 650.0.psi,
++                    tensionParallel = 1100.0.psi,
++                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
++                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.50
++                )
++                // NDS 2018 Supplement Table 5A, 24F-V8 DF/DF (balanced layup, continuous/cantilever use). Was offered by
++                // validGradesFor() with no data behind it (Confirm silently
++                // stayed disabled) until this pass. Table Ex,min = 0.95e6
++                // psi -- not recorded here; WoodReferenceProperties has no
++                // eMin field on this branch yet (falls back to E/1.76 in
++                // the meantime).
++                WoodGrade.G_24F_V8 -> WoodReferenceProperties(
++                    bending = 2400.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1650.0.psi,
++                    compressionPerp = 650.0.psi,
++                    tensionParallel = 1100.0.psi,
++                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
++                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.50
++                )
++                // NDS 2018 Supplement Table 5A, 24F-E4 DF/DF. Was offered by
++                // validGradesFor() with no data behind it (Confirm silently
++                // stayed disabled) until this pass. Table Ex,min = 0.95e6
++                // psi -- not recorded here; WoodReferenceProperties has no
++                // eMin field on this branch yet (falls back to E/1.76 in
++                // the meantime).
++                WoodGrade.G_24F_E4 -> WoodReferenceProperties(
++                    bending = 2400.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1700.0.psi,
++                    compressionPerp = 650.0.psi,
++                    tensionParallel = 1100.0.psi,
++                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
++                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.50
++                )
++                // NDS 2018 Supplement Table 5A, 24F-E13 DF/DF. Was offered by
++                // validGradesFor() with no data behind it (Confirm silently
++                // stayed disabled) until this pass. Table Ex,min = 0.95e6
++                // psi -- not recorded here; WoodReferenceProperties has no
++                // eMin field on this branch yet (falls back to E/1.76 in
++                // the meantime).
++                WoodGrade.G_24F_E13 -> WoodReferenceProperties(
++                    bending = 2400.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1700.0.psi,
++                    compressionPerp = 650.0.psi,
++                    tensionParallel = 1250.0.psi,
++                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
++                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.50
++                )
++                // NDS 2018 Supplement Table 5A, 24F-E18 DF/DF. Was offered by
++                // validGradesFor() with no data behind it (Confirm silently
++                // stayed disabled) until this pass. Table Ex,min = 0.95e6
++                // psi -- not recorded here; WoodReferenceProperties has no
++                // eMin field on this branch yet (falls back to E/1.76 in
++                // the meantime).
++                WoodGrade.G_24F_E18 -> WoodReferenceProperties(
++                    bending = 2400.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1700.0.psi,
++                    compressionPerp = 650.0.psi,
++                    tensionParallel = 975.0.psi,
++                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
++                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.50
++                )
++                // NDS 2018 Supplement Table 5A, 26F-V1 DF/DF (unbalanced layup, simple-span use). Was offered by
++                // validGradesFor() with no data behind it (Confirm silently
++                // stayed disabled) until this pass. Table Ex,min = 1.06e6
++                // psi -- not recorded here; WoodReferenceProperties has no
++                // eMin field on this branch yet (falls back to E/1.76 in
++                // the meantime).
++                WoodGrade.G_26F_V1 -> WoodReferenceProperties(
++                    bending = 2600.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1850.0.psi,
++                    compressionPerp = 650.0.psi,
++                    tensionParallel = 1350.0.psi,
++                    modulusOfElasticity = (2.1 * 1_000_000.0).psi,
++                    shearModulus = (2.1 * 1_000_000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.50
++                )
++                // NDS 2018 Supplement Table 5A, 26F-V2 DF/DF (balanced layup, continuous/cantilever use). Was offered by
++                // validGradesFor() with no data behind it (Confirm silently
++                // stayed disabled) until this pass. Table Ex,min = 1.06e6
++                // psi -- not recorded here; WoodReferenceProperties has no
++                // eMin field on this branch yet (falls back to E/1.76 in
++                // the meantime).
++                WoodGrade.G_26F_V2 -> WoodReferenceProperties(
++                    bending = 2600.0.psi,
++                    shear = 265.0.psi,
++                    compressionParallel = 1850.0.psi,
++                    compressionPerp = 650.0.psi,
++                    tensionParallel = 1350.0.psi,
++                    modulusOfElasticity = (2.1 * 1_000_000.0).psi,
++                    shearModulus = (2.1 * 1_000_000.0 / 16.0).psi,
++                    densityPcf = 31.2 // G = 0.50
++                )
+                 // 2024 NDS Supplement Table 5A, 16F-G6 DF/DF.
+                 WoodGrade.G_16F_G6 -> WoodReferenceProperties(
+                     bending = 1600.0.psi,
+diff --git a/core/solver/src/test/java/com/lz/solver/material/WoodPropertyServiceGlulamCoverageTest.kt b/core/solver/src/test/java/com/lz/solver/material/WoodPropertyServiceGlulamCoverageTest.kt
+new file mode 100644
+index 0000000..ec66c53
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/material/WoodPropertyServiceGlulamCoverageTest.kt
+@@ -0,0 +1,47 @@
++package com.lz.solver.material
++
++import com.lz.model.structural.WoodGrade
++import com.lz.model.structural.WoodSpecies
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/**
++ * Every glulam combination symbol [WoodGrade.validGradesFor] offers for a
++ * species must resolve to real data — otherwise the picker shows it as a
++ * selectable option, the user picks it, and Confirm silently stays
++ * disabled ("Reference design values for this combination aren't
++ * available yet") with no indication of which combination is at fault.
++ * That's exactly what happened with GLULAM_DF_DF's 24F-V8 (and 10 other
++ * DF/DF symbols) before this test existed — validGradesFor listed 19
++ * combinations, WoodPropertyService only had 8 of them.
++ *
++ * GLULAM_HF_HF's G_24F_E15M1 is knowingly excluded: it doesn't match any
++ * plain NDS Table 5A symbol (those don't carry an "M1" suffix — that
++ * naming shows up elsewhere in this file only on ESR-1940-sourced
++ * grades), so it isn't clear the Table 5A "24F-E15" row is the same
++ * combination. Needs Cody to confirm before it's sourced.
++ */
++class WoodPropertyServiceGlulamCoverageTest {
++
++    private val knownGaps = setOf(
++        WoodSpecies.GLULAM_HF_HF to WoodGrade.G_24F_E15M1
++    )
++
++    @Test
++    fun `every offered glulam combination symbol has data`() {
++        val missing = mutableListOf<String>()
++        WoodSpecies.entries.filter { it.isGlulam }.forEach { species ->
++            WoodGrade.validGradesFor(species).forEach { grade ->
++                if (species to grade in knownGaps) return@forEach
++                val props = WoodPropertyService.getReferenceProperties(species, grade)
++                if (props == null) missing += "$species / $grade"
++            }
++        }
++        assertTrue(
++            "These combinations are offered by validGradesFor() but have no " +
++                "WoodPropertyService data (Confirm would silently stay disabled " +
++                "for them): $missing",
++            missing.isEmpty()
++        )
++    }
++}

@@ -69,6 +69,13 @@ class NdsWoodCapacityCalculator(
 
     private val isGlulam: Boolean = material.species.isGlulam
 
+    /**
+     * [material] with any member-width-dependent values (Southern Pine,
+     * NDS Table 4B) resolved for this profile. All capacity math below
+     * reads reference values from here, not from [material] directly.
+     */
+    private val designMaterial: MaterialGrade.Wood = resolveDesignMaterial(material, profile)
+
     // ------------------------------------------------------------------
     // CapacityCalculator contract
     // ------------------------------------------------------------------
@@ -251,7 +258,7 @@ class NdsWoodCapacityCalculator(
      *              NDS 5.3.6: CV and CL are not applied simultaneously.
      */
     private fun calculateBending(lb: Double): Pair<Double, String> {
-        val fb = material.referenceBending.inPsi
+        val fb = designMaterial.referenceBending.inPsi
         val sx = profile.propertiesStrongAxis.s.inIn3
 
         val cl = computeCL(lb)
@@ -271,7 +278,7 @@ class NdsWoodCapacityCalculator(
                 "Bending — Beam Stability CL (NDS 3.3.3)"
         } else {
             // Sawn lumber / SCL: CF from adjustmentFactors (caller must set it)
-            val cfEffective = computeSawnCF()
+            val cfEffective = computeSawnCF(NdsCfProperty.BENDING)
             val f = adjustmentFactors
             fbAdj = fb * f.cd * f.cm * f.ct * cl * cfEffective * f.cfu * f.ci * f.cr
             limitState = if (cl < 1.0)
@@ -289,7 +296,7 @@ class NdsWoodCapacityCalculator(
      * why it's shared with [NdsClCalculator].
      */
     private fun computeCL(lb: Double): Double =
-        computeNdsCL(lb, profile, material, adjustmentFactors, isGlulam)
+        computeNdsCL(lb, profile, designMaterial, adjustmentFactors, isGlulam)
 
     /**
      * NDS 5.3.6 Volume Factor CV for glulam.
@@ -315,58 +322,96 @@ class NdsWoodCapacityCalculator(
     }
 
     /**
-     * NDS Table 4A Size Factor CF for sawn dimension lumber (2"-4" thick),
-     * looked up by nominal width and grade group — NOT the continuous
-     * `(12/d)^(1/9)` formula, which is Table 4D's timber (5"x5" and larger)
-     * formula and does not apply to dimension lumber. Table 4A gives one
-     * shared CF value for Fb and Fc at every width; Ft differs from it only
-     * at the 8" and 10" nominal-width brackets (by 0.1), a difference small
-     * enough, and Ft-governed checks rare enough for typical beams, that
-     * this shares one `cf` value across Fb/Ft/Fc rather than splitting
-     * [NdsAdjustmentFactors] into three separate size-factor fields — a
-     * documented simplification, not an oversight.
-     * Delegates to [resolveSawnCf] — the single source of truth shared
-     * with [computeNdsCL]'s F*b and this class's own compression/tension
-     * paths, so all of them agree on the same resolved CF.
+     * Size factor CF for sawn dimension lumber, looked up by nominal width,
+     * thickness and grade — NOT the continuous `(12/d)^(1/9)` formula, which
+     * is Table 4D's timber (5"x5" and larger) formula. Table 4A gives Fb,
+     * Ft and Fc *separate* schedules (Fc's is much smaller than Fb's, and
+     * Fb differs again for 4"-thick members), so each capacity path asks for
+     * its own [property]. Southern Pine (Table 4B) has size built into its
+     * per-width tabulated values instead. Delegates to [resolveSawnCf].
      */
-    private fun computeSawnCF(): Double = resolveSawnCf(adjustmentFactors, material, profile)
+    private fun computeSawnCF(property: NdsCfProperty): Double =
+        resolveSawnCf(adjustmentFactors, designMaterial, profile, property)
 
     companion object {
         /**
-         * NDS 2018 Supplement Table 4A "Size Factors, CF" — the Fb/Fc
-         * column (see [computeSawnCF] doc for why Ft isn't split out).
-         * Grade groups per the table: Select Structural/No.1 & Btr/No.1/
-         * No.2/No.3 share one column; Stud has its own (and defers to the
-         * first group's values at 8" and wider, per the table's own note);
-         * Construction/Standard are flat 1.0; Utility is 1.0 at 4" and 0.4
-         * below that.
+         * NDS 2018 Supplement Table 4A "Size Factors, CF" for dimension
+         * lumber 2"-4" thick (all species except Southern Pine, whose
+         * Table 4B builds size into the tabulated values).
+         *
+         * The table has separate columns: Fb for 2"-3" thick, Fb for 4"
+         * thick, Ft, and Fc. Ft matches Fb(2"-3"); Fc has its own, smaller
+         * schedule. [nominalThicknessIn] only matters for Fb (>= 4 selects
+         * the 4"-thick column).
+         *
+         * Grade groups per the table: Select Structural / No.1 & Btr /
+         * No.1 / No.2 / No.3 share one schedule; Stud has its own (and
+         * defers to the No.3 schedule at 8" and wider); Construction and
+         * Standard are 1.0; Utility is 1.0 at 4" wide and 0.4 (Fb, Ft) /
+         * 0.6 (Fc) at 2"-3".
          */
-        fun ndsTable4ASizeFactor(grade: WoodGrade, nominalWidthIn: Double): Double {
-            fun selectStructuralGroupCf(width: Double): Double = when {
-                width <= 4.0 -> 1.5
-                width <= 5.0 -> 1.4
-                width <= 6.0 -> 1.3
-                width <= 8.0 -> 1.2
-                width <= 10.0 -> 1.1
-                width <= 12.0 -> 1.0
-                else -> 0.9
+        fun ndsTable4ASizeFactor(
+            grade: WoodGrade,
+            nominalWidthIn: Double,
+            property: NdsCfProperty = NdsCfProperty.BENDING,
+            nominalThicknessIn: Double = 2.0
+        ): Double {
+            fun selectStructuralGroupCf(width: Double): Double = when (property) {
+                NdsCfProperty.COMPRESSION -> when {
+                    width <= 4.0 -> 1.15
+                    width <= 6.0 -> 1.1
+                    width <= 8.0 -> 1.05
+                    width <= 12.0 -> 1.0
+                    else -> 0.9
+                }
+                NdsCfProperty.BENDING ->
+                    if (nominalThicknessIn >= 4.0) when {
+                        width <= 4.0 -> 1.5
+                        width <= 5.0 -> 1.4
+                        width <= 6.0 -> 1.3
+                        width <= 8.0 -> 1.3
+                        width <= 10.0 -> 1.2
+                        width <= 12.0 -> 1.1
+                        else -> 1.0
+                    } else when {
+                        width <= 4.0 -> 1.5
+                        width <= 5.0 -> 1.4
+                        width <= 6.0 -> 1.3
+                        width <= 8.0 -> 1.2
+                        width <= 10.0 -> 1.1
+                        width <= 12.0 -> 1.0
+                        else -> 0.9
+                    }
+                NdsCfProperty.TENSION -> when {
+                    width <= 4.0 -> 1.5
+                    width <= 5.0 -> 1.4
+                    width <= 6.0 -> 1.3
+                    width <= 8.0 -> 1.2
+                    width <= 10.0 -> 1.1
+                    width <= 12.0 -> 1.0
+                    else -> 0.9
+                }
             }
             return when (grade) {
                 WoodGrade.SELECT_STRUCTURAL, WoodGrade.NO_1, WoodGrade.NO_2, WoodGrade.NO_3 ->
                     selectStructuralGroupCf(nominalWidthIn)
                 WoodGrade.STUD -> when {
-                    nominalWidthIn <= 4.0 -> 1.1
+                    nominalWidthIn <= 4.0 ->
+                        if (property == NdsCfProperty.COMPRESSION) 1.05 else 1.1
                     nominalWidthIn <= 6.0 -> 1.0
                     // "8\" & wider: Use No.3 Grade tabulated design values
-                    // and size factors" — NDS Table 4A note.
+                    // and size factors" — NDS Table 4A.
                     else -> selectStructuralGroupCf(nominalWidthIn)
                 }
                 WoodGrade.CONSTRUCTION, WoodGrade.STANDARD -> 1.0
-                WoodGrade.UTILITY -> if (nominalWidthIn <= 3.0) 0.4 else 1.0
+                WoodGrade.UTILITY ->
+                    if (nominalWidthIn <= 3.0) {
+                        if (property == NdsCfProperty.COMPRESSION) 0.6 else 0.4
+                    } else 1.0
                 // Glulam grades (both the legacy MOE-style names and the
                 // newer NDS Table 5A combination symbols) never reach this
-                // path — isGlulam routes to computeCV instead — but return
-                // 1.0 rather than throw if ever called with one.
+                // path — glulam has no CF — but return 1.0 rather than
+                // throw if ever called with one.
                 else -> 1.0
             }
         }
@@ -383,7 +428,7 @@ class NdsWoodCapacityCalculator(
      * in rectangular cross-sections (NDS 3.4.2).
      */
     private fun calculateShear(): Pair<Double, String> {
-        val fvAdj = adjustmentFactors.adjustedShear(material.referenceShear.inPsi)
+        val fvAdj = adjustmentFactors.adjustedShear(designMaterial.referenceShear.inPsi)
         val area  = profile.area.inIn2
 
         val vn = (2.0 / 3.0) * fvAdj * area
@@ -400,13 +445,13 @@ class NdsWoodCapacityCalculator(
      * CP computed from NDS 3.7.1 using slenderness ratio le/d.
      */
     private fun calculateCompression(lu: Double): Pair<Double, String> {
-        val fc   = material.referenceCompressionParallel.inPsi
+        val fc   = designMaterial.referenceCompressionParallel.inPsi
         val area = profile.area.inIn2
 
         val cp = computeCP(lu)
 
         val fcAdj = fc * adjustmentFactors.cd * adjustmentFactors.cm *
-                adjustmentFactors.ct * computeSawnCF() *
+                adjustmentFactors.ct * computeSawnCF(NdsCfProperty.COMPRESSION) *
                 adjustmentFactors.ci * cp
 
         return (fcAdj * area) to "Compression (NDS 3.7, CP=${String.format(Locale.US, "%.3f", cp)})"
@@ -430,13 +475,13 @@ class NdsWoodCapacityCalculator(
         if (slenderness > 50.0) return 0.0  // Exceeds NDS maximum — member inadequate
 
         // Critical buckling stress FcE (NDS 3.7.1)
-        val eMin      = material.modulusOfElasticity.inPsi / 1.76
+        val eMin      = woodEmin(designMaterial)
         val fce       = 0.822 * eMin / slenderness.pow(2)
 
         // F*c = Fc with all adjustments except CP
-        val fcStar    = material.referenceCompressionParallel.inPsi *
+        val fcStar    = designMaterial.referenceCompressionParallel.inPsi *
                 adjustmentFactors.cd * adjustmentFactors.cm *
-                adjustmentFactors.ct * computeSawnCF() * adjustmentFactors.ci
+                adjustmentFactors.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * adjustmentFactors.ci
 
         if (fcStar <= 0.0) return 1.0
 
@@ -460,9 +505,9 @@ class NdsWoodCapacityCalculator(
      * the raw, un-resolved CF field — see [resolveSawnCf].
      */
     private fun calculateTension(): Pair<Double, String> {
-        val ft = material.referenceTensionParallel.inPsi
+        val ft = designMaterial.referenceTensionParallel.inPsi
         val ftAdj = ft * adjustmentFactors.cd * adjustmentFactors.cm *
-                adjustmentFactors.ct * computeSawnCF() * adjustmentFactors.ci
+                adjustmentFactors.ct * computeSawnCF(NdsCfProperty.TENSION) * adjustmentFactors.ci
         val area = profile.area.inIn2
         return (ftAdj * area) to "Tension (NDS 3.8)"
     }

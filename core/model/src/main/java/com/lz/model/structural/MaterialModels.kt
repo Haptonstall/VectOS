@@ -52,6 +52,23 @@ enum class WoodGrade {
     STANDARD,
     UTILITY,
 
+    // Southern Pine-only grades (NDS Table 4B splits Select Structural,
+    // No.1 and No.2 into Dense / standard / Non-Dense, and adds the three
+    // Dense Structural grades). The plain SELECT_STRUCTURAL / NO_1 / NO_2 /
+    // NO_3 / STUD / CONSTRUCTION / STANDARD / UTILITY entries above are
+    // reused for the un-suffixed Southern Pine rows. Appended as new enum
+    // names, so previously saved materials (persisted by name) are
+    // unaffected.
+    DENSE_SELECT_STRUCTURAL,
+    NON_DENSE_SELECT_STRUCTURAL,
+    NO_1_DENSE,
+    NO_1_NON_DENSE,
+    NO_2_DENSE,
+    NO_2_NON_DENSE,
+    DENSE_STRUCTURAL_86,
+    DENSE_STRUCTURAL_72,
+    DENSE_STRUCTURAL_65,
+
     // Legacy glulam combination-symbol naming ("stress class"-"MOE in
     // millions psi"), predating the NDS Table 5A combination-symbol set
     // below. Corrected this pass: ICC-ES ESR-1940 lists "24F-1.8E Glulam
@@ -154,6 +171,15 @@ enum class WoodGrade {
          * Solid-sawn grades apply uniformly to any non-glulam species.
          */
         fun validGradesFor(species: WoodSpecies): List<WoodGrade> {
+            if (species == WoodSpecies.SOUTHERN_PINE) {
+                return listOf(
+                    DENSE_SELECT_STRUCTURAL, SELECT_STRUCTURAL, NON_DENSE_SELECT_STRUCTURAL,
+                    NO_1_DENSE, NO_1, NO_1_NON_DENSE,
+                    NO_2_DENSE, NO_2, NO_2_NON_DENSE,
+                    NO_3, STUD, CONSTRUCTION, STANDARD, UTILITY,
+                    DENSE_STRUCTURAL_86, DENSE_STRUCTURAL_72, DENSE_STRUCTURAL_65
+                )
+            }
             if (!species.isGlulam) {
                 return listOf(SELECT_STRUCTURAL, NO_1, NO_2, NO_3, STUD, CONSTRUCTION, STANDARD, UTILITY)
             }

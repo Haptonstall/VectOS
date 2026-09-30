@@ -1,0 +1,1253 @@
+diff --git a/core/model/src/main/java/com/lz/model/structural/MaterialModels.kt b/core/model/src/main/java/com/lz/model/structural/MaterialModels.kt
+index 1d77a80..84e280d 100644
+--- a/core/model/src/main/java/com/lz/model/structural/MaterialModels.kt
++++ b/core/model/src/main/java/com/lz/model/structural/MaterialModels.kt
+@@ -52,6 +52,23 @@ enum class WoodGrade {
+     STANDARD,
+     UTILITY,
+ 
++    // Southern Pine-only grades (NDS Table 4B splits Select Structural,
++    // No.1 and No.2 into Dense / standard / Non-Dense, and adds the three
++    // Dense Structural grades). The plain SELECT_STRUCTURAL / NO_1 / NO_2 /
++    // NO_3 / STUD / CONSTRUCTION / STANDARD / UTILITY entries above are
++    // reused for the un-suffixed Southern Pine rows. Appended as new enum
++    // names, so previously saved materials (persisted by name) are
++    // unaffected.
++    DENSE_SELECT_STRUCTURAL,
++    NON_DENSE_SELECT_STRUCTURAL,
++    NO_1_DENSE,
++    NO_1_NON_DENSE,
++    NO_2_DENSE,
++    NO_2_NON_DENSE,
++    DENSE_STRUCTURAL_86,
++    DENSE_STRUCTURAL_72,
++    DENSE_STRUCTURAL_65,
++
+     // Legacy glulam combination-symbol naming ("stress class"-"MOE in
+     // millions psi"), predating the NDS Table 5A combination-symbol set
+     // below. Corrected this pass: ICC-ES ESR-1940 lists "24F-1.8E Glulam
+@@ -154,6 +171,15 @@ enum class WoodGrade {
+          * Solid-sawn grades apply uniformly to any non-glulam species.
+          */
+         fun validGradesFor(species: WoodSpecies): List<WoodGrade> {
++            if (species == WoodSpecies.SOUTHERN_PINE) {
++                return listOf(
++                    DENSE_SELECT_STRUCTURAL, SELECT_STRUCTURAL, NON_DENSE_SELECT_STRUCTURAL,
++                    NO_1_DENSE, NO_1, NO_1_NON_DENSE,
++                    NO_2_DENSE, NO_2, NO_2_NON_DENSE,
++                    NO_3, STUD, CONSTRUCTION, STANDARD, UTILITY,
++                    DENSE_STRUCTURAL_86, DENSE_STRUCTURAL_72, DENSE_STRUCTURAL_65
++                )
++            }
+             if (!species.isGlulam) {
+                 return listOf(SELECT_STRUCTURAL, NO_1, NO_2, NO_3, STUD, CONSTRUCTION, STANDARD, UTILITY)
+             }
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+index 4777f46..75a3455 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+@@ -3,7 +3,9 @@ package com.lz.solver.material
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.structural.MaterialGrade
+ import com.lz.model.structural.SectionProfile
++import com.lz.model.structural.WoodGrade
+ import com.lz.model.structural.WoodProfile
++import com.lz.model.structural.WoodSpecies
+ import com.lz.model.units.inIn3
+ import com.lz.model.units.inIn4
+ import com.lz.model.units.inInches
+@@ -12,34 +14,99 @@ import kotlin.math.pow
+ import kotlin.math.sqrt
+ 
+ /**
+- * Resolves the effective NDS Table 4A Size Factor CF — the caller's
+- * explicit override if they set one (non-default), otherwise the
+- * tabulated lookup by nominal width and grade. Single source of truth so
+- * every capacity path that includes CF — bending's F'b, beam stability's
+- * F*b (CL, below), compression's F'c and CP's F*c, and tension's F't —
+- * agrees on the same value. Previously only bending resolved CF this way;
+- * every other path read the raw, un-resolved [NdsAdjustmentFactors.cf]
+- * directly (1.0 unless the user manually overrode it), silently ignoring
+- * the tabulated size factor and understating/overstating capacity for any
+- * sawn member where the true CF isn't 1.0 — and, for CL specifically,
+- * corrupting the beam-stability factor that bending's own F'b then
+- * multiplies by, compounding the error.
++ * Which tabulated property a size factor is being resolved for. NDS Table
++ * 4A gives Fb, Ft and Fc *different* size-factor schedules (Fc's is much
++ * smaller — e.g. 1.15 vs 1.5 for a 2x4 — and Fb also differs for 4"-thick
++ * members), so a single shared CF is wrong for at least one of them.
++ */
++enum class NdsCfProperty { BENDING, TENSION, COMPRESSION }
++
++/**
++ * Resolves the effective size factor CF for [property]: the caller's
++ * explicit override if they set one (non-default — an override applies to
++ * every property), otherwise the tabulated value.
+  *
+- * Glulam never uses CF (bending substitutes CV per NDS 5.3.6; axial
+- * NDS Table 5A values already reflect full-size laminated members) —
+- * glulam [com.lz.model.structural.WoodGrade] values don't match any case
+- * in [NdsWoodCapacityCalculator.ndsTable4ASizeFactor]'s `when`, so they
+- * fall through to its `else -> 1.0`. Safe to call unconditionally.
++ *  - Sawn lumber other than Southern Pine: NDS Table 4A (by nominal width,
++ *    thickness and grade — see [NdsWoodCapacityCalculator.ndsTable4ASizeFactor]).
++ *  - Southern Pine: NDS Table 4B already builds size into the tabulated
++ *    values for each width (see [resolveDesignMaterial]), so applying the
++ *    Table 4A factor on top would double-count. Only the >12" cases in the
++ *    Table 4B adjustment-factor text remain. The optional CF = 1.1 for
++ *    4"-thick, 8"-and-wider Fb is "permitted", not required, so it isn't
++ *    applied automatically (use the CF override to take it).
++ *  - Glulam: no CF (bending uses CV/CL; axial Table 5 values are already
++ *    full-size), so 1.0.
+  */
+ internal fun resolveSawnCf(
+     adjustmentFactors: NdsAdjustmentFactors,
+     material: MaterialGrade.Wood,
+-    profile: SectionProfile
++    profile: SectionProfile,
++    property: NdsCfProperty
+ ): Double {
+     if (adjustmentFactors.cf != 1.0) return adjustmentFactors.cf
++    if (material.species.isGlulam) return 1.0
++
+     val nominalWidthIn =
+         if (profile is WoodProfile) profile.nominalDepth.inInches else profile.depth.inInches
+-    return NdsWoodCapacityCalculator.ndsTable4ASizeFactor(material.grade, nominalWidthIn)
++    val thicknessIn =
++        if (profile is WoodProfile) profile.nominalWidth.inInches else 2.0
++
++    if (material.species == WoodSpecies.SOUTHERN_PINE) {
++        if (nominalWidthIn <= 12.0) return 1.0
++        val dense = material.grade == WoodGrade.DENSE_STRUCTURAL_86 ||
++            material.grade == WoodGrade.DENSE_STRUCTURAL_72 ||
++            material.grade == WoodGrade.DENSE_STRUCTURAL_65
++        return when {
++            // Dense Structural, d > 12": Fb only, CF = (12/d)^(1/9).
++            dense -> if (property == NdsCfProperty.BENDING) (12.0 / nominalWidthIn).pow(1.0 / 9.0) else 1.0
++            // Other grades wider than 12": 0.9 on Fb, Ft and Fc.
++            else -> 0.9
++        }
++    }
++    return NdsWoodCapacityCalculator.ndsTable4ASizeFactor(
++        material.grade, nominalWidthIn, property, thicknessIn
++    )
++}
++
++/**
++ * The material with any width-dependent tabulated values resolved for this
++ * member. Only Southern Pine needs it (NDS Table 4B lists different Fb, Ft
++ * and Fc per width); everything else is returned unchanged. Resolves from
++ * the table by species + grade + width rather than scaling the material's
++ * own values, so it is idempotent and safe to call from more than one place.
++ */
++internal fun resolveDesignMaterial(
++    material: MaterialGrade.Wood,
++    profile: SectionProfile
++): MaterialGrade.Wood {
++    if (material.species != WoodSpecies.SOUTHERN_PINE || profile !is WoodProfile) return material
++    val p = WoodPropertyService.getSouthernPineDimensionValues(
++        material.grade, profile.nominalDepth.inInches
++    ) ?: return material
++    return material.copy(
++        referenceBending = p.bending,
++        referenceShear = p.shear,
++        referenceCompressionParallel = p.compressionParallel,
++        referenceCompressionPerp = p.compressionPerp,
++        referenceTensionParallel = p.tensionParallel
++    )
++}
++
++/**
++ * Emin (psi) for the stability factors CL and CP. Uses the tabulated NDS
++ * Emin where the tables have it; otherwise falls back to E / 1.76. That
++ * fallback is only a rough stand-in — tabulated sawn-lumber Emin is about
++ * 0.37 E, so the fallback overstates it (unconservative for CL / CP), which
++ * is why solid-sawn and hardwood-glulam entries carry the real value.
++ * Prefers the table's E over the material's own so a stale saved material
++ * can't feed a wrong E into the stability check.
++ */
++internal fun woodEmin(material: MaterialGrade.Wood): Double {
++    val table = WoodPropertyService.getReferenceProperties(material.species, material.grade)
++    if (table != null) {
++        return table.eMin?.inPsi ?: (table.modulusOfElasticity.inPsi / 1.76)
++    }
++    return material.modulusOfElasticity.inPsi / 1.76
+ }
+ 
+ /**
+@@ -67,6 +134,7 @@ internal fun computeNdsCL(
+ ): Double {
+     if (lb <= 0.0) return 1.0
+ 
++    val designMaterial = resolveDesignMaterial(material, profile)
+     val d = profile.depth.inInches
+     val b = if (profile is WoodProfile) profile.dressedWidth.inInches
+     else profile.propertiesWeakAxis.s.inIn3 / profile.propertiesWeakAxis.i.inIn4 * 2.0
+@@ -80,12 +148,13 @@ internal fun computeNdsCL(
+     if (rbSquared <= 0.0) return 1.0
+ 
+     // Critical buckling stress FbE (NDS 3.3.3)
+-    val eMin = material.modulusOfElasticity.inPsi / 1.76 // Approx Emin = E / 1.76
++    val eMin = woodEmin(designMaterial)
+     val fbe = 1.20 * eMin / rbSquared
+ 
+-    val fbStar = material.referenceBending.inPsi *
++    val fbStar = designMaterial.referenceBending.inPsi *
+             adjustmentFactors.cd * adjustmentFactors.cm *
+-            adjustmentFactors.ct * resolveSawnCf(adjustmentFactors, material, profile) *
++            adjustmentFactors.ct *
++            resolveSawnCf(adjustmentFactors, designMaterial, profile, NdsCfProperty.BENDING) *
+             adjustmentFactors.ci * adjustmentFactors.cr
+ 
+     if (fbStar <= 0.0) return 1.0
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index a3b2580..cb53048 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -69,6 +69,13 @@ class NdsWoodCapacityCalculator(
+ 
+     private val isGlulam: Boolean = material.species.isGlulam
+ 
++    /**
++     * [material] with any member-width-dependent values (Southern Pine,
++     * NDS Table 4B) resolved for this profile. All capacity math below
++     * reads reference values from here, not from [material] directly.
++     */
++    private val designMaterial: MaterialGrade.Wood = resolveDesignMaterial(material, profile)
++
+     // ------------------------------------------------------------------
+     // CapacityCalculator contract
+     // ------------------------------------------------------------------
+@@ -251,7 +258,7 @@ class NdsWoodCapacityCalculator(
+      *              NDS 5.3.6: CV and CL are not applied simultaneously.
+      */
+     private fun calculateBending(lb: Double): Pair<Double, String> {
+-        val fb = material.referenceBending.inPsi
++        val fb = designMaterial.referenceBending.inPsi
+         val sx = profile.propertiesStrongAxis.s.inIn3
+ 
+         val cl = computeCL(lb)
+@@ -271,7 +278,7 @@ class NdsWoodCapacityCalculator(
+                 "Bending — Beam Stability CL (NDS 3.3.3)"
+         } else {
+             // Sawn lumber / SCL: CF from adjustmentFactors (caller must set it)
+-            val cfEffective = computeSawnCF()
++            val cfEffective = computeSawnCF(NdsCfProperty.BENDING)
+             val f = adjustmentFactors
+             fbAdj = fb * f.cd * f.cm * f.ct * cl * cfEffective * f.cfu * f.ci * f.cr
+             limitState = if (cl < 1.0)
+@@ -289,7 +296,7 @@ class NdsWoodCapacityCalculator(
+      * why it's shared with [NdsClCalculator].
+      */
+     private fun computeCL(lb: Double): Double =
+-        computeNdsCL(lb, profile, material, adjustmentFactors, isGlulam)
++        computeNdsCL(lb, profile, designMaterial, adjustmentFactors, isGlulam)
+ 
+     /**
+      * NDS 5.3.6 Volume Factor CV for glulam.
+@@ -315,58 +322,96 @@ class NdsWoodCapacityCalculator(
+     }
+ 
+     /**
+-     * NDS Table 4A Size Factor CF for sawn dimension lumber (2"-4" thick),
+-     * looked up by nominal width and grade group — NOT the continuous
+-     * `(12/d)^(1/9)` formula, which is Table 4D's timber (5"x5" and larger)
+-     * formula and does not apply to dimension lumber. Table 4A gives one
+-     * shared CF value for Fb and Fc at every width; Ft differs from it only
+-     * at the 8" and 10" nominal-width brackets (by 0.1), a difference small
+-     * enough, and Ft-governed checks rare enough for typical beams, that
+-     * this shares one `cf` value across Fb/Ft/Fc rather than splitting
+-     * [NdsAdjustmentFactors] into three separate size-factor fields — a
+-     * documented simplification, not an oversight.
+-     * Delegates to [resolveSawnCf] — the single source of truth shared
+-     * with [computeNdsCL]'s F*b and this class's own compression/tension
+-     * paths, so all of them agree on the same resolved CF.
++     * Size factor CF for sawn dimension lumber, looked up by nominal width,
++     * thickness and grade — NOT the continuous `(12/d)^(1/9)` formula, which
++     * is Table 4D's timber (5"x5" and larger) formula. Table 4A gives Fb,
++     * Ft and Fc *separate* schedules (Fc's is much smaller than Fb's, and
++     * Fb differs again for 4"-thick members), so each capacity path asks for
++     * its own [property]. Southern Pine (Table 4B) has size built into its
++     * per-width tabulated values instead. Delegates to [resolveSawnCf].
+      */
+-    private fun computeSawnCF(): Double = resolveSawnCf(adjustmentFactors, material, profile)
++    private fun computeSawnCF(property: NdsCfProperty): Double =
++        resolveSawnCf(adjustmentFactors, designMaterial, profile, property)
+ 
+     companion object {
+         /**
+-         * NDS 2018 Supplement Table 4A "Size Factors, CF" — the Fb/Fc
+-         * column (see [computeSawnCF] doc for why Ft isn't split out).
+-         * Grade groups per the table: Select Structural/No.1 & Btr/No.1/
+-         * No.2/No.3 share one column; Stud has its own (and defers to the
+-         * first group's values at 8" and wider, per the table's own note);
+-         * Construction/Standard are flat 1.0; Utility is 1.0 at 4" and 0.4
+-         * below that.
++         * NDS 2018 Supplement Table 4A "Size Factors, CF" for dimension
++         * lumber 2"-4" thick (all species except Southern Pine, whose
++         * Table 4B builds size into the tabulated values).
++         *
++         * The table has separate columns: Fb for 2"-3" thick, Fb for 4"
++         * thick, Ft, and Fc. Ft matches Fb(2"-3"); Fc has its own, smaller
++         * schedule. [nominalThicknessIn] only matters for Fb (>= 4 selects
++         * the 4"-thick column).
++         *
++         * Grade groups per the table: Select Structural / No.1 & Btr /
++         * No.1 / No.2 / No.3 share one schedule; Stud has its own (and
++         * defers to the No.3 schedule at 8" and wider); Construction and
++         * Standard are 1.0; Utility is 1.0 at 4" wide and 0.4 (Fb, Ft) /
++         * 0.6 (Fc) at 2"-3".
+          */
+-        fun ndsTable4ASizeFactor(grade: WoodGrade, nominalWidthIn: Double): Double {
+-            fun selectStructuralGroupCf(width: Double): Double = when {
+-                width <= 4.0 -> 1.5
+-                width <= 5.0 -> 1.4
+-                width <= 6.0 -> 1.3
+-                width <= 8.0 -> 1.2
+-                width <= 10.0 -> 1.1
+-                width <= 12.0 -> 1.0
+-                else -> 0.9
++        fun ndsTable4ASizeFactor(
++            grade: WoodGrade,
++            nominalWidthIn: Double,
++            property: NdsCfProperty = NdsCfProperty.BENDING,
++            nominalThicknessIn: Double = 2.0
++        ): Double {
++            fun selectStructuralGroupCf(width: Double): Double = when (property) {
++                NdsCfProperty.COMPRESSION -> when {
++                    width <= 4.0 -> 1.15
++                    width <= 6.0 -> 1.1
++                    width <= 8.0 -> 1.05
++                    width <= 12.0 -> 1.0
++                    else -> 0.9
++                }
++                NdsCfProperty.BENDING ->
++                    if (nominalThicknessIn >= 4.0) when {
++                        width <= 4.0 -> 1.5
++                        width <= 5.0 -> 1.4
++                        width <= 6.0 -> 1.3
++                        width <= 8.0 -> 1.3
++                        width <= 10.0 -> 1.2
++                        width <= 12.0 -> 1.1
++                        else -> 1.0
++                    } else when {
++                        width <= 4.0 -> 1.5
++                        width <= 5.0 -> 1.4
++                        width <= 6.0 -> 1.3
++                        width <= 8.0 -> 1.2
++                        width <= 10.0 -> 1.1
++                        width <= 12.0 -> 1.0
++                        else -> 0.9
++                    }
++                NdsCfProperty.TENSION -> when {
++                    width <= 4.0 -> 1.5
++                    width <= 5.0 -> 1.4
++                    width <= 6.0 -> 1.3
++                    width <= 8.0 -> 1.2
++                    width <= 10.0 -> 1.1
++                    width <= 12.0 -> 1.0
++                    else -> 0.9
++                }
+             }
+             return when (grade) {
+                 WoodGrade.SELECT_STRUCTURAL, WoodGrade.NO_1, WoodGrade.NO_2, WoodGrade.NO_3 ->
+                     selectStructuralGroupCf(nominalWidthIn)
+                 WoodGrade.STUD -> when {
+-                    nominalWidthIn <= 4.0 -> 1.1
++                    nominalWidthIn <= 4.0 ->
++                        if (property == NdsCfProperty.COMPRESSION) 1.05 else 1.1
+                     nominalWidthIn <= 6.0 -> 1.0
+                     // "8\" & wider: Use No.3 Grade tabulated design values
+-                    // and size factors" — NDS Table 4A note.
++                    // and size factors" — NDS Table 4A.
+                     else -> selectStructuralGroupCf(nominalWidthIn)
+                 }
+                 WoodGrade.CONSTRUCTION, WoodGrade.STANDARD -> 1.0
+-                WoodGrade.UTILITY -> if (nominalWidthIn <= 3.0) 0.4 else 1.0
++                WoodGrade.UTILITY ->
++                    if (nominalWidthIn <= 3.0) {
++                        if (property == NdsCfProperty.COMPRESSION) 0.6 else 0.4
++                    } else 1.0
+                 // Glulam grades (both the legacy MOE-style names and the
+                 // newer NDS Table 5A combination symbols) never reach this
+-                // path — isGlulam routes to computeCV instead — but return
+-                // 1.0 rather than throw if ever called with one.
++                // path — glulam has no CF — but return 1.0 rather than
++                // throw if ever called with one.
+                 else -> 1.0
+             }
+         }
+@@ -383,7 +428,7 @@ class NdsWoodCapacityCalculator(
+      * in rectangular cross-sections (NDS 3.4.2).
+      */
+     private fun calculateShear(): Pair<Double, String> {
+-        val fvAdj = adjustmentFactors.adjustedShear(material.referenceShear.inPsi)
++        val fvAdj = adjustmentFactors.adjustedShear(designMaterial.referenceShear.inPsi)
+         val area  = profile.area.inIn2
+ 
+         val vn = (2.0 / 3.0) * fvAdj * area
+@@ -400,13 +445,13 @@ class NdsWoodCapacityCalculator(
+      * CP computed from NDS 3.7.1 using slenderness ratio le/d.
+      */
+     private fun calculateCompression(lu: Double): Pair<Double, String> {
+-        val fc   = material.referenceCompressionParallel.inPsi
++        val fc   = designMaterial.referenceCompressionParallel.inPsi
+         val area = profile.area.inIn2
+ 
+         val cp = computeCP(lu)
+ 
+         val fcAdj = fc * adjustmentFactors.cd * adjustmentFactors.cm *
+-                adjustmentFactors.ct * computeSawnCF() *
++                adjustmentFactors.ct * computeSawnCF(NdsCfProperty.COMPRESSION) *
+                 adjustmentFactors.ci * cp
+ 
+         return (fcAdj * area) to "Compression (NDS 3.7, CP=${String.format(Locale.US, "%.3f", cp)})"
+@@ -430,13 +475,13 @@ class NdsWoodCapacityCalculator(
+         if (slenderness > 50.0) return 0.0  // Exceeds NDS maximum — member inadequate
+ 
+         // Critical buckling stress FcE (NDS 3.7.1)
+-        val eMin      = material.modulusOfElasticity.inPsi / 1.76
++        val eMin      = woodEmin(designMaterial)
+         val fce       = 0.822 * eMin / slenderness.pow(2)
+ 
+         // F*c = Fc with all adjustments except CP
+-        val fcStar    = material.referenceCompressionParallel.inPsi *
++        val fcStar    = designMaterial.referenceCompressionParallel.inPsi *
+                 adjustmentFactors.cd * adjustmentFactors.cm *
+-                adjustmentFactors.ct * computeSawnCF() * adjustmentFactors.ci
++                adjustmentFactors.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * adjustmentFactors.ci
+ 
+         if (fcStar <= 0.0) return 1.0
+ 
+@@ -460,9 +505,9 @@ class NdsWoodCapacityCalculator(
+      * the raw, un-resolved CF field — see [resolveSawnCf].
+      */
+     private fun calculateTension(): Pair<Double, String> {
+-        val ft = material.referenceTensionParallel.inPsi
++        val ft = designMaterial.referenceTensionParallel.inPsi
+         val ftAdj = ft * adjustmentFactors.cd * adjustmentFactors.cm *
+-                adjustmentFactors.ct * computeSawnCF() * adjustmentFactors.ci
++                adjustmentFactors.ct * computeSawnCF(NdsCfProperty.TENSION) * adjustmentFactors.ci
+         val area = profile.area.inIn2
+         return (ftAdj * area) to "Tension (NDS 3.8)"
+     }
+diff --git a/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt b/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
+index c77a42e..2339926 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
+@@ -19,7 +19,14 @@ object WoodPropertyService {
+         val tensionParallel: Pressure,
+         val modulusOfElasticity: Pressure,
+         val shearModulus: Pressure,
+-        val densityPcf: Double
++        val densityPcf: Double,
++        /**
++         * Tabulated NDS Emin (the adjusted-for-stability modulus used in
++         * CL / CP), or null where it hasn't been sourced for this entry —
++         * callers then fall back to an approximation from E. Sawn-lumber
++         * Emin is only ~0.37 E, well below the old E/1.76 approximation.
++         */
++        val eMin: Pressure? = null
+     )
+ 
+     /**
+@@ -42,11 +49,14 @@ object WoodPropertyService {
+                 WoodGrade.SELECT_STRUCTURAL -> WoodReferenceProperties(
+                     bending = 1500.0.psi,
+                     shear = 180.0.psi,
+-                    compressionParallel = 1550.0.psi,
++                    // NDS 2018 Table 4A DF-L Select Structural Fc = 1,700 psi
++                    // (was 1,550 — that is the "No. 1 & Btr" value).
++                    compressionParallel = 1700.0.psi,
+                     compressionPerp = 625.0.psi,
+                     tensionParallel = 1000.0.psi,
+-                    modulusOfElasticity = (1.9 * 1000.0).psi,
+-                    shearModulus = (1.9 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
++                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
++                    eMin = 690000.0.psi,
+                     densityPcf = 35.0
+                 )
+                 WoodGrade.NO_1 -> WoodReferenceProperties(
+@@ -55,8 +65,9 @@ object WoodPropertyService {
+                     compressionParallel = 1500.0.psi,
+                     compressionPerp = 625.0.psi,
+                     tensionParallel = 675.0.psi,
+-                    modulusOfElasticity = (1.7 * 1000.0).psi,
+-                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
++                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
++                    eMin = 620000.0.psi,
+                     densityPcf = 35.0
+                 )
+                 WoodGrade.NO_2 -> WoodReferenceProperties(
+@@ -65,8 +76,9 @@ object WoodPropertyService {
+                     compressionParallel = 1350.0.psi,
+                     compressionPerp = 625.0.psi,
+                     tensionParallel = 575.0.psi,
+-                    modulusOfElasticity = (1.6 * 1000.0).psi,
+-                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.6 * 1_000_000.0).psi,
++                    shearModulus = (1.6 * 1_000_000.0 / 16.0).psi,
++                    eMin = 580000.0.psi,
+                     densityPcf = 35.0
+                 )
+                 // NDS Supplement 2018 Table 4A, Douglas Fir-Larch, No.3.
+@@ -76,8 +88,9 @@ object WoodPropertyService {
+                     compressionParallel = 775.0.psi,
+                     compressionPerp = 625.0.psi,
+                     tensionParallel = 325.0.psi,
+-                    modulusOfElasticity = (1.4 * 1000.0).psi,
+-                    shearModulus = (1.4 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.4 * 1_000_000.0).psi,
++                    shearModulus = (1.4 * 1_000_000.0 / 16.0).psi,
++                    eMin = 510000.0.psi,
+                     densityPcf = 35.0
+                 )
+                 else -> null
+@@ -86,11 +99,14 @@ object WoodPropertyService {
+                 WoodGrade.SELECT_STRUCTURAL -> WoodReferenceProperties(
+                     bending = 1400.0.psi,
+                     shear = 150.0.psi,
+-                    compressionParallel = 1300.0.psi,
++                    // NDS 2018 Table 4A Hem-Fir Select Structural Fc = 1,500
++                    // psi (was 1,300 — that is the No. 2 value).
++                    compressionParallel = 1500.0.psi,
+                     compressionPerp = 405.0.psi,
+                     tensionParallel = 925.0.psi,
+-                    modulusOfElasticity = (1.6 * 1000.0).psi,
+-                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.6 * 1_000_000.0).psi,
++                    shearModulus = (1.6 * 1_000_000.0 / 16.0).psi,
++                    eMin = 580000.0.psi,
+                     densityPcf = 30.0
+                 )
+                 // NDS Supplement 2018 Table 4A, Hem-Fir, No.1.
+@@ -100,8 +116,9 @@ object WoodPropertyService {
+                     compressionParallel = 1350.0.psi,
+                     compressionPerp = 405.0.psi,
+                     tensionParallel = 625.0.psi,
+-                    modulusOfElasticity = (1.5 * 1000.0).psi,
+-                    shearModulus = (1.5 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.5 * 1_000_000.0).psi,
++                    shearModulus = (1.5 * 1_000_000.0 / 16.0).psi,
++                    eMin = 550000.0.psi,
+                     densityPcf = 30.0
+                 )
+                 // NDS Supplement 2018 Table 4A, Hem-Fir, No.2.
+@@ -111,50 +128,37 @@ object WoodPropertyService {
+                     compressionParallel = 1300.0.psi,
+                     compressionPerp = 405.0.psi,
+                     tensionParallel = 525.0.psi,
+-                    modulusOfElasticity = (1.3 * 1000.0).psi,
+-                    shearModulus = (1.3 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.3 * 1_000_000.0).psi,
++                    shearModulus = (1.3 * 1_000_000.0 / 16.0).psi,
++                    eMin = 470000.0.psi,
+                     densityPcf = 30.0
+                 )
+                 // No.3 not yet verified against a reliable source — left
+                 // unmapped rather than guessed. See WoodPropertyService doc.
+                 else -> null
+             }
++            // NDS 2018 Supplement Table 4A (Spruce-Pine-Fir), 2" & wider,
++            // G = 0.42. The table's combined "No.1 / No.2" row applies to
++            // both grades. Density follows this file's existing 28 pcf
++            // convention for SPF.
+             WoodSpecies.SPF -> when (grade) {
+-                // Only Select Structural has been verified against a
+-                // reliable source so far. SPF's No.1/No.2 (NDS combines
+-                // these into one tabulated grade) and No.3 need a follow-up
+-                // pass — see WoodPropertyService doc comment.
+-                WoodGrade.SELECT_STRUCTURAL -> WoodReferenceProperties(
+-                    bending = 1250.0.psi,
+-                    shear = 135.0.psi,
+-                    compressionParallel = 1150.0.psi,
+-                    compressionPerp = 425.0.psi,
+-                    tensionParallel = 700.0.psi,
+-                    modulusOfElasticity = (1.5 * 1000.0).psi,
+-                    shearModulus = (1.5 * 1000.0 / 16.0).psi,
+-                    densityPcf = 28.0
+-                )
+-                else -> null
+-            }
+-            WoodSpecies.SOUTHERN_PINE -> when (grade) {
+-                // Only No.2 has been mapped so far, and even this single
+-                // value is an approximation: unlike the other three species,
+-                // Southern Pine's real NDS Table 4B design values vary by
+-                // member width (a 2x4's Fb differs from a 2x12's), which
+-                // this lookup's species+grade-only signature can't represent
+-                // without a wider change — see WoodPropertyService doc.
+-                WoodGrade.NO_2 -> WoodReferenceProperties(
+-                    bending = 1150.0.psi,
+-                    shear = 175.0.psi,
+-                    compressionParallel = 1450.0.psi,
+-                    compressionPerp = 565.0.psi,
+-                    tensionParallel = 750.0.psi,
+-                    modulusOfElasticity = (1.6 * 1000.0).psi,
+-                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
+-                    densityPcf = 37.0
+-                )
++                //                                 Fb    Ft   Fv  Fc-perp  Fc     E        Emin
++                WoodGrade.SELECT_STRUCTURAL -> sawnLumber(1250, 700, 135, 425, 1400, 1_500_000, 550_000, 28.0)
++                WoodGrade.NO_1, WoodGrade.NO_2 ->
++                                               sawnLumber( 875, 450, 135, 425, 1150, 1_400_000, 510_000, 28.0)
++                WoodGrade.NO_3              -> sawnLumber( 500, 250, 135, 425,  650, 1_200_000, 440_000, 28.0)
++                WoodGrade.STUD              -> sawnLumber( 675, 350, 135, 425,  725, 1_200_000, 440_000, 28.0)
++                WoodGrade.CONSTRUCTION      -> sawnLumber(1000, 500, 135, 425, 1400, 1_300_000, 470_000, 28.0)
++                WoodGrade.STANDARD          -> sawnLumber( 550, 275, 135, 425, 1150, 1_200_000, 440_000, 28.0)
++                WoodGrade.UTILITY           -> sawnLumber( 275, 125, 135, 425,  750, 1_100_000, 400_000, 28.0)
+                 else -> null
+             }
++            // Southern Pine's Table 4B values depend on member width. The
++            // (species, grade) signature can't carry a width, so this
++            // returns the 2"-4" wide band (the widest-value band, used for
++            // picker display / E / density); the capacity calculators call
++            // getSouthernPineDimensionValues() with the real member width.
++            WoodSpecies.SOUTHERN_PINE -> getSouthernPineDimensionValues(grade, 4.0)
+             // Glulam combination symbols — NDS Supplement Table 5A / ICC-ES
+             // ESR-1940 (joint APA/ICC-ES evaluation report), organized by
+             // species pairing. Real glulam properties are asymmetric
+@@ -176,8 +180,8 @@ object WoodPropertyService {
+                     compressionParallel = 1500.0.psi,
+                     compressionPerp = 560.0.psi,
+                     tensionParallel = 975.0.psi,
+-                    modulusOfElasticity = (1.6 * 1000.0).psi,
+-                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.6 * 1_000_000.0).psi,
++                    shearModulus = (1.6 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 31.2 // G = 0.5
+                 )
+                 // ESR-1940 Table 1, 16F-V6 DF/DF (balanced layup, for
+@@ -188,8 +192,8 @@ object WoodPropertyService {
+                     compressionParallel = 1600.0.psi,
+                     compressionPerp = 560.0.psi,
+                     tensionParallel = 1000.0.psi,
+-                    modulusOfElasticity = (1.7 * 1000.0).psi,
+-                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
++                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 31.2 // G = 0.5
+                 )
+                 // ESR-1940 Table 1, 20F-V4 DF/DF.
+@@ -199,8 +203,8 @@ object WoodPropertyService {
+                     compressionParallel = 1550.0.psi,
+                     compressionPerp = 590.0.psi,
+                     tensionParallel = 975.0.psi,
+-                    modulusOfElasticity = (1.7 * 1000.0).psi,
+-                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
++                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 31.2 // G = 0.5
+                 )
+                 // ESR-1940 Table 1, 20F-V8 DF/DF.
+@@ -210,8 +214,8 @@ object WoodPropertyService {
+                     compressionParallel = 1600.0.psi,
+                     compressionPerp = 590.0.psi,
+                     tensionParallel = 975.0.psi,
+-                    modulusOfElasticity = (1.7 * 1000.0).psi,
+-                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
++                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 31.2 // G = 0.5
+                 )
+                 // 2024 NDS Supplement Table 5A (Cody-supplied screenshot),
+@@ -222,8 +226,8 @@ object WoodPropertyService {
+                     compressionParallel = 1600.0.psi,
+                     compressionPerp = 560.0.psi,
+                     tensionParallel = 975.0.psi,
+-                    modulusOfElasticity = (1.7 * 1000.0).psi,
+-                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
++                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 31.2 // G = 0.5
+                 )
+                 // 2024 NDS Supplement Table 5A, 16F-G6 DF/DF.
+@@ -233,8 +237,8 @@ object WoodPropertyService {
+                     compressionParallel = 1600.0.psi,
+                     compressionPerp = 560.0.psi,
+                     tensionParallel = 1000.0.psi,
+-                    modulusOfElasticity = (1.7 * 1000.0).psi,
+-                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
++                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 31.2 // G = 0.5
+                 )
+                 // 2024 NDS Supplement Table 5A, 20F-V3 DF/DF. Resolves an
+@@ -249,8 +253,8 @@ object WoodPropertyService {
+                     compressionParallel = 1450.0.psi,
+                     compressionPerp = 560.0.psi,
+                     tensionParallel = 1000.0.psi,
+-                    modulusOfElasticity = (1.7 * 1000.0).psi,
+-                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
++                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 31.2 // G = 0.5
+                 )
+                 // 2024 NDS Supplement Table 5A, 20F-V7 DF/DF.
+@@ -260,8 +264,8 @@ object WoodPropertyService {
+                     compressionParallel = 1600.0.psi,
+                     compressionPerp = 560.0.psi,
+                     tensionParallel = 1000.0.psi,
+-                    modulusOfElasticity = (1.7 * 1000.0).psi,
+-                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
++                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 31.2 // G = 0.5
+                 )
+                 // G_16F_E3/E6, G_20F_E3/E6, G_24F_V4/V8, G_24F_E4/E13/E18,
+@@ -277,8 +281,8 @@ object WoodPropertyService {
+                     compressionParallel = 1450.0.psi,
+                     compressionPerp = 650.0.psi,
+                     tensionParallel = 1100.0.psi,
+-                    modulusOfElasticity = (1.8 * 1000.0).psi,
+-                    shearModulus = (1.8 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.8 * 1_000_000.0).psi,
++                    shearModulus = (1.8 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 31.2 // G = 0.5
+                 )
+                 else -> null
+@@ -291,8 +295,8 @@ object WoodPropertyService {
+                     compressionParallel = 1150.0.psi,
+                     compressionPerp = 375.0.psi,
+                     tensionParallel = 825.0.psi,
+-                    modulusOfElasticity = (1.5 * 1000.0).psi,
+-                    shearModulus = (1.5 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.5 * 1_000_000.0).psi,
++                    shearModulus = (1.5 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 26.9 // G = 0.43
+                 )
+                 WoodGrade.G_16F_G7 -> WoodReferenceProperties(
+@@ -301,8 +305,8 @@ object WoodPropertyService {
+                     compressionParallel = 1250.0.psi,
+                     compressionPerp = 375.0.psi,
+                     tensionParallel = 875.0.psi,
+-                    modulusOfElasticity = (1.5 * 1000.0).psi,
+-                    shearModulus = (1.5 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.5 * 1_000_000.0).psi,
++                    shearModulus = (1.5 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 26.9 // G = 0.43
+                 )
+                 // 24F-E15M1 not yet confidently extracted.
+@@ -316,8 +320,8 @@ object WoodPropertyService {
+                     compressionParallel = 1500.0.psi,
+                     compressionPerp = 560.0.psi,
+                     tensionParallel = 925.0.psi,
+-                    modulusOfElasticity = (1.6 * 1000.0).psi,
+-                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.6 * 1_000_000.0).psi,
++                    shearModulus = (1.6 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 28.7 // G = 0.46
+                 )
+                 WoodGrade.G_20F_V13 -> WoodReferenceProperties(
+@@ -326,8 +330,8 @@ object WoodPropertyService {
+                     compressionParallel = 1550.0.psi,
+                     compressionPerp = 560.0.psi,
+                     tensionParallel = 950.0.psi,
+-                    modulusOfElasticity = (1.6 * 1000.0).psi,
+-                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.6 * 1_000_000.0).psi,
++                    shearModulus = (1.6 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 28.7 // G = 0.46
+                 )
+                 else -> null
+@@ -340,8 +344,8 @@ object WoodPropertyService {
+                     compressionParallel = 1150.0.psi,
+                     compressionPerp = 560.0.psi,
+                     tensionParallel = 1050.0.psi,
+-                    modulusOfElasticity = (1.9 * 1000.0).psi,
+-                    shearModulus = (1.9 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
++                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 25.6 // G = 0.41
+                 )
+                 WoodGrade.G_20F_E8 -> WoodReferenceProperties(
+@@ -350,8 +354,8 @@ object WoodPropertyService {
+                     compressionParallel = 1100.0.psi,
+                     compressionPerp = 450.0.psi,
+                     tensionParallel = 825.0.psi,
+-                    modulusOfElasticity = (1.6 * 1000.0).psi,
+-                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.6 * 1_000_000.0).psi,
++                    shearModulus = (1.6 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 25.6 // G = 0.41
+                 )
+                 else -> null
+@@ -364,8 +368,8 @@ object WoodPropertyService {
+                     compressionParallel = 1950.0.psi,
+                     compressionPerp = 560.0.psi,
+                     tensionParallel = 1150.0.psi,
+-                    modulusOfElasticity = (1.9 * 1000.0).psi,
+-                    shearModulus = (1.9 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
++                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 28.1 // G = 0.45
+                 )
+                 WoodGrade.G_22F_V_POC2 -> WoodReferenceProperties(
+@@ -374,8 +378,8 @@ object WoodPropertyService {
+                     compressionParallel = 1900.0.psi,
+                     compressionPerp = 560.0.psi,
+                     tensionParallel = 1150.0.psi,
+-                    modulusOfElasticity = (1.8 * 1000.0).psi,
+-                    shearModulus = (1.8 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.8 * 1_000_000.0).psi,
++                    shearModulus = (1.8 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 28.1 // G = 0.45
+                 )
+                 // 2024 NDS Supplement Table 5A, 20F-V14 & 20F-V15 POC/POC.
+@@ -385,8 +389,8 @@ object WoodPropertyService {
+                     compressionParallel = 1300.0.psi,
+                     compressionPerp = 470.0.psi,
+                     tensionParallel = 900.0.psi,
+-                    modulusOfElasticity = (1.6 * 1000.0).psi,
+-                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.6 * 1_000_000.0).psi,
++                    shearModulus = (1.6 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 28.1 // G = 0.45 (footnote default; not
+                     // independently confirmed for this specific symbol)
+                 )
+@@ -396,8 +400,8 @@ object WoodPropertyService {
+                     compressionParallel = 1600.0.psi,
+                     compressionPerp = 470.0.psi,
+                     tensionParallel = 900.0.psi,
+-                    modulusOfElasticity = (1.6 * 1000.0).psi,
+-                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.6 * 1_000_000.0).psi,
++                    shearModulus = (1.6 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 28.1
+                 )
+                 else -> null
+@@ -411,28 +415,28 @@ object WoodPropertyService {
+             // species: Fbx+, Fvx, Fc, Fc-perp-x, Ft, Ex. Density = 62.4 * G
+             // (G = the table's specific gravity for fastener design).
+             WoodSpecies.GLULAM_HARDWOODS -> when (grade) {
+-                //                        Fbx+  Fvx   Fc    Fc-perp Ft   Ex    G
+-                WoodGrade.G_12F_V1    -> hardwoodGlulam(1200, 125,  800,  285,   600, 1.2, 0.39)
+-                WoodGrade.G_12F_V2    -> hardwoodGlulam(1200, 125,  860,  285,   625, 1.2, 0.39)
+-                WoodGrade.G_14F_V1    -> hardwoodGlulam(1400, 155,  950,  405,   700, 1.3, 0.45)
+-                WoodGrade.G_14F_V2    -> hardwoodGlulam(1400, 180, 1200,  590,   750, 1.3, 0.53)
+-                WoodGrade.G_14F_V3    -> hardwoodGlulam(1400, 155,  950,  405,   725, 1.3, 0.45)
+-                WoodGrade.G_14F_V4    -> hardwoodGlulam(1400, 180, 1200,  590,   775, 1.3, 0.53)
+-                WoodGrade.G_16F_V1    -> hardwoodGlulam(1600, 180, 1200,  590,   800, 1.4, 0.53)
+-                WoodGrade.G_16F_V2    -> hardwoodGlulam(1600, 200, 1250,  835,   875, 1.5, 0.63)
+-                WoodGrade.G_16F_V3    -> hardwoodGlulam(1600, 180, 1200,  590,   850, 1.4, 0.53)
+-                WoodGrade.G_16F_V4    -> hardwoodGlulam(1600, 200, 1300,  835,   900, 1.6, 0.63)
+-                WoodGrade.G_20F_V1    -> hardwoodGlulam(2000, 200, 1400,  835,   975, 1.7, 0.63)
+-                WoodGrade.G_20F_V2    -> hardwoodGlulam(2000, 200, 1400,  835,  1000, 1.7, 0.63)
+-                WoodGrade.G_16F_E1    -> hardwoodGlulam(1600, 125,  975,  440,   825, 1.4, 0.39)
+-                WoodGrade.G_16F_E2    -> hardwoodGlulam(1600, 125, 1000,  440,   900, 1.4, 0.39)
+-                WoodGrade.G_20F_E1    -> hardwoodGlulam(2000, 155, 1050,  590,   950, 1.6, 0.45)
+-                WoodGrade.G_20F_E2    -> hardwoodGlulam(2000, 155, 1100,  590,  1050, 1.6, 0.45)
+-                WoodGrade.G_24F_E1    -> hardwoodGlulam(2400, 180, 1400,  770,  1050, 1.8, 0.53)
+-                WoodGrade.G_24F_E2    -> hardwoodGlulam(2400, 180, 1400,  770,  1050, 1.8, 0.53)
+-                WoodGrade.G_24F_E3_YP -> hardwoodGlulam(2400, 155, 1200,  590,   975, 1.8, 0.45)
+-                WoodGrade.G_24F_E4_RM -> hardwoodGlulam(2400, 220, 1350,  895,  1050, 1.8, 0.53)
+-                WoodGrade.G_24F_E5_RO -> hardwoodGlulam(2400, 235, 1450, 1075,  1100, 1.8, 0.63)
++                //                        Fbx+  Fvx   Fc    Fc-perp Ft   Ex    G     Ex,min
++                WoodGrade.G_12F_V1    -> hardwoodGlulam(1200, 125,  800,  285,   600, 1.2, 0.39, 0.63)
++                WoodGrade.G_12F_V2    -> hardwoodGlulam(1200, 125,  860,  285,   625, 1.2, 0.39, 0.63)
++                WoodGrade.G_14F_V1    -> hardwoodGlulam(1400, 155,  950,  405,   700, 1.3, 0.45, 0.69)
++                WoodGrade.G_14F_V2    -> hardwoodGlulam(1400, 180, 1200,  590,   750, 1.3, 0.53, 0.69)
++                WoodGrade.G_14F_V3    -> hardwoodGlulam(1400, 155,  950,  405,   725, 1.3, 0.45, 0.69)
++                WoodGrade.G_14F_V4    -> hardwoodGlulam(1400, 180, 1200,  590,   775, 1.3, 0.53, 0.69)
++                WoodGrade.G_16F_V1    -> hardwoodGlulam(1600, 180, 1200,  590,   800, 1.4, 0.53, 0.74)
++                WoodGrade.G_16F_V2    -> hardwoodGlulam(1600, 200, 1250,  835,   875, 1.5, 0.63, 0.79)
++                WoodGrade.G_16F_V3    -> hardwoodGlulam(1600, 180, 1200,  590,   850, 1.4, 0.53, 0.74)
++                WoodGrade.G_16F_V4    -> hardwoodGlulam(1600, 200, 1300,  835,   900, 1.6, 0.63, 0.85)
++                WoodGrade.G_20F_V1    -> hardwoodGlulam(2000, 200, 1400,  835,   975, 1.7, 0.63, 0.90)
++                WoodGrade.G_20F_V2    -> hardwoodGlulam(2000, 200, 1400,  835,  1000, 1.7, 0.63, 0.90)
++                WoodGrade.G_16F_E1    -> hardwoodGlulam(1600, 125,  975,  440,   825, 1.4, 0.39, 0.74)
++                WoodGrade.G_16F_E2    -> hardwoodGlulam(1600, 125, 1000,  440,   900, 1.4, 0.39, 0.74)
++                WoodGrade.G_20F_E1    -> hardwoodGlulam(2000, 155, 1050,  590,   950, 1.6, 0.45, 0.85)
++                WoodGrade.G_20F_E2    -> hardwoodGlulam(2000, 155, 1100,  590,  1050, 1.6, 0.45, 0.85)
++                WoodGrade.G_24F_E1    -> hardwoodGlulam(2400, 180, 1400,  770,  1050, 1.8, 0.53, 0.95)
++                WoodGrade.G_24F_E2    -> hardwoodGlulam(2400, 180, 1400,  770,  1050, 1.8, 0.53, 0.95)
++                WoodGrade.G_24F_E3_YP -> hardwoodGlulam(2400, 155, 1200,  590,   975, 1.8, 0.45, 0.95)
++                WoodGrade.G_24F_E4_RM -> hardwoodGlulam(2400, 220, 1350,  895,  1050, 1.8, 0.53, 0.95)
++                WoodGrade.G_24F_E5_RO -> hardwoodGlulam(2400, 235, 1450, 1075,  1100, 1.8, 0.63, 0.95)
+                 else -> null
+             }
+             // ESR-1940 Table 1, 20F-E/SPF1 SPF/SPF.
+@@ -443,8 +447,8 @@ object WoodPropertyService {
+                     compressionParallel = 1100.0.psi,
+                     compressionPerp = 425.0.psi,
+                     tensionParallel = 425.0.psi,
+-                    modulusOfElasticity = (1.6 * 1000.0).psi,
+-                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.6 * 1_000_000.0).psi,
++                    shearModulus = (1.6 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 26.2 // G = 0.42
+                 )
+                 else -> null
+@@ -461,8 +465,8 @@ object WoodPropertyService {
+                     compressionParallel = 1200.0.psi,
+                     compressionPerp = 500.0.psi,
+                     tensionParallel = 950.0.psi,
+-                    modulusOfElasticity = (1.9 * 1000.0).psi,
+-                    shearModulus = (1.9 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
++                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 26.2 // G = 0.42
+                 )
+                 // ESR-1940 Table 1, 16F-V5M1 SP/SP.
+@@ -472,8 +476,8 @@ object WoodPropertyService {
+                     compressionParallel = 1500.0.psi,
+                     compressionPerp = 650.0.psi,
+                     tensionParallel = 1000.0.psi,
+-                    modulusOfElasticity = (1.5 * 1000.0).psi,
+-                    shearModulus = (1.5 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.5 * 1_000_000.0).psi,
++                    shearModulus = (1.5 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 34.3 // G = 0.55
+                 )
+                 // 2024 NDS Supplement Table 5A (Cody-supplied screenshot),
+@@ -484,8 +488,8 @@ object WoodPropertyService {
+                     compressionParallel = 1300.0.psi,
+                     compressionPerp = 740.0.psi,
+                     tensionParallel = 1000.0.psi,
+-                    modulusOfElasticity = (1.6 * 1000.0).psi,
+-                    shearModulus = (1.6 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.6 * 1_000_000.0).psi,
++                    shearModulus = (1.6 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 34.3 // G = 0.55
+                 )
+                 // 2024 NDS Supplement Table 5A, 16F-G1 SP/SP.
+@@ -495,8 +499,8 @@ object WoodPropertyService {
+                     compressionParallel = 1400.0.psi,
+                     compressionPerp = 650.0.psi,
+                     tensionParallel = 1050.0.psi,
+-                    modulusOfElasticity = (1.7 * 1000.0).psi,
+-                    shearModulus = (1.7 * 1000.0 / 16.0).psi,
++                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
++                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
+                     densityPcf = 34.3 // G = 0.55
+                 )
+                 else -> null
+@@ -512,7 +516,7 @@ object WoodPropertyService {
+      */
+     private fun hardwoodGlulam(
+         fbxPositive: Int, fvx: Int, fc: Int, fcPerpX: Int, ft: Int,
+-        exMillionPsi: Double, specificGravity: Double
++        exMillionPsi: Double, specificGravity: Double, exMinMillionPsi: Double
+     ) = WoodReferenceProperties(
+         bending = fbxPositive.toDouble().psi,
+         shear = fvx.toDouble().psi,
+@@ -521,6 +525,184 @@ object WoodPropertyService {
+         tensionParallel = ft.toDouble().psi,
+         modulusOfElasticity = (exMillionPsi * 1_000_000.0).psi,
+         shearModulus = (exMillionPsi * 1_000_000.0 / 16.0).psi,
+-        densityPcf = Math.round(62.4 * specificGravity * 10.0) / 10.0
++        densityPcf = Math.round(62.4 * specificGravity * 10.0) / 10.0,
++        eMin = (exMinMillionPsi * 1_000_000.0).psi
+     )
++
++    /** One solid-sawn dimension-lumber row (psi). Shear modulus = E/16. */
++    private fun sawnLumber(
++        fb: Int, ft: Int, fv: Int, fcPerp: Int, fc: Int, e: Int, eMin: Int, densityPcf: Double
++    ) = WoodReferenceProperties(
++        bending = fb.toDouble().psi,
++        shear = fv.toDouble().psi,
++        compressionParallel = fc.toDouble().psi,
++        compressionPerp = fcPerp.toDouble().psi,
++        tensionParallel = ft.toDouble().psi,
++        modulusOfElasticity = e.toDouble().psi,
++        shearModulus = (e / 16.0).psi,
++        densityPcf = densityPcf,
++        eMin = eMin.toDouble().psi
++    )
++
++    /** One Table 4B row: Fb, Ft, Fv, Fc-perp, Fc, E, Emin (all psi). */
++    private class SouthernPineRow(
++        val fb: Int, val ft: Int, val fv: Int, val fcPerp: Int,
++        val fc: Int, val e: Int, val eMin: Int
++    )
++
++    private fun sp(fb: Int, ft: Int, fv: Int, fcPerp: Int, fc: Int, e: Int, eMin: Int) =
++        SouthernPineRow(fb, ft, fv, fcPerp, fc, e, eMin)
++
++    // NDS 2018 Supplement Table 4B, one entry per grade; list index = width band
++    // (2"-4", 5"-6", 8", 10", 12" wide). Columns: Fb, Ft, Fv, Fc-perp, Fc, E, Emin.
++    private val southernPineTable4B: Map<WoodGrade, List<SouthernPineRow>> = mapOf(
++        WoodGrade.DENSE_SELECT_STRUCTURAL to listOf(
++            sp(2700, 1900, 175, 660, 2050, 1900000, 690000),
++            sp(2400, 1650, 175, 660, 1900, 1900000, 690000),
++            sp(2200, 1550, 175, 660, 1850, 1900000, 690000),
++            sp(1950, 1300, 175, 660, 1800, 1900000, 690000),
++            sp(1800, 1250, 175, 660, 1750, 1900000, 690000)
++        ),
++        WoodGrade.SELECT_STRUCTURAL to listOf(
++            sp(2350, 1650, 175, 565, 1900, 1800000, 660000),
++            sp(2100, 1450, 175, 565, 1800, 1800000, 660000),
++            sp(1950, 1350, 175, 565, 1700, 1800000, 660000),
++            sp(1700, 1150, 175, 565, 1650, 1800000, 660000),
++            sp(1600, 1100, 175, 565, 1650, 1800000, 660000)
++        ),
++        WoodGrade.NON_DENSE_SELECT_STRUCTURAL to listOf(
++            sp(2050, 1450, 175, 480, 1800, 1600000, 580000),
++            sp(1850, 1300, 175, 480, 1700, 1600000, 580000),
++            sp(1700, 1200, 175, 480, 1650, 1600000, 580000),
++            sp(1500, 1050, 175, 480, 1600, 1600000, 580000),
++            sp(1400, 975, 175, 480, 1550, 1600000, 580000)
++        ),
++        WoodGrade.NO_1_DENSE to listOf(
++            sp(1650, 1100, 175, 660, 1750, 1800000, 660000),
++            sp(1500, 1000, 175, 660, 1650, 1800000, 660000),
++            sp(1350, 900, 175, 660, 1600, 1800000, 660000),
++            sp(1200, 800, 175, 660, 1550, 1800000, 660000),
++            sp(1100, 750, 175, 660, 1500, 1800000, 660000)
++        ),
++        WoodGrade.NO_1 to listOf(
++            sp(1500, 1000, 175, 565, 1650, 1600000, 580000),
++            sp(1350, 875, 175, 565, 1550, 1600000, 580000),
++            sp(1250, 800, 175, 565, 1500, 1600000, 580000),
++            sp(1050, 700, 175, 565, 1450, 1600000, 580000),
++            sp(1000, 650, 175, 565, 1400, 1600000, 580000)
++        ),
++        WoodGrade.NO_1_NON_DENSE to listOf(
++            sp(1300, 875, 175, 480, 1550, 1400000, 510000),
++            sp(1200, 775, 175, 480, 1450, 1400000, 510000),
++            sp(1100, 700, 175, 480, 1400, 1400000, 510000),
++            sp(950, 625, 175, 480, 1400, 1400000, 510000),
++            sp(900, 575, 175, 480, 1350, 1400000, 510000)
++        ),
++        WoodGrade.NO_2_DENSE to listOf(
++            sp(1200, 750, 175, 660, 1500, 1600000, 580000),
++            sp(1050, 650, 175, 660, 1450, 1600000, 580000),
++            sp(975, 600, 175, 660, 1400, 1600000, 580000),
++            sp(850, 525, 175, 660, 1350, 1600000, 580000),
++            sp(800, 500, 175, 660, 1300, 1600000, 580000)
++        ),
++        WoodGrade.NO_2 to listOf(
++            sp(1100, 675, 175, 565, 1450, 1400000, 510000),
++            sp(1000, 600, 175, 565, 1400, 1400000, 510000),
++            sp(925, 550, 175, 565, 1350, 1400000, 510000),
++            sp(800, 475, 175, 565, 1300, 1400000, 510000),
++            sp(750, 450, 175, 565, 1250, 1400000, 510000)
++        ),
++        WoodGrade.NO_2_NON_DENSE to listOf(
++            sp(1050, 600, 175, 480, 1450, 1300000, 470000),
++            sp(950, 525, 175, 480, 1350, 1300000, 470000),
++            sp(875, 500, 175, 480, 1300, 1300000, 470000),
++            sp(750, 425, 175, 480, 1250, 1300000, 470000),
++            sp(700, 400, 175, 480, 1250, 1300000, 470000)
++        ),
++        WoodGrade.NO_3 to listOf(
++            sp(650, 400, 175, 565, 850, 1300000, 470000),
++            sp(575, 350, 175, 565, 800, 1300000, 470000),
++            sp(525, 325, 175, 565, 775, 1300000, 470000),
++            sp(475, 275, 175, 565, 750, 1300000, 470000),
++            sp(450, 250, 175, 565, 725, 1300000, 470000)
++        ),
++        WoodGrade.STUD to listOf(
++            sp(650, 400, 175, 565, 850, 1300000, 470000),
++            sp(575, 350, 175, 565, 800, 1300000, 470000),
++            sp(525, 325, 175, 565, 775, 1300000, 470000),
++            sp(475, 275, 175, 565, 750, 1300000, 470000),
++            sp(450, 250, 175, 565, 725, 1300000, 470000)
++        ),
++        WoodGrade.CONSTRUCTION to listOf(
++            sp(875, 500, 175, 565, 1600, 1400000, 510000)
++        ),
++        WoodGrade.STANDARD to listOf(
++            sp(475, 275, 175, 565, 1300, 1200000, 440000)
++        ),
++        WoodGrade.UTILITY to listOf(
++            sp(225, 125, 175, 565, 850, 1200000, 440000)
++        ),
++        WoodGrade.DENSE_STRUCTURAL_86 to listOf(
++            sp(2600, 1750, 175, 660, 2000, 1800000, 660000)
++        ),
++        WoodGrade.DENSE_STRUCTURAL_72 to listOf(
++            sp(2200, 1450, 175, 660, 1650, 1800000, 660000)
++        ),
++        WoodGrade.DENSE_STRUCTURAL_65 to listOf(
++            sp(2000, 1300, 175, 660, 1500, 1800000, 660000)
++        )
++    )
++
++    /**
++     * NDS 2018 Table 4B Southern Pine values for a member of the given
++     * nominal width (the larger nominal dimension — "depth" when used
++     * edgewise), or null when [grade] isn't a Southern Pine grade. Only
++     * Fb, Ft and Fc vary with width; Fv, Fc-perp, E and Emin don't.
++     * Widths above 12" use the 12" band (Table 4B footnote 4 — the >12"
++     * size factor is applied separately, see resolveSawnCf). Grades tabulated
++     * for a single size class (Construction/Standard/Utility, and the Dense
++     * Structural grades) return that one row for every width.
++     *
++     * Not included: Mixed Southern Pine, and the "surfaced green" Dense
++     * Structural values.
++     */
++    fun getSouthernPineDimensionValues(
++        grade: WoodGrade,
++        nominalWidthIn: Double
++    ): WoodReferenceProperties? {
++        val rows = southernPineTable4B[grade] ?: return null
++        val band = when {
++            nominalWidthIn <= 4.0 -> 0
++            nominalWidthIn <= 6.0 -> 1
++            nominalWidthIn <= 8.0 -> 2
++            nominalWidthIn <= 10.0 -> 3
++            else -> 4
++        }.coerceAtMost(rows.lastIndex)
++        val r = rows[band]
++        return sawnLumber(r.fb, r.ft, r.fv, r.fcPerp, r.fc, r.e, r.eMin, densityPcf = 37.0)
++    }
++
++    /**
++     * Re-derives a wood material's tabulated values from the current
++     * tables. Materials picked or saved before a table correction carry the
++     * old numbers with them (this includes the earlier ~1000x-too-small E),
++     * so this lets restored materials pick up fixes. Returns the material
++     * unchanged when there's no table entry for its species/grade. For
++     * Southern Pine this yields the 2"-4" band; the capacity calculators
++     * apply the real member width on top.
++     */
++    fun refreshed(material: com.lz.model.structural.MaterialGrade.Wood):
++        com.lz.model.structural.MaterialGrade.Wood {
++        val p = getReferenceProperties(material.species, material.grade) ?: return material
++        return material.copy(
++            referenceBending = p.bending,
++            referenceShear = p.shear,
++            referenceCompressionParallel = p.compressionParallel,
++            referenceCompressionPerp = p.compressionPerp,
++            referenceTensionParallel = p.tensionParallel,
++            modulusOfElasticity = p.modulusOfElasticity,
++            shearModulus = p.shearModulus,
++            densityPcf = p.densityPcf
++        )
++    }
+ }
+\ No newline at end of file
+diff --git a/core/solver/src/test/java/com/lz/solver/material/WoodPropertyServiceSouthernPineSpfTest.kt b/core/solver/src/test/java/com/lz/solver/material/WoodPropertyServiceSouthernPineSpfTest.kt
+new file mode 100644
+index 0000000..782ce3e
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/material/WoodPropertyServiceSouthernPineSpfTest.kt
+@@ -0,0 +1,96 @@
++package com.lz.solver.material
++
++import com.lz.model.structural.MaterialGrade
++import com.lz.model.structural.WoodGrade
++import com.lz.model.structural.WoodSpecies
++import com.lz.model.units.Pressure
++import com.lz.model.units.inPsi
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Test
++
++class WoodPropertyServiceSouthernPineSpfTest {
++
++    @Test
++    fun `Southern Pine No2 varies by width per Table 4B`() {
++        // 2"-4" wide
++        val narrow = WoodPropertyService.getSouthernPineDimensionValues(WoodGrade.NO_2, 4.0)!!
++        assertEquals(1100.0, narrow.bending.inPsi, 1e-9)
++        assertEquals(675.0, narrow.tensionParallel.inPsi, 1e-9)
++        assertEquals(1450.0, narrow.compressionParallel.inPsi, 1e-9)
++        // 12" wide — meaningfully lower Fb than the 4" band
++        val wide = WoodPropertyService.getSouthernPineDimensionValues(WoodGrade.NO_2, 12.0)!!
++        assertEquals(750.0, wide.bending.inPsi, 1e-9)
++        assertEquals(450.0, wide.tensionParallel.inPsi, 1e-9)
++        assertEquals(1250.0, wide.compressionParallel.inPsi, 1e-9)
++        // Fv, Fc-perp, E, Emin don't vary by width
++        assertEquals(narrow.shear.inPsi, wide.shear.inPsi, 1e-9)
++        assertEquals(narrow.compressionPerp.inPsi, wide.compressionPerp.inPsi, 1e-9)
++    }
++
++    @Test
++    fun `Southern Pine width above 12 inches uses the 12 inch band`() {
++        val at12 = WoodPropertyService.getSouthernPineDimensionValues(WoodGrade.NO_1, 12.0)!!
++        val above = WoodPropertyService.getSouthernPineDimensionValues(WoodGrade.NO_1, 16.0)!!
++        assertEquals(at12.bending.inPsi, above.bending.inPsi, 1e-9)
++    }
++
++    @Test
++    fun `Southern Pine single-band grades return the same row at every width`() {
++        val narrow = WoodPropertyService.getSouthernPineDimensionValues(
++            WoodGrade.DENSE_STRUCTURAL_86, 4.0)!!
++        val wide = WoodPropertyService.getSouthernPineDimensionValues(
++            WoodGrade.DENSE_STRUCTURAL_86, 12.0)!!
++        assertEquals(2600.0, narrow.bending.inPsi, 1e-9)
++        assertEquals(narrow.bending.inPsi, wide.bending.inPsi, 1e-9)
++    }
++
++    @Test
++    fun `non-Southern-Pine grade returns null from the width lookup`() {
++        assertNull(WoodPropertyService.getSouthernPineDimensionValues(WoodGrade.G_16F_V3, 6.0))
++    }
++
++    @Test
++    fun `SPF No1 and No2 share the NDS combined row`() {
++        val no1 = WoodPropertyService.getReferenceProperties(WoodSpecies.SPF, WoodGrade.NO_1)!!
++        val no2 = WoodPropertyService.getReferenceProperties(WoodSpecies.SPF, WoodGrade.NO_2)!!
++        assertEquals(875.0, no1.bending.inPsi, 1e-9)
++        assertEquals(no1.bending.inPsi, no2.bending.inPsi, 1e-9)
++        assertEquals(1_400_000.0, no1.modulusOfElasticity.inPsi, 1e-6)
++    }
++
++    @Test
++    fun `DF-L and Hem-Fir E is in the millions of psi, not thousands`() {
++        val dfl = WoodPropertyService.getReferenceProperties(
++            WoodSpecies.DF_L, WoodGrade.SELECT_STRUCTURAL)!!
++        assertEquals(1_900_000.0, dfl.modulusOfElasticity.inPsi, 1e-6)
++        assertEquals(1700.0, dfl.compressionParallel.inPsi, 1e-9)
++        assertNotNull(dfl.eMin)
++        assertEquals(690_000.0, dfl.eMin!!.inPsi, 1e-6)
++
++        val hf = WoodPropertyService.getReferenceProperties(
++            WoodSpecies.HEM_FIR, WoodGrade.SELECT_STRUCTURAL)!!
++        assertEquals(1_600_000.0, hf.modulusOfElasticity.inPsi, 1e-6)
++        assertEquals(1500.0, hf.compressionParallel.inPsi, 1e-9)
++    }
++
++    @Test
++    fun `refreshed re-derives a stale wood material from the current tables`() {
++        val stale = MaterialGrade.Wood(
++            id = "x", name = "x",
++            species = WoodSpecies.DF_L, grade = WoodGrade.SELECT_STRUCTURAL,
++            referenceBending = Pressure(1500.0),
++            referenceShear = Pressure(180.0),
++            referenceCompressionParallel = Pressure(1550.0), // old, wrong
++            referenceCompressionPerp = Pressure(625.0),
++            referenceTensionParallel = Pressure(1000.0),
++            modulusOfElasticity = Pressure(1900.0), // old, 1000x too small
++            shearModulus = Pressure(118.75),
++            densityPcf = 35.0
++        )
++        val fixed = WoodPropertyService.refreshed(stale)
++        assertEquals(1_900_000.0, fixed.modulusOfElasticity.inPsi, 1e-6)
++        assertEquals(1700.0, fixed.referenceCompressionParallel.inPsi, 1e-9)
++    }
++}
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 33bfbaa..248d5fa 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -54,6 +54,7 @@ import com.lz.model.units.lbPerFt
+ import com.lz.model.units.psiModulus
+ import com.lz.solver.material.AiscSteelCapacityCalculator
+ import com.lz.solver.material.NdsWoodCapacityCalculator
++import com.lz.solver.material.WoodPropertyService
+ import com.lz.solver.envelope.ServiceabilityEvaluationService
+ import com.lz.beam.solver.BeamAnalysisSolver
+ import com.lz.beam.solver.BeamAnalysisConfig
+@@ -783,7 +784,16 @@ class BeamViewModel @Inject constructor(
+ 
+         selectedMaterial = inputs.selectedMaterial
+         availableGrades = materialRepository.getMaterialsByType(selectedMaterial)
+-        activeMaterialGrade = inputs.activeMaterialGrade
++        // A wood material saved before a WoodPropertyService table
++        // correction (e.g. the E / shear-modulus values that were off by
++        // 1000x for every species) carries the old numbers verbatim —
++        // this isn't re-derived from species+grade at load time otherwise.
++        // Re-resolve against the current tables so restoring an old
++        // calculation picks up the fix rather than silently keeping the
++        // wrong stiffness.
++        activeMaterialGrade = (inputs.activeMaterialGrade as? MaterialGrade.Wood)
++            ?.let { WoodPropertyService.refreshed(it) }
++            ?: inputs.activeMaterialGrade
+             ?: availableGrades.firstOrNull()
+ 
+         availableShapeTypes = sectionRepository.getShapeTypes(selectedMaterial)
