@@ -1480,8 +1480,8 @@ fun AnalysisSummary(
         )
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatusBadge("Max Moment", "${String.format("%.1f", analysis.maxMoment.inLbIn / 12000.0)} k-ft", false)
-            StatusBadge("Max Shear", "${String.format("%.1f", analysis.maxShear.inPoundsForce / 1000.0)} kips", false)
+            StatusBadge("Max Moment", "${String.format("%.2f", analysis.maxMoment.inLbIn / 12000.0)} k-ft", false)
+            StatusBadge("Max Shear", "${String.format("%.2f", analysis.maxShear.inPoundsForce / 1000.0)} kips", false)
         }
 
         // Summary Table

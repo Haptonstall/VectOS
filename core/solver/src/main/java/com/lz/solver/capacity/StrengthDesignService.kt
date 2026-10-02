@@ -33,7 +33,11 @@ object StrengthDesignService {
 
         return StrengthDesignResult(
             momentCheck = StrengthCheckResult(
-                demand = momentDemand,
+                // Stored as a magnitude, not the signed envelope value — the
+                // demand/capacity check always compares |demand| to
+                // capacity; a negative Demand on the Design tab read as
+                // wrong regardless of which diagram side it came from.
+                demand = Moment(abs(momentDemand.inLbIn)),
                 capacity = momentCapacity,
                 utilization = if (abs(momentCapacity.inLbIn) > 0) abs(momentDemand.inLbIn) / abs(
                     momentCapacity.inLbIn
@@ -41,7 +45,7 @@ object StrengthDesignService {
                 governingCombination = strengthEnvelope.maxMoment.combinationName
             ),
             shearCheck = StrengthCheckResult(
-                demand = shearDemand,
+                demand = Force(abs(shearDemand.inPoundsForce)),
                 capacity = shearCapacity,
                 utilization = if (abs(shearCapacity.inPoundsForce) > 0) abs(shearDemand.inPoundsForce) / abs(
                     shearCapacity.inPoundsForce

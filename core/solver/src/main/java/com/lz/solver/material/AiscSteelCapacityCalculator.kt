@@ -193,7 +193,9 @@ class AiscSteelCapacityCalculator(
 
         return StrengthDesignResult(
             momentCheck = StrengthCheckResult(
-                demand               = demand.moment,
+                // Stored as a magnitude — see NdsWoodCapacityCalculator's
+                // equivalent comment for why.
+                demand               = Moment(abs(demand.moment.lbIn)),
                 capacity             = Moment(designMn),
                 utilization          = ratioFlexure,
                 governingCombination = "Current",
@@ -201,7 +203,7 @@ class AiscSteelCapacityCalculator(
                 traces               = flexureResult.traces
             ),
             shearCheck = StrengthCheckResult(
-                demand               = demand.shear,
+                demand               = Force(abs(demand.shear.pounds)),
                 capacity             = Force(designVn),
                 utilization          = ratioShear,
                 governingCombination = "Current",
@@ -209,7 +211,7 @@ class AiscSteelCapacityCalculator(
                 traces               = shearResult.traces
             ),
             axialCheck = StrengthCheckResult(
-                demand               = demand.axial,
+                demand               = Force(abs(demand.axial.pounds)),
                 capacity             = Force(designPn),
                 utilization          = ratioAxial,
                 governingCombination = "Current",
@@ -217,7 +219,7 @@ class AiscSteelCapacityCalculator(
                 traces               = axialResult.traces
             ),
             torsionCheck = StrengthCheckResult(
-                demand               = demand.torque,
+                demand               = Moment(abs(demand.torque.lbIn)),
                 capacity             = Moment(designTn),
                 utilization          = ratioTorsion,
                 governingCombination = "Current",

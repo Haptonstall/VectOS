@@ -125,7 +125,7 @@ fun AnalysisChart(
 
                 drawCircle(lineColor, 6f, Offset(ptX, ptY))
 
-                val label = String.format(Locale.US, "%.1f %s", p.value, unitLabel)
+                val label = String.format(Locale.US, "%.2f %s", p.value, unitLabel)
                 drawContext.canvas.nativeCanvas.drawText(
                     label,
                     ptX,

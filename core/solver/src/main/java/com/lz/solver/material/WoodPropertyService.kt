@@ -230,6 +230,160 @@ object WoodPropertyService {
                     shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
                     densityPcf = 31.2 // G = 0.5
                 )
+                // NDS 2018 Supplement Table 5A, 16F-E3 DF/DF. Was offered by
+                // validGradesFor() with no data behind it (Confirm silently
+                // stayed disabled) until this pass.
+                WoodGrade.G_16F_E3 -> WoodReferenceProperties(
+                    bending = 1600.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1600.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 975.0.psi,
+                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
+                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
+                    densityPcf = 31.2, // G = 0.50
+                    eMin = (0.85 * 1_000_000.0).psi
+                )
+                // NDS 2018 Supplement Table 5A, 16F-E6 DF/DF. Was offered by
+                // validGradesFor() with no data behind it (Confirm silently
+                // stayed disabled) until this pass.
+                WoodGrade.G_16F_E6 -> WoodReferenceProperties(
+                    bending = 1600.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1600.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 1000.0.psi,
+                    modulusOfElasticity = (1.7 * 1_000_000.0).psi,
+                    shearModulus = (1.7 * 1_000_000.0 / 16.0).psi,
+                    densityPcf = 31.2, // G = 0.50
+                    eMin = (0.85 * 1_000_000.0).psi
+                )
+                // NDS 2018 Supplement Table 5A, 20F-E3 DF/DF. Was offered by
+                // validGradesFor() with no data behind it (Confirm silently
+                // stayed disabled) until this pass.
+                WoodGrade.G_20F_E3 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1600.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 1050.0.psi,
+                    modulusOfElasticity = (1.8 * 1_000_000.0).psi,
+                    shearModulus = (1.8 * 1_000_000.0 / 16.0).psi,
+                    densityPcf = 31.2, // G = 0.50
+                    eMin = (0.9 * 1_000_000.0).psi
+                )
+                // NDS 2018 Supplement Table 5A, 20F-E6 DF/DF. Was offered by
+                // validGradesFor() with no data behind it (Confirm silently
+                // stayed disabled) until this pass.
+                WoodGrade.G_20F_E6 -> WoodReferenceProperties(
+                    bending = 2000.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1650.0.psi,
+                    compressionPerp = 560.0.psi,
+                    tensionParallel = 1150.0.psi,
+                    modulusOfElasticity = (1.8 * 1_000_000.0).psi,
+                    shearModulus = (1.8 * 1_000_000.0 / 16.0).psi,
+                    densityPcf = 31.2, // G = 0.50
+                    eMin = (0.9 * 1_000_000.0).psi
+                )
+                // NDS 2018 Supplement Table 5A, 24F-V4 DF/DF (unbalanced layup, simple-span use). Was offered by
+                // validGradesFor() with no data behind it (Confirm silently
+                // stayed disabled) until this pass.
+                WoodGrade.G_24F_V4 -> WoodReferenceProperties(
+                    bending = 2400.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1650.0.psi,
+                    compressionPerp = 650.0.psi,
+                    tensionParallel = 1100.0.psi,
+                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
+                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
+                    densityPcf = 31.2, // G = 0.50
+                    eMin = (0.95 * 1_000_000.0).psi
+                )
+                // NDS 2018 Supplement Table 5A, 24F-V8 DF/DF (balanced layup, continuous/cantilever use). Was offered by
+                // validGradesFor() with no data behind it (Confirm silently
+                // stayed disabled) until this pass.
+                WoodGrade.G_24F_V8 -> WoodReferenceProperties(
+                    bending = 2400.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1650.0.psi,
+                    compressionPerp = 650.0.psi,
+                    tensionParallel = 1100.0.psi,
+                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
+                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
+                    densityPcf = 31.2, // G = 0.50
+                    eMin = (0.95 * 1_000_000.0).psi
+                )
+                // NDS 2018 Supplement Table 5A, 24F-E4 DF/DF. Was offered by
+                // validGradesFor() with no data behind it (Confirm silently
+                // stayed disabled) until this pass.
+                WoodGrade.G_24F_E4 -> WoodReferenceProperties(
+                    bending = 2400.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1700.0.psi,
+                    compressionPerp = 650.0.psi,
+                    tensionParallel = 1100.0.psi,
+                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
+                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
+                    densityPcf = 31.2, // G = 0.50
+                    eMin = (0.95 * 1_000_000.0).psi
+                )
+                // NDS 2018 Supplement Table 5A, 24F-E13 DF/DF. Was offered by
+                // validGradesFor() with no data behind it (Confirm silently
+                // stayed disabled) until this pass.
+                WoodGrade.G_24F_E13 -> WoodReferenceProperties(
+                    bending = 2400.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1700.0.psi,
+                    compressionPerp = 650.0.psi,
+                    tensionParallel = 1250.0.psi,
+                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
+                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
+                    densityPcf = 31.2, // G = 0.50
+                    eMin = (0.95 * 1_000_000.0).psi
+                )
+                // NDS 2018 Supplement Table 5A, 24F-E18 DF/DF. Was offered by
+                // validGradesFor() with no data behind it (Confirm silently
+                // stayed disabled) until this pass.
+                WoodGrade.G_24F_E18 -> WoodReferenceProperties(
+                    bending = 2400.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1700.0.psi,
+                    compressionPerp = 650.0.psi,
+                    tensionParallel = 975.0.psi,
+                    modulusOfElasticity = (1.9 * 1_000_000.0).psi,
+                    shearModulus = (1.9 * 1_000_000.0 / 16.0).psi,
+                    densityPcf = 31.2, // G = 0.50
+                    eMin = (0.95 * 1_000_000.0).psi
+                )
+                // NDS 2018 Supplement Table 5A, 26F-V1 DF/DF (unbalanced layup, simple-span use). Was offered by
+                // validGradesFor() with no data behind it (Confirm silently
+                // stayed disabled) until this pass.
+                WoodGrade.G_26F_V1 -> WoodReferenceProperties(
+                    bending = 2600.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1850.0.psi,
+                    compressionPerp = 650.0.psi,
+                    tensionParallel = 1350.0.psi,
+                    modulusOfElasticity = (2.1 * 1_000_000.0).psi,
+                    shearModulus = (2.1 * 1_000_000.0 / 16.0).psi,
+                    densityPcf = 31.2, // G = 0.50
+                    eMin = (1.06 * 1_000_000.0).psi
+                )
+                // NDS 2018 Supplement Table 5A, 26F-V2 DF/DF (balanced layup, continuous/cantilever use). Was offered by
+                // validGradesFor() with no data behind it (Confirm silently
+                // stayed disabled) until this pass.
+                WoodGrade.G_26F_V2 -> WoodReferenceProperties(
+                    bending = 2600.0.psi,
+                    shear = 265.0.psi,
+                    compressionParallel = 1850.0.psi,
+                    compressionPerp = 650.0.psi,
+                    tensionParallel = 1350.0.psi,
+                    modulusOfElasticity = (2.1 * 1_000_000.0).psi,
+                    shearModulus = (2.1 * 1_000_000.0 / 16.0).psi,
+                    densityPcf = 31.2, // G = 0.50
+                    eMin = (1.06 * 1_000_000.0).psi
+                )
                 // 2024 NDS Supplement Table 5A, 16F-G6 DF/DF.
                 WoodGrade.G_16F_G6 -> WoodReferenceProperties(
                     bending = 1600.0.psi,

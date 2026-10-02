@@ -1,0 +1,161 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/capacity/StrengthDesignService.kt b/core/solver/src/main/java/com/lz/solver/capacity/StrengthDesignService.kt
+index 25c2a21..0011f6d 100644
+--- a/core/solver/src/main/java/com/lz/solver/capacity/StrengthDesignService.kt
++++ b/core/solver/src/main/java/com/lz/solver/capacity/StrengthDesignService.kt
+@@ -33,7 +33,11 @@ object StrengthDesignService {
+ 
+         return StrengthDesignResult(
+             momentCheck = StrengthCheckResult(
+-                demand = momentDemand,
++                // Stored as a magnitude, not the signed envelope value — the
++                // demand/capacity check always compares |demand| to
++                // capacity; a negative Demand on the Design tab read as
++                // wrong regardless of which diagram side it came from.
++                demand = Moment(abs(momentDemand.inLbIn)),
+                 capacity = momentCapacity,
+                 utilization = if (abs(momentCapacity.inLbIn) > 0) abs(momentDemand.inLbIn) / abs(
+                     momentCapacity.inLbIn
+@@ -41,7 +45,7 @@ object StrengthDesignService {
+                 governingCombination = strengthEnvelope.maxMoment.combinationName
+             ),
+             shearCheck = StrengthCheckResult(
+-                demand = shearDemand,
++                demand = Force(abs(shearDemand.inPoundsForce)),
+                 capacity = shearCapacity,
+                 utilization = if (abs(shearCapacity.inPoundsForce) > 0) abs(shearDemand.inPoundsForce) / abs(
+                     shearCapacity.inPoundsForce
+diff --git a/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
+index e2b5fb7..a9c681c 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
+@@ -193,7 +193,9 @@ class AiscSteelCapacityCalculator(
+ 
+         return StrengthDesignResult(
+             momentCheck = StrengthCheckResult(
+-                demand               = demand.moment,
++                // Stored as a magnitude — see NdsWoodCapacityCalculator's
++                // equivalent comment for why.
++                demand               = Moment(abs(demand.moment.lbIn)),
+                 capacity             = Moment(designMn),
+                 utilization          = ratioFlexure,
+                 governingCombination = "Current",
+@@ -201,7 +203,7 @@ class AiscSteelCapacityCalculator(
+                 traces               = flexureResult.traces
+             ),
+             shearCheck = StrengthCheckResult(
+-                demand               = demand.shear,
++                demand               = Force(abs(demand.shear.pounds)),
+                 capacity             = Force(designVn),
+                 utilization          = ratioShear,
+                 governingCombination = "Current",
+@@ -209,7 +211,7 @@ class AiscSteelCapacityCalculator(
+                 traces               = shearResult.traces
+             ),
+             axialCheck = StrengthCheckResult(
+-                demand               = demand.axial,
++                demand               = Force(abs(demand.axial.pounds)),
+                 capacity             = Force(designPn),
+                 utilization          = ratioAxial,
+                 governingCombination = "Current",
+@@ -217,7 +219,7 @@ class AiscSteelCapacityCalculator(
+                 traces               = axialResult.traces
+             ),
+             torsionCheck = StrengthCheckResult(
+-                demand               = demand.torque,
++                demand               = Moment(abs(demand.torque.lbIn)),
+                 capacity             = Moment(designTn),
+                 utilization          = ratioTorsion,
+                 governingCombination = "Current",
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index cb53048..da1e7b9 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -26,6 +26,7 @@ import com.lz.solver.capacity.DesignFactorSet
+ import com.lz.solver.capacity.RawCapacityResult
+ import java.util.Locale
+ import kotlin.math.PI
++import kotlin.math.abs
+ import kotlin.math.min
+ import kotlin.math.pow
+ import kotlin.math.sqrt
+@@ -148,37 +149,45 @@ class NdsWoodCapacityCalculator(
+             lambda * (if (isAxialTension) phiTension else phiCompression) * nomPn
+         else nomPn
+ 
+-        val ratioMn = if (designMn > 0) demand.moment.lbIn / designMn else 0.0
+-        val ratioVn = if (designVn > 0) demand.shear.pounds / designVn else 0.0
+-        val ratioPn = if (designPn > 0) demand.axial.pounds / designPn else 0.0
++        // Utilization is always demand vs. capacity as magnitudes — the
++        // signed value only matters upstream (e.g. isAxialTension, or
++        // which diagram side a moment plots on), never for the check
++        // itself. This was the bug behind negative utilization ratios.
++        val ratioMn = if (designMn > 0) abs(demand.moment.lbIn) / designMn else 0.0
++        val ratioVn = if (designVn > 0) abs(demand.shear.pounds) / designVn else 0.0
++        val ratioPn = if (designPn > 0) abs(demand.axial.pounds) / designPn else 0.0
+ 
+         val cl = computeCL(lb)
+         val cv = if (isGlulam) computeCV(lb) else 1.0
+ 
+         return StrengthDesignResult(
+             momentCheck = StrengthCheckResult(
+-                demand               = demand.moment,
++                // Stored as a magnitude, not the signed envelope value — a
++                // demand/capacity check always compares |demand| to
++                // capacity, so a negative Demand on the Design tab reads as
++                // wrong regardless of which diagram side it came from.
++                demand               = Moment(abs(demand.moment.lbIn)),
+                 capacity             = Moment(designMn),
+                 utilization          = ratioMn,
+                 governingCombination = "Current",
+                 governingMode        = lsMn
+             ),
+             shearCheck = StrengthCheckResult(
+-                demand               = demand.shear,
++                demand               = Force(abs(demand.shear.pounds)),
+                 capacity             = Force(designVn),
+                 utilization          = ratioVn,
+                 governingCombination = "Current",
+                 governingMode        = lsVn
+             ),
+             axialCheck = StrengthCheckResult(
+-                demand               = demand.axial,
++                demand               = Force(abs(demand.axial.pounds)),
+                 capacity             = Force(designPn),
+                 utilization          = ratioPn,
+                 governingCombination = "Current",
+                 governingMode        = lsPn
+             ),
+             torsionCheck = StrengthCheckResult(
+-                demand               = demand.torque,
++                demand               = Moment(abs(demand.torque.lbIn)),
+                 capacity             = Moment(0.0),
+                 utilization          = 0.0,
+                 governingCombination = "N/A",
+diff --git a/core/ui/src/main/java/com/lz/ui/AnalysisChart.kt b/core/ui/src/main/java/com/lz/ui/AnalysisChart.kt
+index 0491fc0..c887305 100644
+--- a/core/ui/src/main/java/com/lz/ui/AnalysisChart.kt
++++ b/core/ui/src/main/java/com/lz/ui/AnalysisChart.kt
+@@ -125,7 +125,7 @@ fun AnalysisChart(
+ 
+                 drawCircle(lineColor, 6f, Offset(ptX, ptY))
+ 
+-                val label = String.format(Locale.US, "%.1f %s", p.value, unitLabel)
++                val label = String.format(Locale.US, "%.2f %s", p.value, unitLabel)
+                 drawContext.canvas.nativeCanvas.drawText(
+                     label,
+                     ptX,
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index f6c260c..72c5d08 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -1480,8 +1480,8 @@ fun AnalysisSummary(
+         )
+ 
+         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-            StatusBadge("Max Moment", "${String.format("%.1f", analysis.maxMoment.inLbIn / 12000.0)} k-ft", false)
+-            StatusBadge("Max Shear", "${String.format("%.1f", analysis.maxShear.inPoundsForce / 1000.0)} kips", false)
++            StatusBadge("Max Moment", "${String.format("%.2f", analysis.maxMoment.inLbIn / 12000.0)} k-ft", false)
++            StatusBadge("Max Shear", "${String.format("%.2f", analysis.maxShear.inPoundsForce / 1000.0)} kips", false)
+         }
+ 
+         // Summary Table

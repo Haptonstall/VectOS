@@ -191,12 +191,22 @@ enum class WoodGrade {
                     G_26F_V1, G_26F_V2
                 )
                 WoodSpecies.GLULAM_DF_HF -> listOf(G_24F_V5)
-                WoodSpecies.GLULAM_HF_HF -> listOf(G_24F_E15M1, G_16F_G2, G_16F_G7)
+                // G_24F_E15M1 deliberately left out: its "M1" suffix doesn't
+                // match plain NDS Table 5A naming (that pattern only shows
+                // up elsewhere on ESR-1940-specific grades), so it isn't
+                // confirmed to be the same combination as Table 5A's plain
+                // "24F-E15" HF/HF row. Staying with NDS tabled values only
+                // for now — revisit if it's confirmed applicable.
+                WoodSpecies.GLULAM_HF_HF -> listOf(G_16F_G2, G_16F_G7)
                 WoodSpecies.GLULAM_AC_AC -> listOf(G_20F_V12, G_20F_V13)
                 WoodSpecies.GLULAM_ES_ES -> listOf(G_20F_E_ES1, G_20F_E8)
                 WoodSpecies.GLULAM_POC_POC -> listOf(G_22F_V_POC1, G_22F_V_POC2, G_20F_V14, G_20F_V15)
                 WoodSpecies.GLULAM_SPF_SPF -> listOf(G_20F_E_SPF1)
-                WoodSpecies.GLULAM_SP_SP -> listOf(G_24F_1_8E, G_16F_V5M1, G_16F_V2, G_16F_G1)
+                // G_16F_V5M1 deliberately left out: same "M1"-suffix
+                // concern as GLULAM_HF_HF's G_24F_E15M1 above — an
+                // ESR-1940-specific naming, not a plain NDS Table 5A
+                // symbol. Staying with NDS tabled values only for now.
+                WoodSpecies.GLULAM_SP_SP -> listOf(G_24F_1_8E, G_16F_V2, G_16F_G1)
                 WoodSpecies.GLULAM_HARDWOODS -> listOf(
                     G_12F_V1, G_12F_V2, G_14F_V1, G_14F_V2, G_14F_V3, G_14F_V4,
                     G_16F_V1, G_16F_V2, G_16F_V3, G_16F_V4, G_20F_V1, G_20F_V2,

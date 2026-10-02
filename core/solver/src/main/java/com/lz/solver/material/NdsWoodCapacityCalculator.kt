@@ -26,6 +26,7 @@ import com.lz.solver.capacity.DesignFactorSet
 import com.lz.solver.capacity.RawCapacityResult
 import java.util.Locale
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -148,37 +149,45 @@ class NdsWoodCapacityCalculator(
             lambda * (if (isAxialTension) phiTension else phiCompression) * nomPn
         else nomPn
 
-        val ratioMn = if (designMn > 0) demand.moment.lbIn / designMn else 0.0
-        val ratioVn = if (designVn > 0) demand.shear.pounds / designVn else 0.0
-        val ratioPn = if (designPn > 0) demand.axial.pounds / designPn else 0.0
+        // Utilization is always demand vs. capacity as magnitudes — the
+        // signed value only matters upstream (e.g. isAxialTension, or
+        // which diagram side a moment plots on), never for the check
+        // itself. This was the bug behind negative utilization ratios.
+        val ratioMn = if (designMn > 0) abs(demand.moment.lbIn) / designMn else 0.0
+        val ratioVn = if (designVn > 0) abs(demand.shear.pounds) / designVn else 0.0
+        val ratioPn = if (designPn > 0) abs(demand.axial.pounds) / designPn else 0.0
 
         val cl = computeCL(lb)
         val cv = if (isGlulam) computeCV(lb) else 1.0
 
         return StrengthDesignResult(
             momentCheck = StrengthCheckResult(
-                demand               = demand.moment,
+                // Stored as a magnitude, not the signed envelope value — a
+                // demand/capacity check always compares |demand| to
+                // capacity, so a negative Demand on the Design tab reads as
+                // wrong regardless of which diagram side it came from.
+                demand               = Moment(abs(demand.moment.lbIn)),
                 capacity             = Moment(designMn),
                 utilization          = ratioMn,
                 governingCombination = "Current",
                 governingMode        = lsMn
             ),
             shearCheck = StrengthCheckResult(
-                demand               = demand.shear,
+                demand               = Force(abs(demand.shear.pounds)),
                 capacity             = Force(designVn),
                 utilization          = ratioVn,
                 governingCombination = "Current",
                 governingMode        = lsVn
             ),
             axialCheck = StrengthCheckResult(
-                demand               = demand.axial,
+                demand               = Force(abs(demand.axial.pounds)),
                 capacity             = Force(designPn),
                 utilization          = ratioPn,
                 governingCombination = "Current",
                 governingMode        = lsPn
             ),
             torsionCheck = StrengthCheckResult(
-                demand               = demand.torque,
+                demand               = Moment(abs(demand.torque.lbIn)),
                 capacity             = Moment(0.0),
                 utilization          = 0.0,
                 governingCombination = "N/A",
