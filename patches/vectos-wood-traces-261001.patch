@@ -1,0 +1,343 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index da1e7b9..21f0ca0 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -3,6 +3,7 @@ package com.lz.solver.material
+ import com.lz.model.regulatory.aisc.DesignFactor
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.regulatory.nds.NdsEdition
++import com.lz.model.structural.DesignEquationTrace
+ import com.lz.model.structural.DesignMethodology
+ import com.lz.model.structural.Flange
+ import com.lz.model.structural.MaterialGrade
+@@ -77,6 +78,26 @@ class NdsWoodCapacityCalculator(
+      */
+     private val designMaterial: MaterialGrade.Wood = resolveDesignMaterial(material, profile)
+ 
++    /**
++     * Mirrors [AiscSteelCapacityCalculator]'s own private result wrapper —
++     * same shape, same reasoning: a nominal/limit-state pair for the
++     * [evaluate] path (CapacityEngine's point-by-point diagram, which
++     * doesn't need traces) that also carries optional [DesignEquationTrace]s
++     * for [evaluateDetailed]'s Design tab card. Destructuring
++     * (`val (nominal, limitState) = ...`) still works unchanged against
++     * this three-component class, since Kotlin destructuring only binds as
++     * many components as the left side asks for.
++     */
++    private data class LimitStateResult(
++        val nominal: Double,
++        val limitState: String,
++        val traces: List<DesignEquationTrace> = emptyList()
++    )
++
++    private fun fmt(v: Double, d: Int = 2): String = String.format(Locale.US, "%.${d}f", v)
++    private fun kipFt(lbIn: Double): String = fmt(lbIn / 12000.0, 2)
++    private fun kips(lb: Double): String = fmt(lb / 1000.0, 2)
++
+     // ------------------------------------------------------------------
+     // CapacityCalculator contract
+     // ------------------------------------------------------------------
+@@ -122,9 +143,9 @@ class NdsWoodCapacityCalculator(
+         val luAxial = lb
+         val isAxialTension = demand.axial.pounds >= 0.0
+ 
+-        val (nomMn, lsMn) = calculateBending(lb)
+-        val (nomVn, lsVn) = calculateShear()
+-        val (nomPn, lsPn) = if (isAxialTension)
++        val (nomMn, lsMn, tracesMn) = calculateBending(lb)
++        val (nomVn, lsVn, tracesVn) = calculateShear()
++        val (nomPn, lsPn, tracesPn) = if (isAxialTension)
+             calculateTension()
+         else
+             calculateCompression(luAxial)
+@@ -170,21 +191,24 @@ class NdsWoodCapacityCalculator(
+                 capacity             = Moment(designMn),
+                 utilization          = ratioMn,
+                 governingCombination = "Current",
+-                governingMode        = lsMn
++                governingMode        = lsMn,
++                traces               = tracesMn
+             ),
+             shearCheck = StrengthCheckResult(
+                 demand               = Force(abs(demand.shear.pounds)),
+                 capacity             = Force(designVn),
+                 utilization          = ratioVn,
+                 governingCombination = "Current",
+-                governingMode        = lsVn
++                governingMode        = lsVn,
++                traces               = tracesVn
+             ),
+             axialCheck = StrengthCheckResult(
+                 demand               = Force(abs(demand.axial.pounds)),
+                 capacity             = Force(designPn),
+                 utilization          = ratioPn,
+                 governingCombination = "Current",
+-                governingMode        = lsPn
++                governingMode        = lsPn,
++                traces               = tracesPn
+             ),
+             torsionCheck = StrengthCheckResult(
+                 demand               = Moment(abs(demand.torque.lbIn)),
+@@ -266,37 +290,72 @@ class NdsWoodCapacityCalculator(
+      * Glulam:      F'b = Fb * CD * CM * Ct * min(CV, CL) * Cfu * Ci
+      *              NDS 5.3.6: CV and CL are not applied simultaneously.
+      */
+-    private fun calculateBending(lb: Double): Pair<Double, String> {
++    private fun calculateBending(lb: Double): LimitStateResult {
+         val fb = designMaterial.referenceBending.inPsi
+         val sx = profile.propertiesStrongAxis.s.inIn3
++        val f = adjustmentFactors
+ 
+         val cl = computeCL(lb)
+ 
+         val fbAdj: Double
+         val limitState: String
++        val adjTrace: DesignEquationTrace
+ 
+         if (isGlulam) {
+             val cv = computeCV(lb)
+             // NDS 5.3.6: use lesser of CV and CL
+             val stabilityFactor = min(cl, cv)
+-            val f = adjustmentFactors
+             fbAdj = fb * f.cd * f.cm * f.ct * stabilityFactor * f.cfu * f.ci
+             limitState = if (cv <= cl)
+                 "Bending — Volume Factor CV (NDS 5.3.6)"
+             else
+                 "Bending — Beam Stability CL (NDS 3.3.3)"
++            adjTrace = DesignEquationTrace(
++                symbolicEquation = "F'b = Fb x CD x CM x Ct x min(CL, CV) x Cfu x Ci",
++                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x " +
++                    "${fmt(f.ct)} x min(${fmt(cl, 3)}, ${fmt(cv, 3)}) x ${fmt(f.cfu)} x ${fmt(f.ci)}",
++                result = fmt(fbAdj, 0),
++                units = "psi",
++                codeReference = "NDS 5.3.2, 5.3.6",
++                variables = mapOf(
++                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
++                    "CL" to cl, "CV" to cv, "Cfu" to f.cfu, "Ci" to f.ci
++                )
++            )
+         } else {
+             // Sawn lumber / SCL: CF from adjustmentFactors (caller must set it)
+             val cfEffective = computeSawnCF(NdsCfProperty.BENDING)
+-            val f = adjustmentFactors
+             fbAdj = fb * f.cd * f.cm * f.ct * cl * cfEffective * f.cfu * f.ci * f.cr
+             limitState = if (cl < 1.0)
+                 "Bending — Beam Stability CL (NDS 3.3.3)"
+             else
+                 "Bending — Size Factor CF (NDS Table 4A)"
++            adjTrace = DesignEquationTrace(
++                symbolicEquation = "F'b = Fb x CD x CM x Ct x CL x CF x Cfu x Ci x Cr",
++                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x " +
++                    "${fmt(f.ct)} x ${fmt(cl, 3)} x ${fmt(cfEffective, 3)} x ${fmt(f.cfu)} x " +
++                    "${fmt(f.ci)} x ${fmt(f.cr)}",
++                result = fmt(fbAdj, 0),
++                units = "psi",
++                codeReference = "NDS 3.3.2, 3.3.3, Table 4A",
++                variables = mapOf(
++                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "CL" to cl,
++                    "CF" to cfEffective, "Cfu" to f.cfu, "Ci" to f.ci, "Cr" to f.cr
++                )
++            )
+         }
+ 
+-        return (fbAdj * sx) to limitState
++        val mn = fbAdj * sx
++        val mnTrace = DesignEquationTrace(
++            symbolicEquation = "Mn = F'b x Sx",
++            substitutedEquation = "Mn = ${fmt(fbAdj, 0)} x ${fmt(sx, 2)}",
++            result = "${fmt(mn, 0)} lb-in (${kipFt(mn)} k-ft)",
++            units = "lb-in",
++            codeReference = "NDS 3.3.2",
++            variables = mapOf("F'b" to fbAdj, "Sx" to sx)
++        )
++
++        return LimitStateResult(mn, limitState, listOf(adjTrace, mnTrace))
+     }
+ 
+     /**
+@@ -436,12 +495,33 @@ class NdsWoodCapacityCalculator(
+      * The 2/3 factor accounts for the parabolic shear distribution
+      * in rectangular cross-sections (NDS 3.4.2).
+      */
+-    private fun calculateShear(): Pair<Double, String> {
+-        val fvAdj = adjustmentFactors.adjustedShear(designMaterial.referenceShear.inPsi)
++    private fun calculateShear(): LimitStateResult {
++        val fv = designMaterial.referenceShear.inPsi
++        val f = adjustmentFactors
++        val fvAdj = f.adjustedShear(fv)
+         val area  = profile.area.inIn2
+ 
++        val fvTrace = DesignEquationTrace(
++            symbolicEquation = "F'v = Fv x CD x CM x Ct x Ci",
++            substitutedEquation = "F'v = ${fmt(fv, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x " +
++                "${fmt(f.ct)} x ${fmt(f.ci)}",
++            result = fmt(fvAdj, 0),
++            units = "psi",
++            codeReference = "NDS 3.4.1",
++            variables = mapOf("Fv" to fv, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "Ci" to f.ci)
++        )
++
+         val vn = (2.0 / 3.0) * fvAdj * area
+-        return vn to "Shear (NDS 3.4)"
++        val vnTrace = DesignEquationTrace(
++            symbolicEquation = "Vn = (2/3) x F'v x A",
++            substitutedEquation = "Vn = (2/3) x ${fmt(fvAdj, 0)} x ${fmt(area, 2)}",
++            result = "${fmt(vn, 0)} lb (${kips(vn)} kips)",
++            units = "lb",
++            codeReference = "NDS 3.4.2",
++            variables = mapOf("F'v" to fvAdj, "A" to area)
++        )
++
++        return LimitStateResult(vn, "Shear (NDS 3.4)", listOf(fvTrace, vnTrace))
+     }
+ 
+     // ------------------------------------------------------------------
+@@ -453,26 +533,51 @@ class NdsWoodCapacityCalculator(
+      * F'c = Fc * CD * CM * Ct * CF * Ci * CP
+      * CP computed from NDS 3.7.1 using slenderness ratio le/d.
+      */
+-    private fun calculateCompression(lu: Double): Pair<Double, String> {
++    private fun calculateCompression(lu: Double): LimitStateResult {
+         val fc   = designMaterial.referenceCompressionParallel.inPsi
+         val area = profile.area.inIn2
++        val f = adjustmentFactors
++
++        val (cp, cpTraces) = computeCPTraced(lu)
+ 
+-        val cp = computeCP(lu)
++        val fStarC = fc * f.cd * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
++        val fcAdj = fStarC * cp
+ 
+-        val fcAdj = fc * adjustmentFactors.cd * adjustmentFactors.cm *
+-                adjustmentFactors.ct * computeSawnCF(NdsCfProperty.COMPRESSION) *
+-                adjustmentFactors.ci * cp
++        val fcAdjTrace = DesignEquationTrace(
++            symbolicEquation = "F'c = F*c x CP",
++            substitutedEquation = "F'c = ${fmt(fStarC, 0)} x ${fmt(cp, 3)}",
++            result = fmt(fcAdj, 0),
++            units = "psi",
++            codeReference = "NDS 3.7.1",
++            variables = mapOf("F*c" to fStarC, "CP" to cp)
++        )
++        val pn = fcAdj * area
++        val pnTrace = DesignEquationTrace(
++            symbolicEquation = "Pn = F'c x A",
++            substitutedEquation = "Pn = ${fmt(fcAdj, 0)} x ${fmt(area, 2)}",
++            result = "${fmt(pn, 0)} lb (${kips(pn)} kips)",
++            units = "lb",
++            codeReference = "NDS 3.7",
++            variables = mapOf("F'c" to fcAdj, "A" to area)
++        )
+ 
+-        return (fcAdj * area) to "Compression (NDS 3.7, CP=${String.format(Locale.US, "%.3f", cp)})"
++        return LimitStateResult(
++            pn,
++            "Compression (NDS 3.7, CP=${fmt(cp, 3)})",
++            cpTraces + fcAdjTrace + pnTrace
++        )
+     }
+ 
++    /** NDS 3.7.1 Column Stability Factor CP, with its derivation traced. */
++    private data class CpResult(val cp: Double, val traces: List<DesignEquationTrace>)
++
+     /**
+      * NDS 3.7.1 Column Stability Factor CP.
+      * CP = (1 + ratio) / (2c) - sqrt(((1 + ratio) / (2c))^2 - ratio/c)
+      * where ratio = FcE / F*c, c = 0.8 (sawn) or 0.9 (glulam/SCL)
+      */
+-    private fun computeCP(lu: Double): Double {
+-        if (lu <= 0.0) return 1.0
++    private fun computeCPTraced(lu: Double): CpResult {
++        if (lu <= 0.0) return CpResult(1.0, emptyList())
+ 
+         val d = profile.depth.inInches
+         val b = if (profile is WoodProfile) profile.dressedWidth.inInches
+@@ -481,24 +586,43 @@ class NdsWoodCapacityCalculator(
+         // NDS 3.7.1: slenderness ratio le/d, must not exceed 50
+         val le    = lu  // Effective length — caller responsible for ke * lu if needed
+         val slenderness = le / minOf(d, b)
+-        if (slenderness > 50.0) return 0.0  // Exceeds NDS maximum — member inadequate
++        if (slenderness > 50.0) return CpResult(0.0, emptyList())  // Exceeds NDS max — inadequate
+ 
+         // Critical buckling stress FcE (NDS 3.7.1)
+         val eMin      = woodEmin(designMaterial)
+         val fce       = 0.822 * eMin / slenderness.pow(2)
++        val fceTrace = DesignEquationTrace(
++            symbolicEquation = "FcE = 0.822 x E'min / (le/d)^2",
++            substitutedEquation = "FcE = 0.822 x ${fmt(eMin, 0)} / ${fmt(slenderness, 2)}^2",
++            result = fmt(fce, 0),
++            units = "psi",
++            codeReference = "NDS 3.7.1",
++            variables = mapOf("E'min" to eMin, "le/d" to slenderness)
++        )
+ 
+         // F*c = Fc with all adjustments except CP
++        val f = adjustmentFactors
+         val fcStar    = designMaterial.referenceCompressionParallel.inPsi *
+-                adjustmentFactors.cd * adjustmentFactors.cm *
+-                adjustmentFactors.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * adjustmentFactors.ci
++                f.cd * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
+ 
+-        if (fcStar <= 0.0) return 1.0
++        if (fcStar <= 0.0) return CpResult(1.0, listOf(fceTrace))
+ 
+         val ratio = fce / fcStar
+         val c     = if (isGlulam) 0.90 else 0.80
+ 
+         val term = (1.0 + ratio) / (2.0 * c)
+-        return term - sqrt(term.pow(2) - ratio / c)
++        val cp = term - sqrt(term.pow(2) - ratio / c)
++        val cpTrace = DesignEquationTrace(
++            symbolicEquation = "CP = (1+(FcE/F*c))/2c - sqrt([(1+(FcE/F*c))/2c]^2 - (FcE/F*c)/c)",
++            substitutedEquation = "CP = (1+${fmt(ratio, 3)})/${fmt(2 * c, 2)} - sqrt([(1+${fmt(ratio, 3)})/" +
++                "${fmt(2 * c, 2)}]^2 - ${fmt(ratio, 3)}/${fmt(c, 2)})",
++            result = fmt(cp, 3),
++            units = "",
++            codeReference = "NDS 3.7.1",
++            variables = mapOf("FcE" to fce, "F*c" to fcStar, "FcE/F*c" to ratio, "c" to c)
++        )
++
++        return CpResult(cp, listOf(fceTrace, cpTrace))
+     }
+ 
+     // ------------------------------------------------------------------
+@@ -513,11 +637,34 @@ class NdsWoodCapacityCalculator(
+      * [NdsAdjustmentFactors.adjustedTension]) because that helper uses
+      * the raw, un-resolved CF field — see [resolveSawnCf].
+      */
+-    private fun calculateTension(): Pair<Double, String> {
++    private fun calculateTension(): LimitStateResult {
+         val ft = designMaterial.referenceTensionParallel.inPsi
+-        val ftAdj = ft * adjustmentFactors.cd * adjustmentFactors.cm *
+-                adjustmentFactors.ct * computeSawnCF(NdsCfProperty.TENSION) * adjustmentFactors.ci
++        val f = adjustmentFactors
++        val cf = computeSawnCF(NdsCfProperty.TENSION)
++        val ftAdj = ft * f.cd * f.cm * f.ct * cf * f.ci
+         val area = profile.area.inIn2
+-        return (ftAdj * area) to "Tension (NDS 3.8)"
++
++        val ftTrace = DesignEquationTrace(
++            symbolicEquation = "F't = Ft x CD x CM x Ct x CF x Ci",
++            substitutedEquation = "F't = ${fmt(ft, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x " +
++                "${fmt(f.ct)} x ${fmt(cf, 3)} x ${fmt(f.ci)}",
++            result = fmt(ftAdj, 0),
++            units = "psi",
++            codeReference = "NDS 3.8.1, Table 4A",
++            variables = mapOf(
++                "Ft" to ft, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "CF" to cf, "Ci" to f.ci
++            )
++        )
++        val pn = ftAdj * area
++        val pnTrace = DesignEquationTrace(
++            symbolicEquation = "Pn = F't x A",
++            substitutedEquation = "Pn = ${fmt(ftAdj, 0)} x ${fmt(area, 2)}",
++            result = "${fmt(pn, 0)} lb (${kips(pn)} kips)",
++            units = "lb",
++            codeReference = "NDS 3.8",
++            variables = mapOf("F't" to ftAdj, "A" to area)
++        )
++
++        return LimitStateResult(pn, "Tension (NDS 3.8)", listOf(ftTrace, pnTrace))
+     }
+ }
+\ No newline at end of file

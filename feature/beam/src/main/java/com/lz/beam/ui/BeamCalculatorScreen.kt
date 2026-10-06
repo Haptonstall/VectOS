@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LineAxis
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
@@ -432,6 +433,50 @@ fun BeamCalculatorScreen(
                             contentDescription = "Toggle Heatmap",
                             tint = if (viewModel.showUtilizationOnPlot) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                         )
+                    }
+                }
+            }
+
+            // 1b. Calculation error banner. viewModel.calculationError is set
+            // whenever calculate() throws, but calculationResult is
+            // deliberately left as whatever it last was (so a transient
+            // mistake — e.g. a span length cleared mid-edit — doesn't blank
+            // the screen). Without this banner that silently stale result
+            // was the ONLY thing visible anywhere in the UI — there was no
+            // indication the numbers on screen didn't reflect current
+            // inputs at all, on any tab.
+            viewModel.calculationError?.let { error ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Column {
+                            Text(
+                                "Results below are from the last successful calculation " +
+                                    "and may not reflect your current inputs",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                error,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
                     }
                 }
             }
