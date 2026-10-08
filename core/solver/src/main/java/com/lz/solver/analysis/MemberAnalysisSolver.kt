@@ -192,7 +192,21 @@ object MemberAnalysisSolver {
         }
 
         // 2. Identify all unique categories in the input loads
-        val activeCategories = config.allLoads.map { it.category }.distinct()
+        // Every category any active combination references needs to be
+        // solved — even with zero actual loads in it — so that category
+        // contributes a valid all-zero StationDemand rather than being
+        // absent from resultsByCategory entirely. Previously this was just
+        // the categories with actual loads: with every load removed from
+        // every case, activeCategories (and therefore demandsByCategory)
+        // came back completely empty, which DemandEnvelopeResolver treats
+        // as "nothing to combine" and throws on — surfacing as a stale,
+        // silently-frozen result on screen (see calculationError) rather
+        // than the correct all-zero demand/utilization a loadless member
+        // should show.
+        val activeCategories = (
+            config.allLoads.map { it.category } +
+                config.combinations.flatMap { it.factors.keys }
+            ).distinct()
 
         // 3. Solve for each category independently (Unfactored/Service Pass)
         val resultsByCategory = activeCategories.associateWith { category ->

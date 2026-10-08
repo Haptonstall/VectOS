@@ -36,8 +36,25 @@ object DemandEnvelopeResolver {
         analysisResultsByCategory: Map<LoadCategory, List<StationDemand>>,
         combinations: List<LoadCombination>
     ): MemberEnvelopeResult {
+        // Defensive backstop, not the primary fix: MemberAnalysisSolver now
+        // always solves every category any active combination references
+        // (see its activeCategories), so analysisResultsByCategory should
+        // never actually be empty while any combination is. Still, a
+        // member with truly nothing to combine (e.g. zero combinations
+        // enabled) is a valid, if unhelpful, state — a loadless/comboless
+        // member has a knowable answer (zero everywhere), so return that
+        // instead of throwing and leaving calculate() to silently freeze
+        // the UI on a stale previous result (see BeamViewModel's
+        // calculationError banner history for why that's the wrong
+        // failure mode here).
         if (analysisResultsByCategory.isEmpty() || combinations.isEmpty()) {
-            throw IllegalArgumentException("Analysis results and load combinations must not be empty.")
+            return MemberEnvelopeResult(
+                strengthEnvelope = emptyList(),
+                serviceabilityEnvelope = emptyList(),
+                governingMaxMoment = null,
+                governingMaxShear = null,
+                governingMaxDeflection = null
+            )
         }
 
         val firstCategory = analysisResultsByCategory.keys.first()

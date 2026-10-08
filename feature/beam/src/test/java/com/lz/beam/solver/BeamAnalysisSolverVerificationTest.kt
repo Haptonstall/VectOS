@@ -26,6 +26,53 @@ import java.util.UUID
 class BeamAnalysisSolverVerificationTest {
 
     @Test
+    fun `member with zero loads solves to a valid all-zero result, not an exception`() {
+        // Previously: with every load removed from every case, no category
+        // had any actual load, so MemberAnalysisSolver's activeCategories
+        // (and therefore demandsByCategory) came back completely empty —
+        // which DemandEnvelopeResolver treated as "nothing to combine" and
+        // threw IllegalArgumentException on, surfacing in the UI as a
+        // stale, silently-frozen previous result rather than the correct
+        // zero demand / zero utilization a loadless member should show.
+        val member = StructuralMember.createSimple(Length(120.0))
+
+        val combination = LoadCombination(
+            id = "LC1",
+            name = "1.2D + 1.6L",
+            methodology = DesignMethodology.LRFD,
+            equationText = "1.2D + 1.6L",
+            factors = mapOf(
+                LoadCategory.DEAD to 1.2,
+                LoadCategory.LIVE to 1.6
+            ),
+            codeReference = "ASCE 7-16",
+            type = CombinationType.STRENGTH
+        )
+
+        val config = BeamAnalysisConfig(
+            member = member,
+            loadCases = listOf(
+                LoadCase("D", "Dead", emptyList()),
+                LoadCase("L", "Live", emptyList())
+            ),
+            combinations = listOf(combination),
+            modulusOfElasticity = 29000000.0.psiModulus,
+            momentOfInertiaX = 100.0.in4
+        )
+
+        // The bug was an exception here — reaching this line at all is
+        // most of the test.
+        val result = BeamAnalysisSolver.solve(config)
+
+        val combinationResult = result.combinationResults["1.2D + 1.6L"]!!
+        val spanResult = combinationResult.spanResults[0]
+
+        assertEquals(0.0, spanResult.momentDiagram.maxOf { abs(it.value) }, 1e-9)
+        assertEquals(0.0, spanResult.shearDiagram.maxOf { abs(it.value) }, 1e-9)
+        assertEquals("1.2D + 1.6L", result.governingCombinationName)
+    }
+
+    @Test
     fun `point load produces correct simply supported moment diagram`() {
         val member = StructuralMember.createSimple(Length(120.0))
         val spanId = member.spans.first().id

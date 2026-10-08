@@ -6,6 +6,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -31,6 +32,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LineAxis
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
@@ -1690,24 +1693,42 @@ fun DesignSummary(
                 )
             }
 
-            DesignCard("Bending (Mx)", detailedResult.momentCheck, unitSystem)
+            DesignCard("Bending (Mx)", detailedResult.momentCheck, unitSystem, initiallyExpanded = true)
             DesignCard("Shear (Vy)", detailedResult.shearCheck, unitSystem)
 
             if (detailedResult.axialCheck.demand.inPoundsForce != 0.0) {
                 DesignCard("Axial (Px)", detailedResult.axialCheck, unitSystem)
             }
 
-            // Interaction Details
-            val flexRatio = detailedResult.momentCheck.utilization
-            val axialRatio = detailedResult.axialCheck.utilization
-            val interactionValue = if (axialRatio >= 0.2) axialRatio + (8.0/9.0) * flexRatio else (axialRatio/2.0) + flexRatio
+            // AISC H1-1 is a steel-specific combined-force interaction
+            // equation (AISC 360 Chapter H) — it does not apply to wood,
+            // which uses an entirely different set of equations (NDS
+            // 3.9.1/3.9.2, not yet implemented here). This used to run
+            // unconditionally for every material, including wood, silently
+            // showing an inapplicable steel check on a wood beam's Design
+            // tab. Gated to steel only until the NDS combined check exists.
+            if (!isWoodMaterial) {
+                val flexRatio = detailedResult.momentCheck.utilization
+                val axialRatio = detailedResult.axialCheck.utilization
+                val interactionValue = if (axialRatio >= 0.2) axialRatio + (8.0/9.0) * flexRatio else (axialRatio/2.0) + flexRatio
 
-            InteractionCard(
-                label = "H1-1 Interaction",
-                equation = if (axialRatio >= 0.2) "Pr/Pc + 8/9(Mr/Mc)" else "Pr/2Pc + Mr/Mc",
-                value = interactionValue,
-                status = if (interactionValue <= 1.0) InteractionStatus.PASS else InteractionStatus.FAIL
-            )
+                InteractionCard(
+                    label = "H1-1 Interaction",
+                    equation = if (axialRatio >= 0.2) "Pr/Pc + 8/9(Mr/Mc)" else "Pr/2Pc + Mr/Mc",
+                    value = interactionValue,
+                    status = if (interactionValue <= 1.0) InteractionStatus.PASS else InteractionStatus.FAIL
+                )
+            } else if (detailedResult.axialCheck.demand.inPoundsForce != 0.0) {
+                Text(
+                    "Combined bending and axial — not yet implemented for NDS " +
+                        "(requires NDS 3.9.1/3.9.2). The bending, shear, and axial " +
+                        "checks above are each individually valid; they are not yet " +
+                        "combined into a single interaction ratio for this member.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
 
             DesignParameterSummary(detailedResult, unitSystem)
 
@@ -1907,7 +1928,12 @@ fun ResultRow(label: String, value: String) {
 }
 
 @Composable
-private fun DesignCard(label: String, check: StrengthCheckResult<*>, unitSystem: UnitSystem) {
+private fun DesignCard(
+    label: String,
+    check: StrengthCheckResult<*>,
+    unitSystem: UnitSystem,
+    initiallyExpanded: Boolean = false
+) {
     val isFail = check.utilization > 1.0
     val demandStr = when (val d = check.demand) {
         is Moment -> "${String.format("%.1f", d.inLbIn / 12000.0)} k-ft"
@@ -1919,6 +1945,12 @@ private fun DesignCard(label: String, check: StrengthCheckResult<*>, unitSystem:
         is Force -> "${String.format("%.1f", c.inPoundsForce / 1000.0)} kips"
         else -> c.toString()
     }
+    // Collapsed by default (except the first card, by caller's choice) —
+    // with up to 7 checks' worth of multi-step derivations on this tab
+    // once every NDS condition is covered, showing all of them expanded
+    // at once would be an overwhelming wall of equations most of the time.
+    var isExpanded by remember(label) { mutableStateOf(initiallyExpanded) }
+    val hasTraces = check.traces.isNotEmpty()
 
     Surface(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -1926,7 +1958,12 @@ private fun DesignCard(label: String, check: StrengthCheckResult<*>, unitSystem:
         color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .let { if (hasTraces) it.clickable { isExpanded = !isExpanded } else it }
+                .padding(16.dp)
+        ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
                     Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -1935,13 +1972,23 @@ private fun DesignCard(label: String, check: StrengthCheckResult<*>, unitSystem:
                     }
                 }
 
-                CircularProgressIndicator(
-                    progress = check.utilization.toFloat().coerceAtMost(1f),
-                    modifier = Modifier.size(32.dp),
-                    color = getUtilizationColor(check.utilization),
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    strokeWidth = 4.dp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        progress = check.utilization.toFloat().coerceAtMost(1f),
+                        modifier = Modifier.size(32.dp),
+                        color = getUtilizationColor(check.utilization),
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        strokeWidth = 4.dp
+                    )
+                    if (hasTraces) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isExpanded) "Collapse development" else "Expand development",
+                            modifier = Modifier.padding(start = 4.dp),
+                            tint = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(12.dp))
@@ -1961,7 +2008,7 @@ private fun DesignCard(label: String, check: StrengthCheckResult<*>, unitSystem:
                 }
             }
 
-            if (check.traces.isNotEmpty()) {
+            if (hasTraces && isExpanded) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
                 check.traces.forEach { trace ->
                     EquationTraceItem(trace)
@@ -2039,14 +2086,56 @@ fun EquationTraceItem(trace: DesignEquationTrace) {
     // wrap cleanly on their own) gives a readable trace at any width; the
     // full substituted-equation string is kept below for anyone who wants
     // the literal audit trail, but it's no longer the only way to read it.
+    var isVariableInfoVisible by remember(trace) { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Text(trace.codeReference, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(trace.codeReference, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            if (trace.variables.isNotEmpty()) {
+                IconButton(
+                    onClick = { isVariableInfoVisible = true },
+                    modifier = Modifier.size(20.dp).padding(start = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "What do these variables mean?",
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
         Text(
             trace.symbolicEquation,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(top = 2.dp)
         )
+
+        if (isVariableInfoVisible) {
+            AlertDialog(
+                onDismissRequest = { isVariableInfoVisible = false },
+                title = { Text(trace.symbolicEquation) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        trace.variables.keys.forEach { name ->
+                            val description = ndsVariableDescriptions[name]
+                                ?: ndsVariableDescriptions[name.trimEnd('1', '2')]
+                            Column {
+                                Text(name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                Text(
+                                    description ?: "No description available for this variable.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { isVariableInfoVisible = false }) { Text("Close") }
+                }
+            )
+        }
 
         if (trace.variables.isNotEmpty()) {
             FlowRow(
@@ -2085,6 +2174,46 @@ fun EquationTraceItem(trace: DesignEquationTrace) {
         )
     }
 }
+
+/**
+ * Short, plain-language descriptions for the variable names that show up
+ * in [DesignEquationTrace.variables] across the NDS wood and AISC steel
+ * checks, shown via the info button next to each trace's equation.
+ * Looked up by exact name first, then with a trailing axis digit ("1"/"2")
+ * stripped, so e.g. "FcE1" and "FcE2" both fall back to the "FcE" entry
+ * without needing two near-duplicate descriptions.
+ */
+private val ndsVariableDescriptions: Map<String, String> = mapOf(
+    "Fb" to "Reference (tabulated) bending design value, before any adjustment factors.",
+    "Ft" to "Reference tension design value parallel to grain, before adjustment factors.",
+    "Fv" to "Reference shear design value parallel to grain, before adjustment factors.",
+    "Fc" to "Reference compression design value parallel to grain, before adjustment factors.",
+    "F*c" to "Fc multiplied by every adjustment factor except the column stability factor CP.",
+    "F'c" to "Fc multiplied by every applicable adjustment factor, including CP — the final adjusted compression design value.",
+    "F'b" to "Fb multiplied by every applicable adjustment factor — the final adjusted bending design value.",
+    "F't" to "Ft multiplied by every applicable adjustment factor — the final adjusted tension design value.",
+    "F'v" to "Fv multiplied by every applicable adjustment factor — the final adjusted shear design value.",
+    "CD" to "Load duration factor — accounts for how long the governing load is sustained (NDS 2.3.2). Shorter-duration loads allow a higher design value.",
+    "CM" to "Wet service factor — reduces design values for members used where moisture content stays elevated in service (NDS Table 4A/4B/5A).",
+    "Ct" to "Temperature factor — reduces design values for sustained exposure above 100°F (NDS 2.3.3).",
+    "CL" to "Beam stability factor — accounts for lateral-torsional buckling of the compression edge between points of lateral support (NDS 3.3.3).",
+    "CF" to "Size factor — adjusts bending, tension, and compression values for sawn-lumber member size (NDS 4.3.6, Table 4A/4B).",
+    "Cfu" to "Flat use factor — applies when a member is loaded on its wide face instead of the standard edgewise orientation (NDS 4.3.7).",
+    "Ci" to "Incising factor — reduces design values for lumber incised for preservative treatment (NDS 4.3.8).",
+    "Cr" to "Repetitive member factor — increases Fb for 2\"–4\" dimension lumber in a qualifying repetitive-member system (NDS 4.3.9).",
+    "CP" to "Column stability factor — accounts for buckling of a compression member about its weak axis (NDS 3.7.1).",
+    "CV" to "Volume factor — the glulam equivalent of CL/CF for bending; larger members get a lower factor (NDS 5.3.6). The lesser of CL and CV governs.",
+    "E" to "Reference modulus of elasticity, before adjustment factors — governs deflection.",
+    "Emin" to "Reference modulus of elasticity for stability calculations (beam and column buckling) — a reduced, more conservative value than E.",
+    "E'min" to "Emin multiplied by applicable adjustment factors — the adjusted stability modulus used directly in FcE and CL/CP.",
+    "FcE" to "Critical (Euler) buckling stress for the member's slenderness — compared against F*c to derive the stability factor.",
+    "FbE" to "Critical (Euler) buckling stress for a bending member — compared against F*b to derive the beam stability factor CL.",
+    "le/d" to "Slenderness ratio — effective unbraced length divided by the relevant section dimension. Must not exceed 50 per NDS 3.7.1.",
+    "c" to "Buckling-curve constant used in the CP/CL formula — 0.8 for sawn lumber, 0.9 for glulam/structural composite lumber.",
+    "A" to "Cross-sectional area of the member.",
+    "Sx" to "Section modulus about the strong (x-x) axis — bending capacity is Fb multiplied by this.",
+    "G" to "Specific gravity, used for fastener design — not a design-value adjustment factor itself.",
+)
 
 /** Trims a substituted-variable value to a compact, readable form for the
  *  "given" chips — whole numbers show with no decimal noise, everything

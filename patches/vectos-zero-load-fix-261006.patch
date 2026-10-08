@@ -1,0 +1,116 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+index e984688..a823ae6 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+@@ -192,7 +192,21 @@ object MemberAnalysisSolver {
+         }
+ 
+         // 2. Identify all unique categories in the input loads
+-        val activeCategories = config.allLoads.map { it.category }.distinct()
++        // Every category any active combination references needs to be
++        // solved — even with zero actual loads in it — so that category
++        // contributes a valid all-zero StationDemand rather than being
++        // absent from resultsByCategory entirely. Previously this was just
++        // the categories with actual loads: with every load removed from
++        // every case, activeCategories (and therefore demandsByCategory)
++        // came back completely empty, which DemandEnvelopeResolver treats
++        // as "nothing to combine" and throws on — surfacing as a stale,
++        // silently-frozen result on screen (see calculationError) rather
++        // than the correct all-zero demand/utilization a loadless member
++        // should show.
++        val activeCategories = (
++            config.allLoads.map { it.category } +
++                config.combinations.flatMap { it.factors.keys }
++            ).distinct()
+ 
+         // 3. Solve for each category independently (Unfactored/Service Pass)
+         val resultsByCategory = activeCategories.associateWith { category ->
+diff --git a/core/solver/src/main/java/com/lz/solver/envelope/DemandEnvelopeResolver.kt b/core/solver/src/main/java/com/lz/solver/envelope/DemandEnvelopeResolver.kt
+index 3f21218..7d506cc 100644
+--- a/core/solver/src/main/java/com/lz/solver/envelope/DemandEnvelopeResolver.kt
++++ b/core/solver/src/main/java/com/lz/solver/envelope/DemandEnvelopeResolver.kt
+@@ -36,8 +36,25 @@ object DemandEnvelopeResolver {
+         analysisResultsByCategory: Map<LoadCategory, List<StationDemand>>,
+         combinations: List<LoadCombination>
+     ): MemberEnvelopeResult {
++        // Defensive backstop, not the primary fix: MemberAnalysisSolver now
++        // always solves every category any active combination references
++        // (see its activeCategories), so analysisResultsByCategory should
++        // never actually be empty while any combination is. Still, a
++        // member with truly nothing to combine (e.g. zero combinations
++        // enabled) is a valid, if unhelpful, state — a loadless/comboless
++        // member has a knowable answer (zero everywhere), so return that
++        // instead of throwing and leaving calculate() to silently freeze
++        // the UI on a stale previous result (see BeamViewModel's
++        // calculationError banner history for why that's the wrong
++        // failure mode here).
+         if (analysisResultsByCategory.isEmpty() || combinations.isEmpty()) {
+-            throw IllegalArgumentException("Analysis results and load combinations must not be empty.")
++            return MemberEnvelopeResult(
++                strengthEnvelope = emptyList(),
++                serviceabilityEnvelope = emptyList(),
++                governingMaxMoment = null,
++                governingMaxShear = null,
++                governingMaxDeflection = null
++            )
+         }
+ 
+         val firstCategory = analysisResultsByCategory.keys.first()
+diff --git a/feature/beam/src/test/java/com/lz/beam/solver/BeamAnalysisSolverVerificationTest.kt b/feature/beam/src/test/java/com/lz/beam/solver/BeamAnalysisSolverVerificationTest.kt
+index f67ae4f..8ad9dd5 100644
+--- a/feature/beam/src/test/java/com/lz/beam/solver/BeamAnalysisSolverVerificationTest.kt
++++ b/feature/beam/src/test/java/com/lz/beam/solver/BeamAnalysisSolverVerificationTest.kt
+@@ -25,6 +25,53 @@ import java.util.UUID
+ 
+ class BeamAnalysisSolverVerificationTest {
+ 
++    @Test
++    fun `member with zero loads solves to a valid all-zero result, not an exception`() {
++        // Previously: with every load removed from every case, no category
++        // had any actual load, so MemberAnalysisSolver's activeCategories
++        // (and therefore demandsByCategory) came back completely empty —
++        // which DemandEnvelopeResolver treated as "nothing to combine" and
++        // threw IllegalArgumentException on, surfacing in the UI as a
++        // stale, silently-frozen previous result rather than the correct
++        // zero demand / zero utilization a loadless member should show.
++        val member = StructuralMember.createSimple(Length(120.0))
++
++        val combination = LoadCombination(
++            id = "LC1",
++            name = "1.2D + 1.6L",
++            methodology = DesignMethodology.LRFD,
++            equationText = "1.2D + 1.6L",
++            factors = mapOf(
++                LoadCategory.DEAD to 1.2,
++                LoadCategory.LIVE to 1.6
++            ),
++            codeReference = "ASCE 7-16",
++            type = CombinationType.STRENGTH
++        )
++
++        val config = BeamAnalysisConfig(
++            member = member,
++            loadCases = listOf(
++                LoadCase("D", "Dead", emptyList()),
++                LoadCase("L", "Live", emptyList())
++            ),
++            combinations = listOf(combination),
++            modulusOfElasticity = 29000000.0.psiModulus,
++            momentOfInertiaX = 100.0.in4
++        )
++
++        // The bug was an exception here — reaching this line at all is
++        // most of the test.
++        val result = BeamAnalysisSolver.solve(config)
++
++        val combinationResult = result.combinationResults["1.2D + 1.6L"]!!
++        val spanResult = combinationResult.spanResults[0]
++
++        assertEquals(0.0, spanResult.momentDiagram.maxOf { abs(it.value) }, 1e-9)
++        assertEquals(0.0, spanResult.shearDiagram.maxOf { abs(it.value) }, 1e-9)
++        assertEquals("1.2D + 1.6L", result.governingCombinationName)
++    }
++
+     @Test
+     fun `point load produces correct simply supported moment diagram`() {
+         val member = StructuralMember.createSimple(Length(120.0))
