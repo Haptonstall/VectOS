@@ -45,7 +45,53 @@ data class StrengthDesignResult(
     val axialCheck: StrengthCheckResult<Force>,
     val torsionCheck: StrengthCheckResult<Moment>,
     val methodology: DesignMethodology,
-    val designParameters: Map<String, String> = emptyMap()
+    val designParameters: Map<String, String> = emptyMap(),
+    /**
+     * Flexure about the member's *other* principal axis, present only when
+     * the analysis produced a nonzero moment about it ([momentCheck] is
+     * always the axis the member is oriented to bend about). Null for
+     * calculators that don't check it.
+     */
+    val secondaryMomentCheck: StrengthCheckResult<Moment>? = null,
+    /**
+     * Combined-stress interaction checks (e.g. NDS 3.9.1 bending + axial
+     * tension, NDS 3.9.2 bending + axial compression / biaxial bending).
+     * Empty when no combination applies or the calculator doesn't produce
+     * any.
+     */
+    val combinedChecks: List<CombinedStressCheck> = emptyList()
+)
+
+/**
+ * One equation of a combined-stress interaction check, e.g. NDS Eq. 3.9-1.
+ * [value] is the left-hand side, which must not exceed [limit] (or must be
+ * strictly below it when [isStrictLimit], as for NDS Eq. 3.9-4).
+ * Infinite means the equation can't be satisfied — typically because a
+ * buckling precondition (fc < FcE) fails.
+ */
+data class InteractionEquationResult(
+    val equation: String,
+    val value: Double,
+    val limit: Double = 1.0,
+    val isStrictLimit: Boolean = false
+) {
+    val passes: Boolean get() = if (isStrictLimit) value < limit else value <= limit
+}
+
+/**
+ * A combined bending-and-axial (or biaxial bending) unity check with its
+ * full development. [utilization] is the governing (largest) of
+ * [equations]; [notes] carries any caveat the reader should see next to
+ * the number (failed preconditions, simplifications, missing data).
+ */
+data class CombinedStressCheck(
+    val label: String,
+    val clause: String,
+    val utilization: Double,
+    val governingEquation: String,
+    val equations: List<InteractionEquationResult>,
+    val traces: List<DesignEquationTrace> = emptyList(),
+    val notes: List<String> = emptyList()
 )
 
 /**

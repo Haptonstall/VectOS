@@ -26,7 +26,17 @@ object WoodPropertyService {
          * callers then fall back to an approximation from E. Sawn-lumber
          * Emin is only ~0.37 E, well below the old E/1.76 approximation.
          */
-        val eMin: Pressure? = null
+        val eMin: Pressure? = null,
+        /**
+         * Tabulated NDS Fby — reference bending design value for loading
+         * parallel to the wide faces of the laminations (bending about the
+         * member's weak y-y axis) — for glulam, where it genuinely differs
+         * from Fbx. Null where it hasn't been sourced for this combination
+         * (the weak-axis check then reports "not available" rather than
+         * guessing), and null for solid-sawn lumber, which has one Fb for
+         * both axes (see [bending]).
+         */
+        val bendingWeakAxis: Pressure? = null
     )
 
     /**
@@ -176,6 +186,7 @@ object WoodPropertyService {
                 // (unbalanced layup, for simple-span use).
                 WoodGrade.G_16F_V3 -> WoodReferenceProperties(
                     bending = 1600.0.psi,
+                    bendingWeakAxis = 1450.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1500.0.psi,
                     compressionPerp = 560.0.psi,
@@ -188,6 +199,7 @@ object WoodPropertyService {
                 // continuous/cantilever use).
                 WoodGrade.G_16F_V6 -> WoodReferenceProperties(
                     bending = 1600.0.psi,
+                    bendingWeakAxis = 1450.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1600.0.psi,
                     compressionPerp = 560.0.psi,
@@ -235,6 +247,7 @@ object WoodPropertyService {
                 // stayed disabled) until this pass.
                 WoodGrade.G_16F_E3 -> WoodReferenceProperties(
                     bending = 1600.0.psi,
+                    bendingWeakAxis = 1400.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1600.0.psi,
                     compressionPerp = 560.0.psi,
@@ -249,6 +262,7 @@ object WoodPropertyService {
                 // stayed disabled) until this pass.
                 WoodGrade.G_16F_E6 -> WoodReferenceProperties(
                     bending = 1600.0.psi,
+                    bendingWeakAxis = 1550.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1600.0.psi,
                     compressionPerp = 560.0.psi,
@@ -263,6 +277,7 @@ object WoodPropertyService {
                 // stayed disabled) until this pass.
                 WoodGrade.G_20F_E3 -> WoodReferenceProperties(
                     bending = 2000.0.psi,
+                    bendingWeakAxis = 1400.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1600.0.psi,
                     compressionPerp = 560.0.psi,
@@ -277,6 +292,7 @@ object WoodPropertyService {
                 // stayed disabled) until this pass.
                 WoodGrade.G_20F_E6 -> WoodReferenceProperties(
                     bending = 2000.0.psi,
+                    bendingWeakAxis = 1550.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1650.0.psi,
                     compressionPerp = 560.0.psi,
@@ -291,6 +307,7 @@ object WoodPropertyService {
                 // stayed disabled) until this pass.
                 WoodGrade.G_24F_V4 -> WoodReferenceProperties(
                     bending = 2400.0.psi,
+                    bendingWeakAxis = 1450.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1650.0.psi,
                     compressionPerp = 650.0.psi,
@@ -305,6 +322,7 @@ object WoodPropertyService {
                 // stayed disabled) until this pass.
                 WoodGrade.G_24F_V8 -> WoodReferenceProperties(
                     bending = 2400.0.psi,
+                    bendingWeakAxis = 1550.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1650.0.psi,
                     compressionPerp = 650.0.psi,
@@ -319,6 +337,7 @@ object WoodPropertyService {
                 // stayed disabled) until this pass.
                 WoodGrade.G_24F_E4 -> WoodReferenceProperties(
                     bending = 2400.0.psi,
+                    bendingWeakAxis = 1400.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1700.0.psi,
                     compressionPerp = 650.0.psi,
@@ -333,6 +352,7 @@ object WoodPropertyService {
                 // stayed disabled) until this pass.
                 WoodGrade.G_24F_E13 -> WoodReferenceProperties(
                     bending = 2400.0.psi,
+                    bendingWeakAxis = 1750.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1700.0.psi,
                     compressionPerp = 650.0.psi,
@@ -347,6 +367,7 @@ object WoodPropertyService {
                 // stayed disabled) until this pass.
                 WoodGrade.G_24F_E18 -> WoodReferenceProperties(
                     bending = 2400.0.psi,
+                    bendingWeakAxis = 1550.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1700.0.psi,
                     compressionPerp = 650.0.psi,
@@ -361,6 +382,7 @@ object WoodPropertyService {
                 // stayed disabled) until this pass.
                 WoodGrade.G_26F_V1 -> WoodReferenceProperties(
                     bending = 2600.0.psi,
+                    bendingWeakAxis = 1850.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1850.0.psi,
                     compressionPerp = 650.0.psi,
@@ -375,6 +397,7 @@ object WoodPropertyService {
                 // stayed disabled) until this pass.
                 WoodGrade.G_26F_V2 -> WoodReferenceProperties(
                     bending = 2600.0.psi,
+                    bendingWeakAxis = 1850.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1850.0.psi,
                     compressionPerp = 650.0.psi,
@@ -431,6 +454,7 @@ object WoodPropertyService {
             WoodSpecies.GLULAM_DF_HF -> when (grade) {
                 WoodGrade.G_24F_V5 -> WoodReferenceProperties(
                     bending = 2400.0.psi,
+                    bendingWeakAxis = 1350.0.psi, // NDS 2018 Table 5A Fby
                     shear = 215.0.psi,
                     compressionParallel = 1450.0.psi,
                     compressionPerp = 650.0.psi,
@@ -470,6 +494,7 @@ object WoodPropertyService {
             WoodSpecies.GLULAM_AC_AC -> when (grade) {
                 WoodGrade.G_20F_V12 -> WoodReferenceProperties(
                     bending = 2000.0.psi,
+                    bendingWeakAxis = 1250.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1500.0.psi,
                     compressionPerp = 560.0.psi,
@@ -480,6 +505,7 @@ object WoodPropertyService {
                 )
                 WoodGrade.G_20F_V13 -> WoodReferenceProperties(
                     bending = 2000.0.psi,
+                    bendingWeakAxis = 1250.0.psi, // NDS 2018 Table 5A Fby
                     shear = 265.0.psi,
                     compressionParallel = 1550.0.psi,
                     compressionPerp = 560.0.psi,
@@ -504,6 +530,7 @@ object WoodPropertyService {
                 )
                 WoodGrade.G_20F_E8 -> WoodReferenceProperties(
                     bending = 2000.0.psi,
+                    bendingWeakAxis = 1000.0.psi, // NDS 2018 Table 5A Fby
                     shear = 200.0.psi,
                     compressionParallel = 1100.0.psi,
                     compressionPerp = 450.0.psi,
@@ -570,27 +597,27 @@ object WoodPropertyService {
             // (G = the table's specific gravity for fastener design).
             WoodSpecies.GLULAM_HARDWOODS -> when (grade) {
                 //                        Fbx+  Fvx   Fc    Fc-perp Ft   Ex    G     Ex,min
-                WoodGrade.G_12F_V1    -> hardwoodGlulam(1200, 125,  800,  285,   600, 1.2, 0.39, 0.63)
-                WoodGrade.G_12F_V2    -> hardwoodGlulam(1200, 125,  860,  285,   625, 1.2, 0.39, 0.63)
-                WoodGrade.G_14F_V1    -> hardwoodGlulam(1400, 155,  950,  405,   700, 1.3, 0.45, 0.69)
-                WoodGrade.G_14F_V2    -> hardwoodGlulam(1400, 180, 1200,  590,   750, 1.3, 0.53, 0.69)
-                WoodGrade.G_14F_V3    -> hardwoodGlulam(1400, 155,  950,  405,   725, 1.3, 0.45, 0.69)
-                WoodGrade.G_14F_V4    -> hardwoodGlulam(1400, 180, 1200,  590,   775, 1.3, 0.53, 0.69)
-                WoodGrade.G_16F_V1    -> hardwoodGlulam(1600, 180, 1200,  590,   800, 1.4, 0.53, 0.74)
-                WoodGrade.G_16F_V2    -> hardwoodGlulam(1600, 200, 1250,  835,   875, 1.5, 0.63, 0.79)
-                WoodGrade.G_16F_V3    -> hardwoodGlulam(1600, 180, 1200,  590,   850, 1.4, 0.53, 0.74)
-                WoodGrade.G_16F_V4    -> hardwoodGlulam(1600, 200, 1300,  835,   900, 1.6, 0.63, 0.85)
-                WoodGrade.G_20F_V1    -> hardwoodGlulam(2000, 200, 1400,  835,   975, 1.7, 0.63, 0.90)
-                WoodGrade.G_20F_V2    -> hardwoodGlulam(2000, 200, 1400,  835,  1000, 1.7, 0.63, 0.90)
-                WoodGrade.G_16F_E1    -> hardwoodGlulam(1600, 125,  975,  440,   825, 1.4, 0.39, 0.74)
-                WoodGrade.G_16F_E2    -> hardwoodGlulam(1600, 125, 1000,  440,   900, 1.4, 0.39, 0.74)
-                WoodGrade.G_20F_E1    -> hardwoodGlulam(2000, 155, 1050,  590,   950, 1.6, 0.45, 0.85)
-                WoodGrade.G_20F_E2    -> hardwoodGlulam(2000, 155, 1100,  590,  1050, 1.6, 0.45, 0.85)
-                WoodGrade.G_24F_E1    -> hardwoodGlulam(2400, 180, 1400,  770,  1050, 1.8, 0.53, 0.95)
-                WoodGrade.G_24F_E2    -> hardwoodGlulam(2400, 180, 1400,  770,  1050, 1.8, 0.53, 0.95)
-                WoodGrade.G_24F_E3_YP -> hardwoodGlulam(2400, 155, 1200,  590,   975, 1.8, 0.45, 0.95)
-                WoodGrade.G_24F_E4_RM -> hardwoodGlulam(2400, 220, 1350,  895,  1050, 1.8, 0.53, 0.95)
-                WoodGrade.G_24F_E5_RO -> hardwoodGlulam(2400, 235, 1450, 1075,  1100, 1.8, 0.63, 0.95)
+                WoodGrade.G_12F_V1    -> hardwoodGlulam(1200, 125,  800,  285,   600, 1.2, 0.39, 0.63, 1050)
+                WoodGrade.G_12F_V2    -> hardwoodGlulam(1200, 125,  860,  285,   625, 1.2, 0.39, 0.63, 1050)
+                WoodGrade.G_14F_V1    -> hardwoodGlulam(1400, 155,  950,  405,   700, 1.3, 0.45, 0.69, 1250)
+                WoodGrade.G_14F_V2    -> hardwoodGlulam(1400, 180, 1200,  590,   750, 1.3, 0.53, 0.69, 1450)
+                WoodGrade.G_14F_V3    -> hardwoodGlulam(1400, 155,  950,  405,   725, 1.3, 0.45, 0.69, 1250)
+                WoodGrade.G_14F_V4    -> hardwoodGlulam(1400, 180, 1200,  590,   775, 1.3, 0.53, 0.69, 1450)
+                WoodGrade.G_16F_V1    -> hardwoodGlulam(1600, 180, 1200,  590,   800, 1.4, 0.53, 0.74, 1400)
+                WoodGrade.G_16F_V2    -> hardwoodGlulam(1600, 200, 1250,  835,   875, 1.5, 0.63, 0.79, 1700)
+                WoodGrade.G_16F_V3    -> hardwoodGlulam(1600, 180, 1200,  590,   850, 1.4, 0.53, 0.74, 1400)
+                WoodGrade.G_16F_V4    -> hardwoodGlulam(1600, 200, 1300,  835,   900, 1.6, 0.63, 0.85, 1700)
+                WoodGrade.G_20F_V1    -> hardwoodGlulam(2000, 200, 1400,  835,   975, 1.7, 0.63, 0.90, 1700)
+                WoodGrade.G_20F_V2    -> hardwoodGlulam(2000, 200, 1400,  835,  1000, 1.7, 0.63, 0.90, 1700)
+                WoodGrade.G_16F_E1    -> hardwoodGlulam(1600, 125,  975,  440,   825, 1.4, 0.39, 0.74, 1250)
+                WoodGrade.G_16F_E2    -> hardwoodGlulam(1600, 125, 1000,  440,   900, 1.4, 0.39, 0.74, 1400)
+                WoodGrade.G_20F_E1    -> hardwoodGlulam(2000, 155, 1050,  590,   950, 1.6, 0.45, 0.85, 1350)
+                WoodGrade.G_20F_E2    -> hardwoodGlulam(2000, 155, 1100,  590,  1050, 1.6, 0.45, 0.85, 1600)
+                WoodGrade.G_24F_E1    -> hardwoodGlulam(2400, 180, 1400,  770,  1050, 1.8, 0.53, 0.95, 1550)
+                WoodGrade.G_24F_E2    -> hardwoodGlulam(2400, 180, 1400,  770,  1050, 1.8, 0.53, 0.95, 1650)
+                WoodGrade.G_24F_E3_YP -> hardwoodGlulam(2400, 155, 1200,  590,   975, 1.8, 0.45, 0.95, 1450)
+                WoodGrade.G_24F_E4_RM -> hardwoodGlulam(2400, 220, 1350,  895,  1050, 1.8, 0.53, 0.95, 1650)
+                WoodGrade.G_24F_E5_RO -> hardwoodGlulam(2400, 235, 1450, 1075,  1100, 1.8, 0.63, 0.95, 1700)
                 else -> null
             }
             // ESR-1940 Table 1, 20F-E/SPF1 SPF/SPF.
@@ -638,6 +665,7 @@ object WoodPropertyService {
                 // 16F-V2 SP/SP.
                 WoodGrade.G_16F_V2 -> WoodReferenceProperties(
                     bending = 1600.0.psi,
+                    bendingWeakAxis = 1450.0.psi, // NDS 2018 Table 5A Fby
                     shear = 300.0.psi,
                     compressionParallel = 1300.0.psi,
                     compressionPerp = 740.0.psi,
@@ -670,7 +698,8 @@ object WoodPropertyService {
      */
     private fun hardwoodGlulam(
         fbxPositive: Int, fvx: Int, fc: Int, fcPerpX: Int, ft: Int,
-        exMillionPsi: Double, specificGravity: Double, exMinMillionPsi: Double
+        exMillionPsi: Double, specificGravity: Double, exMinMillionPsi: Double,
+        fbyPsi: Int
     ) = WoodReferenceProperties(
         bending = fbxPositive.toDouble().psi,
         shear = fvx.toDouble().psi,
@@ -680,7 +709,8 @@ object WoodPropertyService {
         modulusOfElasticity = (exMillionPsi * 1_000_000.0).psi,
         shearModulus = (exMillionPsi * 1_000_000.0 / 16.0).psi,
         densityPcf = Math.round(62.4 * specificGravity * 10.0) / 10.0,
-        eMin = (exMinMillionPsi * 1_000_000.0).psi
+        eMin = (exMinMillionPsi * 1_000_000.0).psi,
+        bendingWeakAxis = fbyPsi.toDouble().psi
     )
 
     /** One solid-sawn dimension-lumber row (psi). Shear modulus = E/16. */

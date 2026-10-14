@@ -110,20 +110,97 @@ internal fun woodEmin(material: MaterialGrade.Wood): Double {
 }
 
 /**
- * NDS 3.3.3 Beam Stability Factor CL — single source of truth.
+ * Everything NDS 3.3.3 derives on the way to CL, so the Design tab's trace
+ * can show the development (RB, FbE, F*b) rather than just the answer.
  *
- * Shared by [NdsWoodCapacityCalculator] (applies CL to F'b for the actual
- * bending capacity check) and [NdsClCalculator] (reports CL as the generic
- * [com.lz.solver.bracing.StabilityFactorCalculator] segment factor, i.e.
- * [com.lz.model.structural.StationDemand.cb]). Both must agree on the same
- * number for the same inputs — computing this in two places previously let
- * them silently drift (see NdsClCalculator, which stubbed CL = 1.0).
+ * @property rb slenderness ratio RB = sqrt(le*d / b^2) (NDS Eq. 3.3-5).
+ *   NDS 3.3.3.7 limits RB to 50 — see [rbExceedsLimit].
+ * @property eMinAdj E'min = Emin * CM * Ct * Ci (NDS Table 4.3.1).
+ * @property fbE critical buckling design value 1.20 E'min / RB^2 (NDS 3.3.3.8).
+ * @property fStarB F*b for the CL calculation: Fb times every applicable
+ *   adjustment factor except Cfu, CV and CL (NDS 3.3.3.8).
+ */
+internal data class NdsBeamStabilityDetail(
+    val lb: Double,
+    val le: Double,
+    val d: Double,
+    val b: Double,
+    val rb: Double,
+    val eMinAdj: Double,
+    val fbE: Double,
+    val fStarB: Double,
+    val cl: Double
+) {
+    val rbExceedsLimit: Boolean get() = rb > 50.0
+}
+
+/**
+ * Full NDS 3.3.3 beam-stability development, or null when there's no
+ * lateral-torsional buckling check to make (unbraced length not
+ * positive, degenerate section, or no usable F*b) — callers treat null
+ * as CL = 1.0.
+ */
+@Suppress("UNUSED_PARAMETER")
+internal fun computeNdsBeamStability(
+    lb: Double,
+    profile: SectionProfile,
+    material: MaterialGrade.Wood,
+    adjustmentFactors: NdsAdjustmentFactors,
+    isGlulam: Boolean
+): NdsBeamStabilityDetail? {
+    if (lb <= 0.0) return null
+
+    val designMaterial = resolveDesignMaterial(material, profile)
+    val d = profile.depth.inInches
+    val b = if (profile is WoodProfile) profile.dressedWidth.inInches
+    else profile.propertiesWeakAxis.s.inIn3 / profile.propertiesWeakAxis.i.inIn4 * 2.0
+
+    if (b <= 0.0) return null
+
+    // Effective span length le (NDS Table 3.3.3 — approximate for uniformly loaded)
+    val le = 1.63 * lb + 3.0 * d
+
+    val rbSquared = le * d / b.pow(2)
+    if (rbSquared <= 0.0) return null
+
+    // Critical buckling stress FbE (NDS 3.3.3.8), from the *adjusted* Emin.
+    val eMinAdj = woodAdjustedEmin(designMaterial, adjustmentFactors)
+    val fbE = 1.20 * eMinAdj / rbSquared
+
+    val fStarB = designMaterial.referenceBending.inPsi *
+            adjustmentFactors.cd * adjustmentFactors.cm *
+            adjustmentFactors.ct *
+            resolveSawnCf(adjustmentFactors, designMaterial, profile, NdsCfProperty.BENDING) *
+            adjustmentFactors.ci * adjustmentFactors.cr
+
+    if (fStarB <= 0.0) return null
+
+    val ratio = fbE / fStarB
+
+    // NDS Eq. 3.3-6. The 1.9 and 0.95 are the same for every product —
+    // sawn, glulam and structural composite lumber alike (the product-
+    // dependent constant c lives in the *column* stability factor CP,
+    // NDS 3.7.1, not here). This used to use c = 0.85 (sawn) / 0.90
+    // (glulam), which isn't in 3.3-6 at all; it was conservative, but it
+    // wasn't the code.
+    val term = (1.0 + ratio) / 1.9
+    val cl = term - sqrt(term.pow(2) - ratio / 0.95)
+
+    return NdsBeamStabilityDetail(
+        lb = lb, le = le, d = d, b = b, rb = sqrt(rbSquared),
+        eMinAdj = eMinAdj, fbE = fbE, fStarB = fStarB, cl = cl
+    )
+}
+
+/**
+ * NDS 3.3.3 Beam Stability Factor CL — single source of truth, shared by
+ * [NdsWoodCapacityCalculator] (applies CL to F'b for the bending capacity
+ * check) and [NdsClCalculator] (reports CL as the generic
+ * [com.lz.solver.bracing.StabilityFactorCalculator] segment factor). Both
+ * must agree on the same number for the same inputs. See
+ * [computeNdsBeamStability] for the full development.
  *
- * CL accounts for lateral-torsional buckling of beams. Requires Emin for
- * stability calculations — uses E/1.76 as approximation when Emin is not
- * separately tracked (conservative, per NDS commentary).
- *
- * @param lb Unbraced length in inches (0 or negative → no LTB check, CL = 1.0).
+ * @param lb Unbraced length in inches (0 or negative -> no LTB check, CL = 1.0).
  */
 internal fun computeNdsCL(
     lb: Double,
@@ -131,38 +208,62 @@ internal fun computeNdsCL(
     material: MaterialGrade.Wood,
     adjustmentFactors: NdsAdjustmentFactors,
     isGlulam: Boolean
+): Double = computeNdsBeamStability(lb, profile, material, adjustmentFactors, isGlulam)?.cl ?: 1.0
+
+/**
+ * E'min = Emin x CM x Ct x Ci (NDS Table 4.3.1) — the adjusted stability
+ * modulus used in FbE (CL), FcE and CP. Until now CL and CP used the bare
+ * tabulated Emin, so a user-entered wet-service / temperature / incising
+ * factor never reached the stability checks even though the traces labelled
+ * the value E'min.
+ */
+internal fun woodAdjustedEmin(
+    material: MaterialGrade.Wood,
+    adjustmentFactors: NdsAdjustmentFactors
+): Double = woodEmin(material) * adjustmentFactors.cm * adjustmentFactors.ct * adjustmentFactors.ci
+
+/**
+ * Flat use factor Cfu for bending about the member's weak axis (load on
+ * the wide face). The caller's explicit [NdsAdjustmentFactors.cfu]
+ * override wins when set (non-default); otherwise the tabulated value:
+ *
+ *  - Sawn lumber (Table 4A, and Southern Pine Table 4B — identical): by
+ *    nominal width (the larger dimension) and thickness (2"-3" or 4").
+ *  - Glulam (Table 5A / 5C): by the member dimension parallel to the wide
+ *    faces — the member width — applying only below 12". Between tabulated
+ *    sizes the next larger tabulated dimension's (smaller, conservative)
+ *    factor is used.
+ */
+internal fun resolveFlatUseCfu(
+    adjustmentFactors: NdsAdjustmentFactors,
+    material: MaterialGrade.Wood,
+    profile: SectionProfile
 ): Double {
-    if (lb <= 0.0) return 1.0
+    if (adjustmentFactors.cfu != 1.0) return adjustmentFactors.cfu
 
-    val designMaterial = resolveDesignMaterial(material, profile)
-    val d = profile.depth.inInches
-    val b = if (profile is WoodProfile) profile.dressedWidth.inInches
-    else profile.propertiesWeakAxis.s.inIn3 / profile.propertiesWeakAxis.i.inIn4 * 2.0
+    if (material.species.isGlulam) {
+        val width = if (profile is WoodProfile) profile.dressedWidth.inInches
+        else return 1.0
+        return when {
+            width <= 2.5   -> 1.19
+            width <= 3.125 -> 1.16
+            width <= 5.125 -> 1.10
+            width <= 6.75  -> 1.07
+            width <= 8.75  -> 1.04
+            width <= 10.75 -> 1.01
+            else           -> 1.0
+        }
+    }
 
-    if (b <= 0.0) return 1.0
-
-    // Effective span length le (NDS Table 3.3.3 — approximate for uniformly loaded)
-    val le = 1.63 * lb + 3.0 * d
-
-    val rbSquared = le * d / b.pow(2)
-    if (rbSquared <= 0.0) return 1.0
-
-    // Critical buckling stress FbE (NDS 3.3.3)
-    val eMin = woodEmin(designMaterial)
-    val fbe = 1.20 * eMin / rbSquared
-
-    val fbStar = designMaterial.referenceBending.inPsi *
-            adjustmentFactors.cd * adjustmentFactors.cm *
-            adjustmentFactors.ct *
-            resolveSawnCf(adjustmentFactors, designMaterial, profile, NdsCfProperty.BENDING) *
-            adjustmentFactors.ci * adjustmentFactors.cr
-
-    if (fbStar <= 0.0) return 1.0
-
-    val ratio = fbe / fbStar
-    val c = if (isGlulam) 0.90 else 0.85 // NDS 3.3.3: c=0.90 glulam, 0.85 sawn
-
-    // NDS Eq. 3.3-6
-    val term = (1.0 + ratio) / (2.0 * c)
-    return term - sqrt(term.pow(2) - ratio / c)
+    if (profile !is WoodProfile) return 1.0
+    val widthIn = profile.nominalDepth.inInches
+    val thick4 = profile.nominalWidth.inInches >= 4.0
+    return when {
+        widthIn <= 3.0  -> 1.0
+        widthIn <= 4.0  -> if (thick4) 1.0 else 1.1
+        widthIn <= 5.0  -> if (thick4) 1.05 else 1.1
+        widthIn <= 6.0  -> if (thick4) 1.05 else 1.15
+        widthIn <= 8.0  -> if (thick4) 1.05 else 1.15
+        else            -> if (thick4) 1.1 else 1.2
+    }
 }
