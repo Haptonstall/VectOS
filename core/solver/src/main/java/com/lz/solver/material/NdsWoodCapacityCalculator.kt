@@ -3,6 +3,7 @@ package com.lz.solver.material
 import com.lz.model.regulatory.aisc.DesignFactor
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
 import com.lz.model.regulatory.nds.NdsEdition
+import com.lz.model.structural.CodeCheck
 import com.lz.model.structural.CombinedStressCheck
 import com.lz.model.structural.DesignEquationTrace
 import com.lz.model.structural.DesignMethodology
@@ -23,6 +24,8 @@ import com.lz.model.units.inIn2
 import com.lz.model.units.inIn3
 import com.lz.model.units.inIn4
 import com.lz.model.units.inInches
+import com.lz.model.units.inLbIn
+import com.lz.model.units.inPoundsForce
 import com.lz.model.units.inPsi
 import com.lz.solver.capacity.CapacityCalculator
 import com.lz.solver.capacity.DesignFactorSet
@@ -689,6 +692,9 @@ class NdsWoodCapacityCalculator(
         resolveSawnCf(adjustmentFactors, designMaterial, profile, property)
 
     companion object {
+        /** Cap on a point-path combined ratio — see [pointInteractionCheck]. */
+        const val POINT_RATIO_CAP = 99.0
+
         /**
          * NDS 2018 Supplement Table 4A "Size Factors, CF" for dimension
          * lumber 2"-4" thick (all species except Southern Pine, whose
@@ -1337,5 +1343,30 @@ class NdsWoodCapacityCalculator(
             traces = traces,
             notes = allNotes
         )
+    }
+    /**
+     * NDS 3.9 combined-stress ratio for the point-by-point capacity path
+     * (the header / governing-utilization diagram), as a [CodeCheck] to plug
+     * into [CapacityEngine.evaluate]'s `interactionCheckProvider`. Without it
+     * that path judged wood by AISC Eq. H1-1.
+     *
+     * Combined checks only exist where a station has bending with axial load,
+     * or bending about both axes; elsewhere the individual checks already
+     * cover the member and this returns 0. Where one applies, the worst of
+     * the 3.9 checks is returned. An infinite ratio (a precondition such as
+     * fc < FcE violated) is capped at [POINT_RATIO_CAP] so diagrams stay
+     * finite; the Design tab's detailed card still shows it as N.G.
+     */
+    fun pointInteractionCheck(demand: StationDemand, methodology: DesignMethodology): CodeCheck {
+        val label = "NDS 3.9 Combined"
+        val mx = abs(demand.moment.inLbIn)
+        val my = abs(demand.momentY.inLbIn)
+        val axial = abs(demand.axial.inPoundsForce)
+        val applies = ((mx > 0.0 || my > 0.0) && axial > 0.0) || (mx > 0.0 && my > 0.0)
+        if (!applies) return CodeCheck(label, 0.0, 1.0, 0.0)
+        val worst = evaluateDetailed(demand, methodology).combinedChecks.maxByOrNull { it.utilization }
+            ?: return CodeCheck(label, 0.0, 1.0, 0.0)
+        val ratio = worst.utilization.coerceAtMost(POINT_RATIO_CAP)
+        return CodeCheck("${worst.clause} ${worst.governingEquation}", ratio, 1.0, ratio)
     }
 }

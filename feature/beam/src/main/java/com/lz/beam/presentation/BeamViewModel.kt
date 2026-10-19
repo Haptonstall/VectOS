@@ -228,7 +228,8 @@ class BeamViewModel @Inject constructor(
                 is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
                 is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
                     section, mat,
-                    adjustmentFactors = ndsAdjustmentFactors
+                    adjustmentFactors = ndsAdjustmentFactors,
+                    memberIsStrongAxis = isStrongAxis
                 )
                 else                   -> null
             } ?: return null

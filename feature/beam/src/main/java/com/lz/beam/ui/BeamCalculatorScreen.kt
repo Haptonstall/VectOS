@@ -94,6 +94,7 @@ import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.codes.ServiceabilityCriterion
 import com.lz.model.structural.BracingInput
 import com.lz.model.structural.BracingMode
+import com.lz.model.structural.CombinedStressCheck
 import com.lz.model.structural.DesignEquationTrace
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.InteractionStatus
@@ -1020,6 +1021,7 @@ fun DesignTab(viewModel: BeamViewModel) {
             allServiceabilityResults = results.serviceabilityResults,
             member = viewModel.structuralMember,
             unitSystem = viewModel.unitSystem,
+            isStrongAxis = viewModel.isStrongAxis,
             isWoodMaterial = viewModel.activeMaterialGrade is MaterialGrade.Wood,
             ndsAdjustmentFactors = viewModel.ndsAdjustmentFactors,
             onAdjustmentFactorsChanged = viewModel::onAdjustmentFactorsChanged
@@ -1674,6 +1676,10 @@ fun DesignSummary(
     allServiceabilityResults: List<ServiceabilityResult>,
     member: StructuralMember,
     unitSystem: UnitSystem,
+    // Which principal axis the member is oriented to bend about (the
+    // Geometry tab's strong/weak toggle). The primary bending card and its
+    // secondary-axis companion are labelled from this.
+    isStrongAxis: Boolean = true,
     // Only meaningful for wood materials — null/no-op for steel, aluminum,
     // masonry. When non-null, an "Edit Adjustment Factors" entry point is
     // shown next to the read-only Design Parameters summary below.
@@ -1693,7 +1699,15 @@ fun DesignSummary(
                 )
             }
 
-            DesignCard("Bending (Mx)", detailedResult.momentCheck, unitSystem, initiallyExpanded = true)
+            val primaryBendingLabel = if (isStrongAxis) "Bending (Mx)" else "Bending (My)"
+            val secondaryBendingLabel =
+                if (isStrongAxis) "Bending (My) — secondary axis" else "Bending (Mx) — secondary axis"
+            DesignCard(primaryBendingLabel, detailedResult.momentCheck, unitSystem, initiallyExpanded = true)
+            // Moment about the member's other principal axis, present only when
+            // the analysis produced one (wood: checked against its own capacity).
+            detailedResult.secondaryMomentCheck?.let { secondary ->
+                DesignCard(secondaryBendingLabel, secondary, unitSystem)
+            }
             DesignCard("Shear (Vy)", detailedResult.shearCheck, unitSystem)
 
             if (detailedResult.axialCheck.demand.inPoundsForce != 0.0) {
@@ -1701,12 +1715,10 @@ fun DesignSummary(
             }
 
             // AISC H1-1 is a steel-specific combined-force interaction
-            // equation (AISC 360 Chapter H) — it does not apply to wood,
-            // which uses an entirely different set of equations (NDS
-            // 3.9.1/3.9.2, not yet implemented here). This used to run
-            // unconditionally for every material, including wood, silently
-            // showing an inapplicable steel check on a wood beam's Design
-            // tab. Gated to steel only until the NDS combined check exists.
+            // equation (AISC 360 Chapter H) — it does not apply to wood.
+            // Wood's combined bending + axial / biaxial checks (NDS 3.9.1 and
+            // 3.9.2) come from the capacity calculator as `combinedChecks`
+            // and are shown as their own collapsible cards below.
             if (!isWoodMaterial) {
                 val flexRatio = detailedResult.momentCheck.utilization
                 val axialRatio = detailedResult.axialCheck.utilization
@@ -1718,16 +1730,10 @@ fun DesignSummary(
                     value = interactionValue,
                     status = if (interactionValue <= 1.0) InteractionStatus.PASS else InteractionStatus.FAIL
                 )
-            } else if (detailedResult.axialCheck.demand.inPoundsForce != 0.0) {
-                Text(
-                    "Combined bending and axial — not yet implemented for NDS " +
-                        "(requires NDS 3.9.1/3.9.2). The bending, shear, and axial " +
-                        "checks above are each individually valid; they are not yet " +
-                        "combined into a single interaction ratio for this member.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
+            } else {
+                detailedResult.combinedChecks.forEach { combined ->
+                    CombinedCheckCard(combined)
+                }
             }
 
             DesignParameterSummary(detailedResult, unitSystem)
@@ -2000,7 +2006,7 @@ private fun DesignCard(
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Ratio", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                    Text(String.format("%.2f", check.utilization), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = getUtilizationColor(check.utilization))
+                    Text(formatUtilization(check.utilization), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = getUtilizationColor(check.utilization))
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text("Capacity", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
@@ -2012,6 +2018,109 @@ private fun DesignCard(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
                 check.traces.forEach { trace ->
                     EquationTraceItem(trace)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A utilization ratio as text. An infinite (or NaN) ratio means the member
+ * cannot be made to satisfy the check at all — zero capacity against a real
+ * demand, e.g. a slenderness limit exceeded, or a stability precondition like
+ * fc < FcE violated — so it reads "N.G." (no good) instead of "Infinity".
+ */
+private fun formatUtilization(value: Double, decimals: Int = 2): String =
+    if (value.isNaN() || value.isInfinite()) "N.G." else String.format("%.${decimals}f", value)
+
+/**
+ * One NDS 3.9 combined-stress check (bending + tension, bending + compression,
+ * or biaxial bending): the governing ratio up front, and — when expanded — each
+ * interaction equation's value against its limit, the full development
+ * (stresses, adjusted design values, buckling stresses) as equation traces, and
+ * any notes the reader should see (assumptions, why a ratio is N.G.).
+ * Collapsed by default, like the other check cards.
+ */
+@Composable
+private fun CombinedCheckCard(check: CombinedStressCheck) {
+    var isExpanded by remember(check.label, check.clause) { mutableStateOf(false) }
+    val hasDetail = check.equations.isNotEmpty() || check.traces.isNotEmpty() || check.notes.isNotEmpty()
+    val ratioColor = getUtilizationColor(check.utilization)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .let { if (hasDetail) it.clickable { isExpanded = !isExpanded } else it }
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(check.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${check.clause} — governed by ${check.governingEquation}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("Ratio", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    Text(
+                        formatUtilization(check.utilization),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = ratioColor
+                    )
+                }
+                if (hasDetail) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (isExpanded) "Collapse development" else "Expand development",
+                        modifier = Modifier.padding(start = 8.dp),
+                        tint = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+
+            if (hasDetail && isExpanded) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                )
+                check.equations.forEach { eq ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(eq.equation, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            "${formatUtilization(eq.value, 3)} ${if (eq.isStrictLimit) "<" else "≤"} " +
+                                "${String.format("%.1f", eq.limit)}  ${if (eq.passes) "OK" else "N.G."}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (eq.passes) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+                check.traces.forEach { trace ->
+                    EquationTraceItem(trace)
+                }
+                check.notes.forEach { note ->
+                    Text(
+                        note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
                 }
             }
         }
@@ -2041,7 +2150,7 @@ fun InteractionCard(
             }
 
             Column(horizontalAlignment = Alignment.End) {
-                Text(String.format("%.2f", value), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = getUtilizationColor(value))
+                Text(formatUtilization(value), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = getUtilizationColor(value))
                 Text(if (isFail) "FAIL" else "PASS", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = getUtilizationColor(value))
             }
         }
@@ -2212,6 +2321,36 @@ private val ndsVariableDescriptions: Map<String, String> = mapOf(
     "c" to "Buckling-curve constant used in the CP/CL formula — 0.8 for sawn lumber, 0.9 for glulam/structural composite lumber.",
     "A" to "Cross-sectional area of the member.",
     "Sx" to "Section modulus about the strong (x-x) axis — bending capacity is Fb multiplied by this.",
+    "Sy" to "Section modulus about the weak (y-y) axis — used for flatwise bending, where the load acts on the member's wide face.",
+    "Fby" to "Reference bending design value for bending about the weak (y-y) axis — tabulated separately from Fb for glulam (NDS Table 5A/5C). Sawn lumber has one tabulated Fb for both axes.",
+    "F'by" to "Fby multiplied by every applicable adjustment factor (CL = 1.0 for flatwise bending) — the final adjusted weak-axis bending design value.",
+    "F*b" to "Fb multiplied by every adjustment factor except the beam stability factor CL (NDS 3.9.1). For glulam the volume factor CV is included. Used in Eq. 3.9-1 and to derive CL.",
+    "F*b1" to "F*b for bending about the strong (x-x) axis: every adjustment factor except CL (NDS 3.9.1).",
+    "F*b2" to "F*b for bending about the weak (y-y) axis: every adjustment factor except CL — flatwise bending has no CL (NDS 3.9.1).",
+    "F**b" to "Fb multiplied by every adjustment factor except the volume factor CV, so CL stays in (NDS 3.9.1). Used in Eq. 3.9-2. For sawn lumber, which has no CV, this equals F'b.",
+    "F**b1" to "F**b for bending about the strong (x-x) axis: every adjustment factor except CV (NDS 3.9.1, Eq. 3.9-2).",
+    "F**b2" to "F**b for bending about the weak (y-y) axis (NDS 3.9.1, Eq. 3.9-2).",
+    "F'b1" to "Final adjusted bending design value for the strong (x-x) axis, including the beam stability factor CL (or the lesser of CL and CV for glulam).",
+    "F'b2" to "Final adjusted bending design value for the weak (y-y) axis (CL = 1.0, flat use factor Cfu applies).",
+    "ft" to "Actual tensile stress parallel to grain: axial tension T divided by the member's cross-sectional area.",
+    "fc" to "Actual compressive stress parallel to grain: axial compression P divided by the member's cross-sectional area.",
+    "fb1" to "Actual bending stress about the strong (x-x) axis: moment about that axis divided by Sx.",
+    "fb2" to "Actual bending stress about the weak (y-y) axis: moment about that axis divided by Sy.",
+    "T" to "Axial tension demand on the member at this station, from the governing load combination.",
+    "P" to "Axial compression demand on the member at this station, from the governing load combination.",
+    "M" to "Bending moment about the axis being checked at this station.",
+    "RB" to "Slenderness ratio for bending members, sqrt(le x d / b^2) (NDS 3.3.3.6). Must not exceed 50 (NDS 3.3.3.7).",
+    "le" to "Effective length of the compression edge, accounting for how the load and bracing affect lateral buckling (NDS Table 3.3.3). Here le = 1.63 x unbraced length + 3d.",
+    "le1" to "Effective length for buckling in the plane of strong-axis (x-x) bending — taken equal to the unbraced length.",
+    "le2" to "Effective length for buckling in the plane of weak-axis (y-y) bending — taken equal to the unbraced length.",
+    "d" to "Depth of the member in the plane of bending (the larger face dimension for edgewise bending).",
+    "d1" to "Dimension of the wide face — the depth for strong-axis (edgewise) bending, used with le1 (NDS 3.9.2).",
+    "d2" to "Dimension of the narrow face — the breadth for weak-axis (flatwise) bending, used with le2 (NDS 3.9.2).",
+    "b" to "Breadth (width) of the member — the dimension perpendicular to the depth d.",
+    "FcE1" to "Critical buckling stress for buckling in the strong-axis plane, 0.822 E'min / (le1/d1)^2 (NDS 3.9.2). The member must have fc < FcE1 for Eq. 3.9-3 to apply.",
+    "FcE2" to "Critical buckling stress for buckling in the weak-axis plane, 0.822 E'min / (le2/d2)^2 (NDS 3.9.2). The member must have fc < FcE2 for Eq. 3.9-3 to apply.",
+    "FbE/F*b" to "Ratio of the critical beam buckling stress to F*b — the single input to the beam stability factor CL formula (NDS Eq. 3.3-6).",
+    "FcE/F*c" to "Ratio of the critical column buckling stress to F*c — the single input to the column stability factor CP formula (NDS 3.7.1).",
     "G" to "Specific gravity, used for fastener design — not a design-value adjustment factor itself.",
 )
 

@@ -149,7 +149,8 @@ object BeamAnalysisSolver {
             is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
                 profile, material,
                 adjustmentFactors = config.ndsAdjustmentFactors,
-                edition = resolveNdsEdition(config) ?: NdsEdition.NDS_2018
+                edition = resolveNdsEdition(config) ?: NdsEdition.NDS_2018,
+                memberIsStrongAxis = config.isStrongAxis
             )
             else                   -> null
         }
@@ -160,7 +161,12 @@ object BeamAnalysisSolver {
             demands              = demands,
             section              = profile,
             methodology          = config.designMethodology,
-            factors              = calculator.designFactors(config.designMethodology)
+            factors              = calculator.designFactors(config.designMethodology),
+            // Wood is judged by NDS 3.9, not by AISC Eq. H1-1 (the engine's
+            // default, which is only right for steel).
+            interactionCheckProvider = (calculator as? NdsWoodCapacityCalculator)?.let { wood ->
+                { demand -> wood.pointInteractionCheck(demand, config.designMethodology) }
+            }
         ) { demand -> calculator.evaluate(demand) }
             .map { cap ->
                 UtilizationPoint(

@@ -54,6 +54,12 @@ object CapacityEngine {
         section: SectionProfile,
         methodology: DesignMethodology,
         factors: DesignFactorSet,
+        // Combined-force interaction check for a station. Null (the default)
+        // keeps AISC 360 Eq. H1-1 — correct for steel, and what every caller
+        // got before this parameter existed. A material whose code has its
+        // own interaction rules (NDS 3.9 for wood) supplies its own here
+        // instead of being silently judged by the steel equation.
+        interactionCheckProvider: ((StationDemand) -> CodeCheck)? = null,
         capacityCalculator: (StationDemand) -> RawCapacityResult
     ): List<PointCapacityResult> {
 
@@ -118,13 +124,16 @@ object CapacityEngine {
             )
 
             // Interaction (Chapter H1.1)
-            val interactionRatio = if (ratioAxial >= 0.2) {
-                ratioAxial + (8.0 / 9.0) * (ratioFlexureX + ratioFlexureY)
+            val checkInteraction = if (interactionCheckProvider != null) {
+                interactionCheckProvider(demand)
             } else {
-                (ratioAxial / 2.0) + (ratioFlexureX + ratioFlexureY)
-            }
-            val checkInteraction =
+                val interactionRatio = if (ratioAxial >= 0.2) {
+                    ratioAxial + (8.0 / 9.0) * (ratioFlexureX + ratioFlexureY)
+                } else {
+                    (ratioAxial / 2.0) + (ratioFlexureX + ratioFlexureY)
+                }
                 CodeCheck("Interaction Eq H1-1", interactionRatio, 1.0, interactionRatio)
+            }
 
             // Find Governing Limit State
             val checks = listOf(
