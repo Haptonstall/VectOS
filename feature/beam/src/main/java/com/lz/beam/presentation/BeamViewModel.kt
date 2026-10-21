@@ -21,7 +21,9 @@ import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.LoadCombinationSet
 import com.lz.model.regulatory.codes.BuildingCode
 import com.lz.model.regulatory.codes.ServiceabilityCriterion
+import com.lz.model.regulatory.codes.StandardEdition
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+import com.lz.model.regulatory.nds.NdsEdition
 import com.lz.model.structural.BracingInput
 import com.lz.model.structural.BracingResolver
 import com.lz.model.structural.DesignMethodology
@@ -39,13 +41,17 @@ import com.lz.model.structural.ShapeType
 import com.lz.model.structural.StationDemand
 import com.lz.model.structural.SpanGeometry
 import com.lz.model.structural.StandardLoadCases
+import com.lz.model.structural.StrengthCheckResult
 import com.lz.model.structural.StrengthDesignResult
 import com.lz.model.structural.StructuralMember
 import com.lz.model.structural.StructuralNode
 import com.lz.model.structural.NodeBoundaryCondition
 import com.lz.model.structural.WoodGrade
 import com.lz.model.structural.WoodSpecies
+import com.lz.solver.analysis.AnalysisResult
 import com.lz.solver.analysis.UtilizationPoint
+import com.lz.solver.capacity.CapacityCalculator
+import com.lz.model.units.Force
 import com.lz.model.units.Length
 import com.lz.model.units.MomentOfInertia
 import com.lz.model.units.UnitSystem
@@ -71,6 +77,7 @@ import java.time.LocalDateTime
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.collections.plus
+import kotlin.math.abs
 
 /**
  * Modernized ViewModel for Beam Analysis & Design.
@@ -219,31 +226,149 @@ class BeamViewModel @Inject constructor(
         }
     val serviceabilityResults get() = calculationResult?.results?.serviceabilityResults ?: emptyList()
 
+    /**
+     * Where along the member (inches, global x — the same coordinate the
+     * Analysis tab's station picker uses) the user asked the Design tab to
+     * show the calculation. Null means "worst case": the governing point for
+     * bending / axial / combined checks, and the largest-shear station for
+     * shear. Pure view state — changing it doesn't recalculate anything.
+     */
+    var designLocationInches by mutableStateOf<Double?>(null)
+        private set
+
+    fun onDesignLocationChanged(xInches: Double?) {
+        designLocationInches = xInches
+    }
+
+    /**
+     * The NDS edition the project's building code points at (IBC 2015 -> NDS
+     * 2015, IBC 2018 / 2021 -> NDS 2018, IBC 2024 -> NDS 2024). Null when the
+     * code has no wood standard. The Design tab's detail calculator used to be
+     * built without it and so always ran as NDS 2018 regardless of the project.
+     */
+    val activeNdsEdition: NdsEdition?
+        get() = (activeBuildingCode?.defaultMaterialStandards?.get(MaterialType.WOOD)?.edition
+            as? StandardEdition.Nds)?.edition
+
+    /** e.g. "IBC 2024" — shown next to the standard edition on the Design tab. */
+    val activeBuildingCodeName: String?
+        get() = activeBuildingCode?.shortName
+
+    private fun detailCalculator(section: SectionProfile): CapacityCalculator? =
+        when (val mat = activeMaterialGrade) {
+            is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
+            is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
+                section, mat,
+                adjustmentFactors = ndsAdjustmentFactors,
+                edition = activeNdsEdition ?: NdsEdition.NDS_2018,
+                memberIsStrongAxis = isStrongAxis
+            )
+            else                   -> null
+        }
+
     val detailedStrengthResult: StrengthDesignResult?
         get() {
             val section = selectedSection ?: return null
-            val governingDemand = governingDesignPoint()?.demand ?: return null
-
-            val calculator = when (val mat = activeMaterialGrade) {
-                is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
-                is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
-                    section, mat,
-                    adjustmentFactors = ndsAdjustmentFactors,
-                    memberIsStrongAxis = isStrongAxis
-                )
-                else                   -> null
-            } ?: return null
-
-            return calculator.evaluateDetailed(governingDemand, methodology)
+            val demand = designPoint()?.demand ?: return null
+            val calculator = detailCalculator(section) ?: return null
+            return calculator.evaluateDetailed(demand, methodology)
         }
 
     val detailedStrengthCombinationName: String?
-        get() = governingDesignPoint()?.combinationName
+        get() = designPoint()?.combinationName
 
-    /** Span the governing (worst-case) strength check point falls in — used to
+    /** Global x (inches) of the station the bending / axial / combined cards describe. */
+    val detailedStrengthLocationInches: Double?
+        get() = designPoint()?.demand?.x?.inches
+
+    /**
+     * Shear gets its own station. Shear capacity is a property of the section
+     * (it doesn't vary along the member), so the worst case is simply the
+     * largest |V| over every enabled combination, span and station — which is
+     * not generally where the governing bending point is (a simply supported
+     * beam's shear peaks at a support, its moment at midspan). When the user
+     * has picked a location, shear is shown there like everything else.
+     */
+    private fun shearDesignPoint(): ShearDesignPoint? {
+        if (designLocationInches != null) {
+            designPoint()?.let { return ShearDesignPoint(it.combinationName, it.demand) }
+        }
+        val result = calculationResult ?: return null
+        var best: ShearDesignPoint? = null
+        var bestV = -1.0
+        for ((name, analysis) in analysisOptions(result)) {
+            for (span in analysis.spanResults) {
+                for (d in span.stationDemands) {
+                    val v = abs(d.shear.pounds)
+                    if (v > bestV) { bestV = v; best = ShearDesignPoint(name, d) }
+                }
+            }
+        }
+        return best
+    }
+
+    val detailedShearCheck: StrengthCheckResult<Force>?
+        get() {
+            val section = selectedSection ?: return null
+            val point = shearDesignPoint() ?: return null
+            val calculator = detailCalculator(section) ?: return null
+            return calculator.evaluateDetailed(point.demand, methodology).shearCheck
+                .copy(governingCombination = point.combinationName)
+        }
+
+    val detailedShearLocationInches: Double?
+        get() = shearDesignPoint()?.demand?.x?.inches
+
+    /** True when the shear card shows the worst-case station rather than a user-chosen location. */
+    val detailedShearIsWorstCase: Boolean
+        get() = designLocationInches == null
+
+    /** Span the design point (the user's location, or the governing point) falls in — used to
      *  scope the Design tab's serviceability section to that same span. */
     val governingSpanId: UUID?
-        get() = governingDesignPoint()?.demand?.spanId
+        get() = designPoint()?.demand?.spanId
+
+    private fun analysisOptions(result: BeamCalculation): List<Pair<String, AnalysisResult>> {
+        val combinationResults = result.results.analysisResult.combinationResults
+        return if (combinationResults.isNotEmpty()) {
+            combinationResults.map { (name, analysis) -> name to analysis }
+        } else {
+            listOf(
+                (result.results.analysisResult.governingCombinationName ?: "Governing Envelope") to
+                    result.results.analysisResult
+            )
+        }
+    }
+
+    /** The point the bending / axial / combined cards describe: the user's location if set, else the governing point. */
+    private fun designPoint(): GoverningDesignPoint? {
+        val loc = designLocationInches ?: return governingDesignPoint()
+        return pointAtLocation(loc) ?: governingDesignPoint()
+    }
+
+    /**
+     * The design point nearest [xInches] — across every combination and span,
+     * the utilization-diagram station closest to that location, and where
+     * several combinations land on the same station, the one that governs
+     * there. (Stations are the solver's sample points; the nearest is used,
+     * not an interpolation, so every force on the card is a real solver value.)
+     */
+    private fun pointAtLocation(xInches: Double): GoverningDesignPoint? {
+        val result = calculationResult ?: return null
+        data class Candidate(val dist: Double, val point: GoverningDesignPoint)
+        val candidates = mutableListOf<Candidate>()
+        for ((name, analysis) in analysisOptions(result)) {
+            for (span in analysis.spanResults) {
+                val pt = span.utilizationDiagram.minByOrNull { abs(it.x.inches - xInches) } ?: continue
+                val demand = span.stationDemands.find { it.x == pt.x } ?: continue
+                candidates += Candidate(abs(pt.x.inches - xInches), GoverningDesignPoint(name, pt, demand))
+            }
+        }
+        val minDist = candidates.minOfOrNull { it.dist } ?: return null
+        return candidates.filter { it.dist <= minDist + 1e-6 }.maxByOrNull { it.point.point.ratio }?.point
+    }
+
+    private data class ShearDesignPoint(val combinationName: String, val demand: StationDemand)
 
     private fun loadInitialGeometryData() {
         viewModelScope.launch {
@@ -620,14 +745,8 @@ class BeamViewModel @Inject constructor(
 
     private fun governingDesignPoint(): GoverningDesignPoint? {
         val result = calculationResult ?: return null
-        val combinationResults = result.results.analysisResult.combinationResults
-        val analysisOptions = if (combinationResults.isNotEmpty()) {
-            combinationResults.map { (name, analysis) -> name to analysis }
-        } else {
-            listOf((result.results.analysisResult.governingCombinationName ?: "Governing Envelope") to result.results.analysisResult)
-        }
 
-        return analysisOptions.mapNotNull { (combinationName, analysis) ->
+        return analysisOptions(result).mapNotNull { (combinationName, analysis) ->
             analysis.spanResults.mapNotNull { span ->
                 val point = span.utilizationDiagram.maxByOrNull { it.ratio } ?: return@mapNotNull null
                 val demand = span.stationDemands.find { it.x == point.x } ?: return@mapNotNull null

@@ -196,13 +196,13 @@ class NdsWoodCombinedChecksTest {
     fun `combined bending and compression Eq 3_9-3, uniaxial`() {
         // P = 500 lb comp, M = 10000 lb-in, lb = 60: fc = 36.036, fb1 = 467.495,
         // CP = 0.209605 (FcE = 297.975, F*c = 1350), F'c = 282.967,
-        // FcE1 = 11331.33, CL = 0.914167, F'b1 = 879.885
+        // FcE1 = 11331.33, CL = 0.916942 (le = 2.06 lu: lu/d = 6.49 < 7), F'b1 = 882.557
         val r = detailed(demand(moment = 10000.0, axial = -500.0, lb = 60.0))
         assertEquals(1, r.combinedChecks.size)
         val c = r.combinedChecks[0]
         assertEquals("NDS 3.9.2", c.clause)
         assertEquals("Bending + Axial Compression", c.label)
-        near(0.549226, c.equations.first { it.equation == "Eq. 3.9-3" }.value, "Eq 3.9-3")
+        near(0.547612886566562, c.equations.first { it.equation == "Eq. 3.9-3" }.value, "Eq 3.9-3")
         assertTrue("uniaxial has no Eq 3.9-4", c.equations.none { it.equation == "Eq. 3.9-4" })
     }
 
@@ -213,9 +213,9 @@ class NdsWoodCombinedChecksTest {
         // terms: 0.023354 + 0.800023 + 0.341662
         val r = detailed(demand(moment = 15000.0, momentY = 800.0, axial = -600.0, lb = 60.0))
         val c = r.combinedChecks.single()
-        near(1.165039, c.equations.first { it.equation == "Eq. 3.9-3" }.value, "Eq 3.9-3")
+        near(1.1578129568563427, c.equations.first { it.equation == "Eq. 3.9-3" }.value, "Eq 3.9-3")
         val e4 = c.equations.first { it.equation == "Eq. 3.9-4" }
-        near(0.4155625005, e4.value, "Eq 3.9-4")
+        near(0.4072270126627252, e4.value, "Eq 3.9-4")
         assertTrue("Eq 3.9-4 is a strict (<) limit", e4.isStrictLimit)
         assertFalse("Eq 3.9-3 > 1 must not pass", c.equations.first { it.equation == "Eq. 3.9-3" }.passes)
         assertEquals("Eq. 3.9-3", c.governingEquation)
@@ -227,8 +227,8 @@ class NdsWoodCombinedChecksTest {
         val c = r.combinedChecks.single()
         assertEquals("Biaxial Bending", c.label)
         assertEquals("NDS 3.9.2", c.clause)
-        near(1.070669, c.equations.first { it.equation == "Eq. 3.9-3" }.value, "Eq 3.9-3 with fc = 0")
-        near(0.270439, c.equations.first { it.equation == "Eq. 3.9-4" }.value, "Eq 3.9-4 with fc = 0")
+        near(1.0651643618932103, c.equations.first { it.equation == "Eq. 3.9-3" }.value, "Eq 3.9-3 with fc = 0")
+        near(0.2621032833456911, c.equations.first { it.equation == "Eq. 3.9-4" }.value, "Eq 3.9-4 with fc = 0")
     }
 
     @Test
@@ -263,9 +263,9 @@ class NdsWoodCombinedChecksTest {
 
     @Test
     fun `RB over 50 is a failure shown as an infinite ratio, not 0_00`() {
-        // lb = 600: le = 1005.75, RB = 64.30 > 50 (NDS 3.3.3.7) -> capacity 0
+        // lb = 600: lu/d = 64.9 > 14.3 -> le = 1.84 lu = 1104, RB = 67.37 > 50 (NDS 3.3.3.7) -> capacity 0
         val s = computeNdsBeamStability(600.0, profile, material, NdsAdjustmentFactors(), false)!!
-        near(64.302022, s.rb, "RB")
+        near(67.3696271821855, s.rb, "RB")
         assertTrue(s.rbExceedsLimit)
 
         val r = detailed(demand(moment = 1000.0, lb = 600.0))
@@ -321,5 +321,155 @@ class NdsWoodCombinedChecksTest {
             factors = calc.designFactors(DesignMethodology.ASD)
         ) { calc.evaluate(it) }
         assertEquals("Interaction Eq H1-1", r.single().interactionCheck.limitState)
+    }
+
+    // ------------------------------------------------------------------
+    // NDS Table 3.3.3 effective length, and per-axis lengths
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `effective length picks the Table 3_3_3 fn 1 row from lu over d`() {
+        // d = 9.25: lu/d < 7 -> 2.06 lu ; 7 <= lu/d <= 14.3 -> 1.63 lu + 3d ; > 14.3 -> 1.84 lu
+        val low = ndsBeamEffectiveLength(60.0, 9.25)
+        assertEquals(2.06, low.coefficient, 0.0); near(123.6, low.le, "le, lu/d < 7")
+        val mid = ndsBeamEffectiveLength(120.0, 9.25)
+        assertEquals(1.63, mid.coefficient, 0.0); near(223.35, mid.le, "le, 7 <= lu/d <= 14.3")
+        val high = ndsBeamEffectiveLength(200.0, 9.25)
+        assertEquals(1.84, high.coefficient, 0.0); near(368.0, high.le, "le, lu/d > 14.3")
+        assertEquals("le = 1.63 lu + 3d", mid.formula)
+        // Row boundaries: lu/d = 7 exactly is the 1.63 row; just past 14.3 is the 1.84 row.
+        assertEquals(1.63, ndsBeamEffectiveLength(7.0 * 9.25, 9.25).coefficient, 0.0)
+        near(133.2925, ndsBeamEffectiveLength(64.75, 9.25).le, "le at lu/d = 7")
+        assertEquals(1.63, ndsBeamEffectiveLength(14.3 * 9.25, 9.25).coefficient, 0.0)
+        assertEquals(1.84, ndsBeamEffectiveLength(14.31 * 9.25, 9.25).coefficient, 0.0)
+    }
+
+    @Test
+    fun `CL in the lu over d greater than 14_3 row`() {
+        val st = computeNdsBeamStability(200.0, profile, material, NdsAdjustmentFactors(), false)!!
+        near(368.0, st.le, "le = 1.84 lu")
+        near(38.89587238883952, st.rb, "RB")
+        near(460.0470035252645, st.fbE, "FbE")
+        near(0.4585533756531186, st.cl, "CL")
+    }
+
+    @Test
+    fun `flatwise bending swaps d and b so CL is exempt, and the swap shows for a wide member`() {
+        // 2x10 flatwise: d = 1.5 <= b = 9.25 -> CL = 1.0 exactly (NDS 3.3.3.1)
+        val weak = computeNdsBeamStability(120.0, profile, material, NdsAdjustmentFactors(), false, aboutStrongAxis = false)!!
+        near(1.5, weak.d, "d (flatwise)"); near(9.25, weak.b, "b (flatwise)")
+        assertTrue(weak.exemptByShape); near(1.0, weak.cl, "CL")
+        near(220.8, weak.le, "le = 1.84 lu since lu/d = 80")
+        assertFalse(weak.rbExceedsLimit)
+        // A member whose width exceeds its depth (9.25 wide x 1.5 deep): bending about its
+        // y-y axis has d = 9.25, b = 1.5 -> the same RB as the 2x10 edgewise case, so not exempt.
+        val wide = WoodProfile(
+            id = "w", designation = "10x2", nominalWidth = 10.0.inches, nominalDepth = 2.0.inches,
+            dressedWidth = 9.25.inches, dressedDepth = 1.5.inches
+        )
+        val w = computeNdsBeamStability(120.0, wide, material, NdsAdjustmentFactors(), false, aboutStrongAxis = false)!!
+        near(9.25, w.d, "d"); near(1.5, w.b, "b")
+        assertFalse(w.exemptByShape)
+        near(223.35, w.le, "le"); near(30.30209, w.rb, "RB — same as the 2x10 edgewise case")
+        assertTrue(computeNdsBeamStability(120.0, wide, material, NdsAdjustmentFactors(), false)!!.exemptByShape)
+    }
+
+    @Test
+    fun `the bending traces name the Table 3_3_3 expression that was used`() {
+        val r = detailed(demand(moment = 5000.0, lb = 120.0))
+        val le = r.momentCheck.traces.first { it.symbolicEquation.startsWith("le = ") }
+        assertEquals("le = 1.63 lu + 3d", le.symbolicEquation)
+        assertTrue(le.codeReference.contains("Table 3.3.3"))
+        near(223.35, le.result.toDouble(), "le")
+        // Flatwise shows why CL = 1.0
+        val w = detailed(demand(moment = 1000.0, lb = 120.0), strong = false)
+        assertTrue(w.momentCheck.traces.any { it.symbolicEquation == "d <= b  ->  CL = 1.0" })
+    }
+
+    @Test
+    fun `column buckling checks both planes with their own lengths and the larger slenderness governs`() {
+        // Weak plane governs: le1/d1 = 120/9.25 = 12.97 vs le2/d2 = 30/1.5 = 20.0
+        val a = detailed(demand(axial = -500.0, lb = 120.0).copy(luWeakAxis = 30.0.inches))
+        near(12109.11343185832, a.axialCheck.capacity.pounds, "Pn, weak plane governs")
+        assertTrue(a.axialCheck.traces.first { it.symbolicEquation.startsWith("le/d = max") }
+            .substitutedEquation.contains("weak axis governs"))
+        // Strong plane governs: 12.97 vs 10/1.5 = 6.67
+        val b = detailed(demand(axial = -500.0, lb = 120.0).copy(luWeakAxis = 10.0.inches))
+        near(16387.62970937548, b.axialCheck.capacity.pounds, "Pn, strong plane governs")
+        assertTrue(b.axialCheck.traces.first { it.symbolicEquation.startsWith("le/d = max") }
+            .substitutedEquation.contains("strong axis governs"))
+    }
+
+    @Test
+    fun `with no per-axis input the larger edge bracing length is used for columns, the flange length for LTB`() {
+        // lbTop = 30 (compression flange), lbBottom = 60: LTB uses 30; column planes use the larger, 60.
+        val d = demand(moment = 5000.0, axial = -500.0).copy(lbTop = 30.0.inches, lbBottom = 60.0.inches)
+        val r = detailed(d)
+        near(20066.0001548043, r.momentCheck.capacity.lbIn, "Mn uses the compression-flange length (30)")
+        near(3926.166737806891, r.axialCheck.capacity.pounds, "Pn uses the larger length (60)")
+    }
+
+    @Test
+    fun `point path shows zero capacity against a real demand as infinite, and N-A checks stay 0`() {
+        val calc = NdsWoodCapacityCalculator(profile, material)
+        fun run(d: StationDemand) = com.lz.solver.capacity.CapacityEngine.evaluate(
+            demands = listOf(d), section = profile, methodology = DesignMethodology.ASD,
+            factors = calc.designFactors(DesignMethodology.ASD)
+        ) { calc.evaluate(it) }.single()
+
+        // lb = 600 -> RB > 50 -> bending capacity 0. Torque is "not codified for wood": N/A, not a failure.
+        val r = run(demand(moment = 1000.0, lb = 600.0).copy(torque = Moment(500.0)))
+        assertEquals(Double.POSITIVE_INFINITY, r.flexureCheckX.ratio, 0.0)
+        assertEquals(0.0, r.torsionCheck.ratio, 0.0)
+        assertEquals(Double.POSITIVE_INFINITY, r.utilizationRatio, 0.0)
+        // The governing demand is carried explicitly (ratio x capacity would be NaN here).
+        near(1000.0, r.governingDemand, "governing demand")
+        assertFalse(r.governingDemand.isNaN())
+
+        // No demand at zero capacity is still 0.
+        assertEquals(0.0, run(demand(moment = 0.0, lb = 600.0)).flexureCheckX.ratio, 0.0)
+        // Ordinary capacity: demand / capacity, unchanged.
+        near(5000.0 / 14491.63656, run(demand(moment = 5000.0, lb = 120.0)).flexureCheckX.ratio, "normal ratio")
+    }
+
+    // ------------------------------------------------------------------
+    // Selected properties section
+    // ------------------------------------------------------------------
+
+    private fun prop(r: StrengthDesignResult, group: String, symbol: String) =
+        r.selectedProperties.first { it.title == group }.rows.first { it.symbol == symbol }.value
+
+    @Test
+    fun `selected properties report the inputs the checks used`() {
+        val r = detailed(demand(moment = 5000.0, axial = -500.0, lb = 120.0))
+        assertEquals("875 psi", prop(r, "Reference design values", "Fb"))
+        assertEquals("580000 psi", prop(r, "Reference design values", "Emin"))
+        assertEquals("1.500 in", prop(r, "Section", "b"))
+        assertEquals("9.250 in", prop(r, "Section", "d"))
+        assertEquals("13.875 in\u00b2", prop(r, "Section", "A"))
+        assertEquals("21.391 in\u00b3", prop(r, "Section", "Sx"))
+        assertEquals("3.469 in\u00b3", prop(r, "Section", "Sy"))
+        assertEquals("1.100", prop(r, "Adjustment factors", "CF (bending)"))
+        assertEquals("1.200", prop(r, "Adjustment factors", "Cfu"))
+        // CL differs by axis: 0.703871 about x-x (d = 9.25, b = 1.5), exactly 1 about y-y (d = 1.5 <= b = 9.25)
+        assertEquals("0.704", prop(r, "Adjustment factors", "CL (strong axis)"))
+        assertEquals("1.000", prop(r, "Adjustment factors", "CL (weak axis)"))
+        assertTrue(prop(r, "Unbraced and effective lengths", "le (strong-axis bending)").startsWith("223.4 in"))
+        assertTrue(r.selectedProperties.first { it.title == "Unbraced and effective lengths" }.rows
+            .first { it.symbol == "le (strong-axis bending)" }.description.contains("1.63 lu + 3d"))
+        // No per-axis input -> the default is disclosed
+        assertTrue(r.selectedProperties.first { it.title == "Unbraced and effective lengths" }.rows
+            .first { it.symbol == "le2 (column, weak plane)" }.description.contains("default"))
+        val withInput = detailed(demand(axial = -500.0, lb = 120.0).copy(luWeakAxis = 30.0.inches))
+        assertFalse(withInput.selectedProperties.first { it.title == "Unbraced and effective lengths" }.rows
+            .first { it.symbol == "le2 (column, weak plane)" }.description.contains("default"))
+    }
+
+    @Test
+    fun `glulam properties show Fby, or say it is not sourced`() {
+        val ok = detailed(demand(moment = 1000.0), mat = glulam(WoodGrade.G_16F_V3), prof = glulamProfile)
+        assertEquals("1450 psi", prop(ok, "Reference design values", "Fby"))
+        val none = detailed(demand(moment = 1000.0), mat = glulam(WoodGrade.G_20F_V3), prof = glulamProfile)
+        assertEquals("not sourced for this combination", prop(none, "Reference design values", "Fby"))
     }
 }

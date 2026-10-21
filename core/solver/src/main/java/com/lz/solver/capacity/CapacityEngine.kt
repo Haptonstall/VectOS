@@ -60,17 +60,24 @@ object CapacityEngine {
         // own interaction rules (NDS 3.9 for wood) supplies its own here
         // instead of being silently judged by the steel equation.
         interactionCheckProvider: ((StationDemand) -> CodeCheck)? = null,
+        // Design factors for a specific station. Null (the default) uses
+        // [factors] everywhere. Some factors depend on the load combination a
+        // station's demand came from — the NDS LRFD time effect factor lambda
+        // follows the combination's load mix — so a material can supply them
+        // per demand instead of one set for the whole member.
+        factorsProvider: ((StationDemand) -> DesignFactorSet)? = null,
         capacityCalculator: (StationDemand) -> RawCapacityResult
     ): List<PointCapacityResult> {
 
         return demands.map { demand ->
+            val factors = factorsProvider?.invoke(demand) ?: factors
             val raw = capacityCalculator(demand)
             val isAxialTension = demand.axial.pounds >= 0.0
 
             // Flexure X
             val designFlexureX = factors.apply(raw.nominalFlexureX, factors.flexure)
             val demandFlexureX = abs(demand.moment.inLbIn)
-            val ratioFlexureX = if (designFlexureX > 0) demandFlexureX / designFlexureX else 0.0
+            val ratioFlexureX = checkRatio(demandFlexureX, designFlexureX, raw.limitStateFlexureX)
             val checkFlexureX =
                 CodeCheck(raw.limitStateFlexureX, demandFlexureX, designFlexureX, ratioFlexureX)
 
@@ -78,21 +85,21 @@ object CapacityEngine {
             // strong/weak axis bending for phi/omega purposes)
             val designFlexureY = factors.apply(raw.nominalFlexureY, factors.flexure)
             val demandFlexureY = abs(demand.momentY.inLbIn)
-            val ratioFlexureY = if (designFlexureY > 0) demandFlexureY / designFlexureY else 0.0
+            val ratioFlexureY = checkRatio(demandFlexureY, designFlexureY, raw.limitStateFlexureY)
             val checkFlexureY =
                 CodeCheck(raw.limitStateFlexureY, demandFlexureY, designFlexureY, ratioFlexureY)
 
             // Shear X (Strong axis / Vy demand)
             val designShearX = factors.apply(raw.nominalShearX, factors.shear)
             val demandShearX = abs(demand.shear.inPoundsForce)
-            val ratioShearX = if (designShearX > 0) demandShearX / designShearX else 0.0
+            val ratioShearX = checkRatio(demandShearX, designShearX, raw.limitStateShearX)
             val checkShearX =
                 CodeCheck(raw.limitStateShearX, demandShearX, designShearX, ratioShearX)
 
             // Shear Y (Weak axis / Vz demand)
             val designShearY = factors.apply(raw.nominalShearY, factors.shear)
             val demandShearY = abs(demand.shearY.inPoundsForce)
-            val ratioShearY = if (designShearY > 0) demandShearY / designShearY else 0.0
+            val ratioShearY = checkRatio(demandShearY, designShearY, raw.limitStateShearY)
             val checkShearY =
                 CodeCheck(raw.limitStateShearY, demandShearY, designShearY, ratioShearY)
 
@@ -101,13 +108,13 @@ object CapacityEngine {
             val axialFactor = if (isAxialTension) factors.axialTension else factors.axialCompression
             val designAxial = factors.apply(raw.nominalAxial, axialFactor)
             val demandAxial = abs(demand.axial.inPoundsForce)
-            val ratioAxial = if (designAxial > 0) demandAxial / designAxial else 0.0
+            val ratioAxial = checkRatio(demandAxial, designAxial, raw.limitStateAxial)
             val checkAxial = CodeCheck(raw.limitStateAxial, demandAxial, designAxial, ratioAxial)
 
             // Torsion
             val designTorsion = factors.apply(raw.nominalTorsion, factors.torsion)
             val demandTorsion = abs(demand.torque.inLbIn)
-            val ratioTorsion = if (designTorsion > 0) demandTorsion / designTorsion else 0.0
+            val ratioTorsion = checkRatio(demandTorsion, designTorsion, raw.limitStateTorsion)
             val checkTorsion =
                 CodeCheck(raw.limitStateTorsion, demandTorsion, designTorsion, ratioTorsion)
 
@@ -157,10 +164,26 @@ object CapacityEngine {
                 interactionCheck = checkInteraction,
                 designCapacity = governing.capacity,
                 utilizationRatio = governing.ratio,
+                governingDemand = governing.demand,
                 governingLimitState = governing.limitState,
                 compressionFlange = demand.compressionFlange,
                 Lb = if (demand.compressionFlange == Flange.TOP) demand.lbTop.inInches else demand.lbBottom.inInches
             )
         }
+    }
+
+    /**
+     * Utilization of one strength check. Zero capacity against a real demand
+     * is a FAILURE — the member can't carry the load at all (e.g. a
+     * slenderness limit exceeded, or a design value that isn't available) —
+     * so it is infinite, not 0.00 as a plain `if (capacity > 0)` guard made
+     * it. A check whose limit state is "N/A..." is one the material's code
+     * doesn't define (torsion for wood, say): its zero capacity means "not
+     * checked", and it stays 0.
+     */
+    private fun checkRatio(demand: Double, capacity: Double, limitState: String): Double = when {
+        capacity > 0.0 -> demand / capacity
+        demand > 1e-9 && !limitState.trimStart().startsWith("N/A") -> Double.POSITIVE_INFINITY
+        else -> 0.0
     }
 }

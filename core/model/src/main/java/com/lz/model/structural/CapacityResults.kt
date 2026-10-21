@@ -36,5 +36,9 @@ data class PointCapacityResult(
     val utilizationRatio: Double = 0.0,
     val governingLimitState: String = "N/A",
     val compressionFlange: Flange = Flange.TOP,
-    val Lb: Double = 0.0
+    val Lb: Double = 0.0,
+    // The demand of the governing check itself. utilizationRatio * designCapacity
+    // used to stand in for this, which is NaN once a ratio is infinite (zero
+    // capacity against a real demand).
+    val governingDemand: Double = 0.0
 )

@@ -59,7 +59,54 @@ data class StrengthDesignResult(
      * Empty when no combination applies or the calculator doesn't produce
      * any.
      */
-    val combinedChecks: List<CombinedStressCheck> = emptyList()
+    val combinedChecks: List<CombinedStressCheck> = emptyList(),
+    /**
+     * The material, section, adjustment factors and unbraced / effective
+     * lengths this evaluation actually used, grouped for display — so a
+     * reader can check a calculation's inputs without reverse-engineering
+     * them from the traces. Empty for calculators that don't report it.
+     */
+    val selectedProperties: List<DesignPropertyGroup> = emptyList(),
+    /**
+     * What this evaluation does NOT have verified data or implementation for,
+     * under the project's selected code / standard edition. Empty when
+     * everything it used is sourced for that edition.
+     */
+    val codeDataNotices: List<CodeDataNotice> = emptyList(),
+    /** e.g. "NDS 2024" — the standard edition the evaluation was run against. */
+    val standardLabel: String? = null
+)
+
+/** How well a body of code data / rules is backed for the selected edition. */
+enum class CodeDataStatus {
+    /** Sourced from the edition's own published tables / text. */
+    VERIFIED,
+    /** Implemented, but not yet checked against the edition's own pages. */
+    UNVERIFIED,
+    /** Not available for the selected edition; values from another edition are standing in. */
+    NOT_SOURCED,
+    /** The rule exists in the code but this calculator does not apply it. */
+    NOT_IMPLEMENTED
+}
+
+/** One item of [CodeDataStatus] that isn't plainly VERIFIED, with what it means for the result. */
+data class CodeDataNotice(
+    val dataset: String,
+    val status: CodeDataStatus,
+    val message: String
+)
+
+/** One labelled input value, e.g. symbol "Fb", description "Reference bending", value "875 psi". */
+data class DesignPropertyRow(
+    val symbol: String,
+    val description: String,
+    val value: String
+)
+
+/** A titled block of [DesignPropertyRow]s (material, section, factors, lengths ...). */
+data class DesignPropertyGroup(
+    val title: String,
+    val rows: List<DesignPropertyRow>
 )
 
 /**

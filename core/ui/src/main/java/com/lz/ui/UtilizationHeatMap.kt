@@ -177,7 +177,7 @@ fun UtilizationHeatMap(
                             fontSize = 12.sp
                         )
                         Text(
-                            "Ratio: ${"%.2f".format(point.utilizationRatio)}",
+                            "Ratio: ${if (point.utilizationRatio.isInfinite() || point.utilizationRatio.isNaN()) "N.G." else "%.2f".format(point.utilizationRatio)}",
                             color = if (point.utilizationRatio > 1.0) Color.Red else Color.Unspecified,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp

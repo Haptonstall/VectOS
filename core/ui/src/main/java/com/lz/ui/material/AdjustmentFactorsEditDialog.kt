@@ -2,6 +2,7 @@ package com.lz.ui.material
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -11,6 +12,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -18,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -51,6 +54,7 @@ fun AdjustmentFactorsEditDialog(
     onConfirm: (NdsAdjustmentFactors) -> Unit
 ) {
     var cd by remember(currentFactors) { mutableStateOf(currentFactors.cd.toString()) }
+    var autoCd by remember(currentFactors) { mutableStateOf(currentFactors.usesAutoLoadDuration) }
     var cm by remember(currentFactors) { mutableStateOf(currentFactors.cm.toString()) }
     var ct by remember(currentFactors) { mutableStateOf(currentFactors.ct.toString()) }
     var cl by remember(currentFactors) { mutableStateOf(currentFactors.cl.toString()) }
@@ -69,7 +73,9 @@ fun AdjustmentFactorsEditDialog(
                 "sustained — shorter-duration loads permit a higher design value. " +
                 "Typical: 0.9 (permanent/dead), 1.0 (10-year/normal occupancy live), " +
                 "1.15 (2-month/snow), 1.25 (7-day/construction), 1.6 (10-min/wind or " +
-                "seismic), 2.0 (impact). Does not apply to modulus of elasticity.",
+                "seismic), 2.0 (impact). Does not apply to modulus of elasticity. " +
+                "Under LRFD the time effect factor λ takes its place and is also set per " +
+                "combination.",
             onValueChange = { cd = it }
         ),
         FactorField(
@@ -203,8 +209,26 @@ fun AdjustmentFactorsEditDialog(
                             "CP" -> cp
                             else -> cb
                         }
+                        if (field.symbol == "CD") {
+                            // CD belongs to a load combination (the shortest-duration load
+                            // in it sets it), not to the member — so by default it is derived
+                            // for each combination. A typed-in value overrides that for all.
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "Set automatically from each load combination",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Switch(checked = autoCd, onCheckedChange = { autoCd = it })
+                            }
+                        }
                         OutlinedTextField(
-                            value = rawText,
+                            value = if (field.symbol == "CD" && autoCd) "Automatic" else rawText,
+                            enabled = !(field.symbol == "CD" && autoCd),
                             onValueChange = field.onValueChange,
                             label = { Text(field.symbol) },
                             singleLine = true,
@@ -224,7 +248,8 @@ fun AdjustmentFactorsEditDialog(
             TextButton(onClick = {
                 onConfirm(
                     NdsAdjustmentFactors(
-                        cd = cd.toDoubleOrNull() ?: 1.0,
+                        cd = if (autoCd) 1.0 else (cd.toDoubleOrNull() ?: 1.0),
+                        loadDurationFromCombination = autoCd,
                         cm = cm.toDoubleOrNull() ?: 1.0,
                         ct = ct.toDoubleOrNull() ?: 1.0,
                         cl = cl.toDoubleOrNull() ?: 1.0,

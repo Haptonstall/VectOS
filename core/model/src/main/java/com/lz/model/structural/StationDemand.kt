@@ -1,5 +1,6 @@
 package com.lz.model.structural
 
+import com.lz.model.regulatory.LoadCategory
 import com.lz.model.units.Force
 import com.lz.model.units.Length
 import com.lz.model.units.Moment
@@ -47,5 +48,30 @@ data class StationDemand(
     val cb: Double = 1.0,
     val lbTop: Length = 0.0.inches,
     val lbBottom: Length = 0.0.inches,
-    val compressionFlange: Flange = Flange.NONE
+    val compressionFlange: Flange = Flange.NONE,
+
+    // --- Per-axis unbraced lengths for column buckling / flatwise bending ---
+    // lbTop / lbBottom above are the lateral bracing of the two edges. A
+    // member is usually braced differently about its two axes, so wood checks
+    // want each axis's own length: luStrongAxis is the unbraced length for
+    // buckling in the plane of strong-axis bending (about x-x); luWeakAxis for
+    // buckling about the weak axis (y-y) and flatwise bending. Null means
+    // "no separate input" — the wood calculator then falls back to the
+    // larger of lbTop / lbBottom, the conservative choice.
+    val luStrongAxis: Length? = null,
+    val luWeakAxis: Length? = null,
+
+    // --- Which load combination produced this demand ---
+    // Some adjustment factors depend on WHICH loads are acting, not just how
+    // big they are: the NDS load duration factor CD (ASD) and time effect
+    // factor lambda (LRFD) follow the shortest-duration load in the
+    // combination. The solver fills these in per combination. Empty / null
+    // means the demand isn't tied to a combination (a legacy single-case
+    // solve), and capacity code falls back to its manual setting.
+    val combinationName: String? = null,
+    // Load categories that are BOTH in the combination (non-zero factor) AND
+    // actually applied to the member — a combination that lists snow doesn't
+    // involve snow duration if no snow load was entered.
+    val combinationLoadCategories: Set<LoadCategory> = emptySet(),
+    val combinationMethodology: DesignMethodology? = null
 )

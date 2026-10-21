@@ -166,12 +166,16 @@ object BeamAnalysisSolver {
             // default, which is only right for steel).
             interactionCheckProvider = (calculator as? NdsWoodCapacityCalculator)?.let { wood ->
                 { demand -> wood.pointInteractionCheck(demand, config.designMethodology) }
+            },
+            // NDS LRFD lambda follows each combination's loads.
+            factorsProvider = (calculator as? NdsWoodCapacityCalculator)?.let { wood ->
+                { demand -> wood.designFactorsFor(demand, config.designMethodology) }
             }
         ) { demand -> calculator.evaluate(demand) }
             .map { cap ->
                 UtilizationPoint(
                     x                   = cap.demand.x,
-                    demand              = cap.utilizationRatio * cap.designCapacity,
+                    demand              = cap.governingDemand,
                     capacity            = cap.designCapacity,
                     ratio               = cap.utilizationRatio,
                     governingLimitState = cap.governingLimitState

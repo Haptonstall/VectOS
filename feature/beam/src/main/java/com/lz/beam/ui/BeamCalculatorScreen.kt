@@ -94,7 +94,10 @@ import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.codes.ServiceabilityCriterion
 import com.lz.model.structural.BracingInput
 import com.lz.model.structural.BracingMode
+import com.lz.model.structural.CodeDataNotice
+import com.lz.model.structural.CodeDataStatus
 import com.lz.model.structural.CombinedStressCheck
+import com.lz.model.structural.DesignPropertyGroup
 import com.lz.model.structural.DesignEquationTrace
 import com.lz.model.structural.DesignMethodology
 import com.lz.model.structural.InteractionStatus
@@ -331,7 +334,7 @@ fun BeamCalculatorScreen(
                             // trustworthy, so this shows the real overall ratio instead)
                             StatusBadgeSmall(
                                 label = "GOV",
-                                value = "${(governingStrengthUtil * 100).toInt()}%",
+                                value = if (governingStrengthUtil.isInfinite() || governingStrengthUtil.isNaN()) "N.G." else "${(governingStrengthUtil * 100).toInt()}%",
                                 isCritical = governingStrengthUtil > 1.0
                             )
 
@@ -1022,6 +1025,13 @@ fun DesignTab(viewModel: BeamViewModel) {
             member = viewModel.structuralMember,
             unitSystem = viewModel.unitSystem,
             isStrongAxis = viewModel.isStrongAxis,
+            buildingCodeName = viewModel.activeBuildingCodeName,
+            shearCheck = viewModel.detailedShearCheck,
+            shearLocationInches = viewModel.detailedShearLocationInches,
+            shearIsWorstCase = viewModel.detailedShearIsWorstCase,
+            strengthLocationInches = viewModel.detailedStrengthLocationInches,
+            designLocationInches = viewModel.designLocationInches,
+            onDesignLocationChanged = viewModel::onDesignLocationChanged,
             isWoodMaterial = viewModel.activeMaterialGrade is MaterialGrade.Wood,
             ndsAdjustmentFactors = viewModel.ndsAdjustmentFactors,
             onAdjustmentFactorsChanged = viewModel::onAdjustmentFactorsChanged
@@ -1680,6 +1690,18 @@ fun DesignSummary(
     // Geometry tab's strong/weak toggle). The primary bending card and its
     // secondary-axis companion are labelled from this.
     isStrongAxis: Boolean = true,
+    // Shear is shown at its own station: the worst-case (largest |V|) one,
+    // or the user's chosen location. Null falls back to the governing point's shear.
+    // Name of the project's building code (e.g. "IBC 2024"), shown with the standard edition.
+    buildingCodeName: String? = null,
+    shearCheck: StrengthCheckResult<Force>? = null,
+    shearLocationInches: Double? = null,
+    shearIsWorstCase: Boolean = true,
+    // Where the bending / axial / combined cards are evaluated, and the
+    // location the user asked for (null = worst case).
+    strengthLocationInches: Double? = null,
+    designLocationInches: Double? = null,
+    onDesignLocationChanged: ((Double?) -> Unit)? = null,
     // Only meaningful for wood materials — null/no-op for steel, aluminum,
     // masonry. When non-null, an "Edit Adjustment Factors" entry point is
     // shown next to the read-only Design Parameters summary below.
@@ -1690,7 +1712,24 @@ fun DesignSummary(
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
         // 1. Critical Strength Check (Governing)
         if (detailedResult != null) {
-            Text("Governing Strength Checks", style = MaterialTheme.typography.titleMedium)
+            detailedResult.standardLabel?.let { label ->
+                CodeStandardCard(label, buildingCodeName, detailedResult.codeDataNotices)
+            }
+            if (onDesignLocationChanged != null) {
+                DesignLocationControl(
+                    unitSystem = unitSystem,
+                    userLocationInches = designLocationInches,
+                    strengthLocationInches = strengthLocationInches,
+                    onLocationChanged = onDesignLocationChanged
+                )
+            }
+            if (detailedResult.selectedProperties.isNotEmpty()) {
+                SelectedPropertiesCard(detailedResult.selectedProperties)
+            }
+            Text(
+                if (designLocationInches != null) "Strength Checks at Selected Location" else "Governing Strength Checks",
+                style = MaterialTheme.typography.titleMedium
+            )
             detailedCombinationName?.let {
                 InfoCard(
                     title = "Governing Load Combination",
@@ -1708,7 +1747,20 @@ fun DesignSummary(
             detailedResult.secondaryMomentCheck?.let { secondary ->
                 DesignCard(secondaryBendingLabel, secondary, unitSystem)
             }
-            DesignCard("Shear (Vy)", detailedResult.shearCheck, unitSystem)
+            val shearCardCheck = shearCheck ?: detailedResult.shearCheck
+            val shearAt = shearLocationInches?.let { formatLocation(it, unitSystem) }
+            DesignCard(
+                label = "Shear (Vy)",
+                check = shearCardCheck,
+                unitSystem = unitSystem,
+                subtitle = buildString {
+                    shearCardCheck.governingCombination?.takeIf { it != "Current" }?.let { append("Combination: $it") }
+                    if (shearAt != null) {
+                        if (isNotEmpty()) append("  \u00b7  ")
+                        append(if (shearIsWorstCase) "Worst case at x = $shearAt" else "At x = $shearAt")
+                    }
+                }.ifEmpty { null }
+            )
 
             if (detailedResult.axialCheck.demand.inPoundsForce != 0.0) {
                 DesignCard("Axial (Px)", detailedResult.axialCheck, unitSystem)
@@ -1938,7 +1990,10 @@ private fun DesignCard(
     label: String,
     check: StrengthCheckResult<*>,
     unitSystem: UnitSystem,
-    initiallyExpanded: Boolean = false
+    initiallyExpanded: Boolean = false,
+    // Extra line under the governing equation — e.g. which combination and
+    // station a card describes when it differs from the other cards.
+    subtitle: String? = null
 ) {
     val isFail = check.utilization > 1.0
     val demandStr = when (val d = check.demand) {
@@ -1975,6 +2030,9 @@ private fun DesignCard(
                     Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     check.governingMode?.let {
                         Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                    subtitle?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                     }
                 }
 
@@ -2018,6 +2076,240 @@ private fun DesignCard(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
                 check.traces.forEach { trace ->
                     EquationTraceItem(trace)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Which code / standard edition the design was run against, and what the
+ * calculator does NOT have backing for under it. Values missing for the
+ * selected edition (another edition's numbers standing in) and rules the
+ * calculator doesn't apply are shown in the error color and the card opens
+ * expanded; items merely not yet checked against the edition's pages are
+ * listed but don't demand attention. Silent use of another edition's values
+ * is what this exists to prevent.
+ */
+@Composable
+private fun CodeStandardCard(
+    standardLabel: String,
+    buildingCodeName: String?,
+    notices: List<CodeDataNotice>
+) {
+    val severe = notices.filter {
+        it.status == CodeDataStatus.NOT_SOURCED || it.status == CodeDataStatus.NOT_IMPLEMENTED
+    }
+    var isExpanded by remember(standardLabel, severe.size) { mutableStateOf(severe.isNotEmpty()) }
+    val accent = if (severe.isNotEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(
+            if (severe.isNotEmpty()) 2.dp else 1.dp,
+            if (severe.isNotEmpty()) accent else MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth()
+                .let { if (notices.isNotEmpty()) it.clickable { isExpanded = !isExpanded } else it }
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Code and Standard: $standardLabel" + (buildingCodeName?.let { " ($it)" } ?: ""),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        when {
+                            severe.isNotEmpty() ->
+                                "${severe.size} item${if (severe.size == 1) "" else "s"} not available for $standardLabel \u2014 results are provisional"
+                            notices.isNotEmpty() ->
+                                "${notices.size} item${if (notices.size == 1) "" else "s"} not yet checked against $standardLabel"
+                            else -> "All design values sourced for $standardLabel"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = accent
+                    )
+                }
+                if (notices.isNotEmpty()) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        tint = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+            if (isExpanded) {
+                notices.sortedByDescending { it.status.ordinal }.forEach { n ->
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                    )
+                    val statusText = when (n.status) {
+                        CodeDataStatus.NOT_SOURCED -> "Values not available for this edition"
+                        CodeDataStatus.NOT_IMPLEMENTED -> "Not implemented"
+                        CodeDataStatus.UNVERIFIED -> "Not yet checked"
+                        CodeDataStatus.VERIFIED -> "Verified"
+                    }
+                    val statusColor = when (n.status) {
+                        CodeDataStatus.NOT_SOURCED, CodeDataStatus.NOT_IMPLEMENTED -> MaterialTheme.colorScheme.error
+                        CodeDataStatus.UNVERIFIED -> MaterialTheme.colorScheme.outline
+                        CodeDataStatus.VERIFIED -> MaterialTheme.colorScheme.primary
+                    }
+                    Text(n.dataset, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                    Text(statusText, style = MaterialTheme.typography.labelSmall, color = statusColor, fontWeight = FontWeight.Bold)
+                    Text(n.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                }
+            }
+        }
+    }
+}
+
+/** A station location as text in the project's units: "12.50 ft" or "3.810 m". */
+private fun formatLocation(inches: Double, unitSystem: UnitSystem): String =
+    if (unitSystem == UnitSystem.METRIC) String.format("%.3f m", inches * 0.0254)
+    else String.format("%.2f ft", inches / 12.0)
+
+/**
+ * Lets the user pick a location along the member (same global x as the
+ * Analysis tab's station picker, in ft or m) at which to see the design
+ * calculation; blank means worst case. Says what each card is showing.
+ */
+@Composable
+private fun DesignLocationControl(
+    unitSystem: UnitSystem,
+    userLocationInches: Double?,
+    strengthLocationInches: Double?,
+    onLocationChanged: (Double?) -> Unit
+) {
+    var text by remember { mutableStateOf("") }
+    val unitLabel = if (unitSystem == UnitSystem.METRIC) "m" else "ft"
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Design Location", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { entered ->
+                        text = entered
+                        val v = entered.toDoubleOrNull()
+                        onLocationChanged(
+                            if (v == null) null
+                            else if (unitSystem == UnitSystem.METRIC) v.meters.inInches else v.feet.inInches
+                        )
+                    },
+                    label = { Text("Location x ($unitLabel from member start)") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                if (userLocationInches != null) {
+                    TextButton(onClick = { text = ""; onLocationChanged(null) }) { Text("Worst case") }
+                }
+            }
+            Text(
+                if (userLocationInches != null && strengthLocationInches != null)
+                    "All checks are shown at the nearest solver station, x = ${formatLocation(strengthLocationInches, unitSystem)}."
+                else
+                    "Leave blank for worst case: bending, axial and combined checks at the governing point" +
+                        (strengthLocationInches?.let { " (x = ${formatLocation(it, unitSystem)})" } ?: "") +
+                        "; shear at the station with the largest shear.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+    }
+}
+
+/**
+ * The material, section, adjustment factors and unbraced / effective lengths
+ * the checks below actually used, grouped and collapsible, so a calculation's
+ * inputs can be checked without reverse-engineering them from the traces.
+ */
+@Composable
+private fun SelectedPropertiesCard(groups: List<DesignPropertyGroup>) {
+    var isExpanded by remember { mutableStateOf(false) }
+    fun value(group: String, symbol: String) =
+        groups.firstOrNull { it.title == group }?.rows?.firstOrNull { it.symbol == symbol }?.value
+    val summary = listOfNotNull(
+        value("Material", "Species"), value("Material", "Grade"), value("Section", "Size")
+    ).joinToString("  \u00b7  ")
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().clickable { isExpanded = !isExpanded }.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Selected Properties", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    if (summary.isNotEmpty()) {
+                        Text(summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (isExpanded) "Collapse properties" else "Expand properties",
+                    tint = MaterialTheme.colorScheme.outline
+                )
+            }
+            if (isExpanded) {
+                groups.forEach { group ->
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                    )
+                    Text(group.title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    group.rows.forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                row.symbol,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(0.34f)
+                            )
+                            Text(
+                                row.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.weight(0.38f)
+                            )
+                            Text(
+                                row.value,
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                                modifier = Modifier.weight(0.28f)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -2340,7 +2632,9 @@ private val ndsVariableDescriptions: Map<String, String> = mapOf(
     "P" to "Axial compression demand on the member at this station, from the governing load combination.",
     "M" to "Bending moment about the axis being checked at this station.",
     "RB" to "Slenderness ratio for bending members, sqrt(le x d / b^2) (NDS 3.3.3.6). Must not exceed 50 (NDS 3.3.3.7).",
-    "le" to "Effective length of the compression edge, accounting for how the load and bracing affect lateral buckling (NDS Table 3.3.3). Here le = 1.63 x unbraced length + 3d.",
+    "lu" to "Unbraced length of the compression edge — the distance between points of lateral support for the axis being checked. Strong-axis and weak-axis bending, and the two column-buckling planes, can each have a different one.",
+    "lu/d" to "Unbraced length divided by the member's depth in the plane of bending. It selects the row of NDS Table 3.3.3 used for the effective length (below 7, 7 to 14.3, or above 14.3).",
+    "le" to "Effective length of the compression edge, accounting for how the load and bracing affect lateral buckling (NDS Table 3.3.3). With the load pattern not specified, the table's footnote 1 expressions are used: 2.06 lu (lu/d < 7), 1.63 lu + 3d (7 to 14.3), or 1.84 lu (> 14.3) — never less than any specific row of the table.",
     "le1" to "Effective length for buckling in the plane of strong-axis (x-x) bending — taken equal to the unbraced length.",
     "le2" to "Effective length for buckling in the plane of weak-axis (y-y) bending — taken equal to the unbraced length.",
     "d" to "Depth of the member in the plane of bending (the larger face dimension for edgewise bending).",

@@ -223,7 +223,10 @@ object MemberAnalysisSolver {
         // 5. Build Individual Combination Results
         val combinationResults = config.combinations.associate { combo ->
             // Factor each category's station demands by this combo's load factors
-            val comboDemands = buildFactoredDemands(resultsByCategory, combo, demandsByCategory)
+            val comboDemands = buildFactoredDemands(
+                resultsByCategory, combo, demandsByCategory,
+                appliedCategories = config.allLoads.map { it.category }.toSet()
+            )
 
             // Apply factors to reactions
             val comboReactions = buildFactoredReactions(resultsByCategory, combo)
@@ -361,8 +364,10 @@ object MemberAnalysisSolver {
     private fun buildFactoredDemands(
         resultsByCategory: Map<com.lz.model.regulatory.LoadCategory, AnalysisResult>,
         combo: com.lz.model.regulatory.LoadCombination,
-        demandsByCategory: Map<com.lz.model.regulatory.LoadCategory, List<StationDemand>>
+        demandsByCategory: Map<com.lz.model.regulatory.LoadCategory, List<StationDemand>>,
+        appliedCategories: Set<com.lz.model.regulatory.LoadCategory> = emptySet()
     ): List<StationDemand> {
+        val actingCategories = loadCategoriesActing(combo, appliedCategories)
         val stationCount = demandsByCategory.values.firstOrNull()?.size ?: return emptyList()
         return (0 until stationCount).map { index ->
             var mX = 0.0; var vY = 0.0; var pZ = 0.0
@@ -382,10 +387,26 @@ object MemberAnalysisSolver {
             firstStation.copy(
                 moment = Moment(mX), shear = Force(vY), axial = Force(pZ),
                 momentY = Moment(mY), shearY = Force(vX), torque = Moment(tZ),
-                deflection = Length(delta)
+                deflection = Length(delta),
+                combinationName = combo.name,
+                combinationLoadCategories = actingCategories,
+                combinationMethodology = combo.methodology
             )
         }
     }
+
+    /**
+     * The load categories that actually act in [combo]: those it gives a
+     * non-zero factor AND that have at least one load applied to the member.
+     * (A combination can list snow, but if no snow load was entered the
+     * member never sees snow's duration.) Duration-dependent factors — NDS
+     * CD / lambda — are derived from this set.
+     */
+    internal fun loadCategoriesActing(
+        combo: com.lz.model.regulatory.LoadCombination,
+        appliedCategories: Set<com.lz.model.regulatory.LoadCategory>
+    ): Set<com.lz.model.regulatory.LoadCategory> =
+        combo.factors.filter { (category, factor) -> factor != 0.0 && category in appliedCategories }.keys
 
     private fun buildFactoredReactions(
         resultsByCategory: Map<com.lz.model.regulatory.LoadCategory, AnalysisResult>,

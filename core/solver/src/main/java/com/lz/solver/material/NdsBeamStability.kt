@@ -129,9 +129,65 @@ internal data class NdsBeamStabilityDetail(
     val eMinAdj: Double,
     val fbE: Double,
     val fStarB: Double,
-    val cl: Double
+    val cl: Double,
+    /** Which Table 3.3.3 expression produced [le], e.g. "le = 1.63 lu + 3d". */
+    val effectiveLength: NdsEffectiveLength,
+    /** True for bending about the strong (x-x) axis, false for flatwise (y-y). */
+    val aboutStrongAxis: Boolean = true,
+    /** NDS 3.3.3.1: d <= b -> no lateral-torsional buckling, CL = 1.0 exactly. */
+    val exemptByShape: Boolean = false
 ) {
-    val rbExceedsLimit: Boolean get() = rb > 50.0
+    val rbExceedsLimit: Boolean get() = !exemptByShape && rb > 50.0
+}
+
+/**
+ * Effective length le of a bending member's compression edge — NDS Table
+ * 3.3.3, and the factor that was used so the Design tab can show it.
+ *
+ * The calculator does not know the load pattern (uniform vs. concentrated,
+ * cantilever vs. single span), so it uses the table's footnote 1 — the
+ * expressions for "loading conditions not specified in Table 3.3.3":
+ *
+ *   lu/d <  7          le = 2.06 lu
+ *   7 <= lu/d <= 14.3  le = 1.63 lu + 3d
+ *   lu/d > 14.3        le = 1.84 lu
+ *
+ * Those are at or above every specific row of the table for the same lu/d
+ * (the largest specific coefficients are 2.06 / 1.63 + 3d / 1.84), so using
+ * them is the conservative reading; a known load pattern could give a
+ * smaller le (e.g. 1.37 lu + 3d for a single center point load).
+ *
+ * @param lu unbraced length of the compression edge, inches.
+ * @param d  depth of the member in the plane of bending (for flatwise
+ *           bending, the narrow dimension), inches.
+ */
+internal data class NdsEffectiveLength(
+    val le: Double,
+    /** The multiplier on lu (2.06, 1.63 or 1.84). */
+    val coefficient: Double,
+    /** Added constant in units of d (3.0 for the 1.63 row, else 0). */
+    val dTerm: Double,
+    val luOverD: Double,
+    val tableReference: String
+) {
+    /** e.g. "le = 1.63 lu + 3d". */
+    val formula: String
+        get() = if (dTerm > 0.0) "le = ${coefficient} lu + ${dTerm.toInt()}d" else "le = ${coefficient} lu"
+}
+
+internal fun ndsBeamEffectiveLength(lu: Double, d: Double): NdsEffectiveLength {
+    val ratio = if (d > 0.0) lu / d else 0.0
+    return when {
+        ratio < 7.0 -> NdsEffectiveLength(
+            2.06 * lu, 2.06, 0.0, ratio, "NDS Table 3.3.3 fn. 1 (lu/d < 7)"
+        )
+        ratio <= 14.3 -> NdsEffectiveLength(
+            1.63 * lu + 3.0 * d, 1.63, 3.0, ratio, "NDS Table 3.3.3 fn. 1 (7 <= lu/d <= 14.3)"
+        )
+        else -> NdsEffectiveLength(
+            1.84 * lu, 1.84, 0.0, ratio, "NDS Table 3.3.3 fn. 1 (lu/d > 14.3)"
+        )
+    }
 }
 
 /**
@@ -146,19 +202,27 @@ internal fun computeNdsBeamStability(
     profile: SectionProfile,
     material: MaterialGrade.Wood,
     adjustmentFactors: NdsAdjustmentFactors,
-    isGlulam: Boolean
+    isGlulam: Boolean,
+    aboutStrongAxis: Boolean = true
 ): NdsBeamStabilityDetail? {
     if (lb <= 0.0) return null
 
     val designMaterial = resolveDesignMaterial(material, profile)
-    val d = profile.depth.inInches
-    val b = if (profile is WoodProfile) profile.dressedWidth.inInches
+    val depth = profile.depth.inInches
+    val width = if (profile is WoodProfile) profile.dressedWidth.inInches
     else profile.propertiesWeakAxis.s.inIn3 / profile.propertiesWeakAxis.i.inIn4 * 2.0
 
-    if (b <= 0.0) return null
+    if (width <= 0.0) return null
 
-    // Effective span length le (NDS Table 3.3.3 — approximate for uniformly loaded)
-    val le = 1.63 * lb + 3.0 * d
+    // "d" is the dimension in the plane of bending and "b" the one across it:
+    // edgewise bending about x-x has d = depth, b = width; flatwise bending
+    // about y-y swaps them. That swap is what makes CL differ by axis.
+    val d = if (aboutStrongAxis) depth else width
+    val b = if (aboutStrongAxis) width else depth
+
+    // Effective length le (NDS Table 3.3.3) — see ndsBeamEffectiveLength.
+    val effLen = ndsBeamEffectiveLength(lb, d)
+    val le = effLen.le
 
     val rbSquared = le * d / b.pow(2)
     if (rbSquared <= 0.0) return null
@@ -184,11 +248,17 @@ internal fun computeNdsBeamStability(
     // (glulam), which isn't in 3.3-6 at all; it was conservative, but it
     // wasn't the code.
     val term = (1.0 + ratio) / 1.9
-    val cl = term - sqrt(term.pow(2) - ratio / 0.95)
+    val clRaw = term - sqrt(term.pow(2) - ratio / 0.95)
+
+    // NDS 3.3.3.1: when d <= b the member cannot buckle laterally and
+    // CL = 1.0. (Flatwise bending of any rectangular member lands here.)
+    val exempt = d <= b
 
     return NdsBeamStabilityDetail(
         lb = lb, le = le, d = d, b = b, rb = sqrt(rbSquared),
-        eMinAdj = eMinAdj, fbE = fbE, fStarB = fStarB, cl = cl
+        eMinAdj = eMinAdj, fbE = fbE, fStarB = fStarB,
+        cl = if (exempt) 1.0 else clRaw,
+        effectiveLength = effLen, aboutStrongAxis = aboutStrongAxis, exemptByShape = exempt
     )
 }
 
@@ -207,8 +277,9 @@ internal fun computeNdsCL(
     profile: SectionProfile,
     material: MaterialGrade.Wood,
     adjustmentFactors: NdsAdjustmentFactors,
-    isGlulam: Boolean
-): Double = computeNdsBeamStability(lb, profile, material, adjustmentFactors, isGlulam)?.cl ?: 1.0
+    isGlulam: Boolean,
+    aboutStrongAxis: Boolean = true
+): Double = computeNdsBeamStability(lb, profile, material, adjustmentFactors, isGlulam, aboutStrongAxis)?.cl ?: 1.0
 
 /**
  * E'min = Emin x CM x Ct x Ci (NDS Table 4.3.1) — the adjusted stability

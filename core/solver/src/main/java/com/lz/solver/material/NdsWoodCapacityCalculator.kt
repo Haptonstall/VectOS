@@ -4,6 +4,10 @@ import com.lz.model.regulatory.aisc.DesignFactor
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
 import com.lz.model.regulatory.nds.NdsEdition
 import com.lz.model.structural.CodeCheck
+import com.lz.model.structural.CodeDataNotice
+import com.lz.model.structural.CodeDataStatus
+import com.lz.model.structural.DesignPropertyGroup
+import com.lz.model.structural.DesignPropertyRow
 import com.lz.model.structural.CombinedStressCheck
 import com.lz.model.structural.DesignEquationTrace
 import com.lz.model.structural.DesignMethodology
@@ -68,12 +72,17 @@ class NdsWoodCapacityCalculator(
     private val adjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors(),
     /**
      * Resolved NDS edition (from the active project's BuildingCode ->
-     * Standard -> StandardEdition.Nds chain). Not currently used to vary
-     * any factor here — NDS 2015/2018/2024 share the same values for
-     * everything this calculator models (adjustment factors, phi, lambda).
-     * Carried through purely for report citation traceability; if a future
-     * edition genuinely changes one of these values, branch on [edition]
-     * at that point rather than assuming it stays inert.
+     * Standard -> StandardEdition.Nds chain: IBC 2015 -> NDS 2015, IBC 2018 /
+     * 2021 -> NDS 2018, IBC 2024 -> NDS 2024).
+     *
+     * The values this calculator uses have been sourced for NDS 2018 only; it
+     * has NOT been established that 2015 / 2024 share them. So the edition is
+     * not assumed inert: [NdsCodeData] reports, per edition, what is
+     * verified, unverified, standing in from another edition, or not
+     * implemented, and every [StrengthDesignResult] carries those notices so
+     * a result for an edition whose data is missing says so instead of
+     * looking authoritative. Where an edition genuinely differs, branch on
+     * [edition] here AND update [NdsCodeData].
      */
     private val edition: NdsEdition = NdsEdition.NDS_2018,
     /**
@@ -87,7 +96,13 @@ class NdsWoodCapacityCalculator(
      * True = edgewise / strong axis (x-x, NDS fb1); false = flatwise / weak
      * axis (y-y, NDS fb2).
      */
-    private val memberIsStrongAxis: Boolean = true
+    private val memberIsStrongAxis: Boolean = true,
+    /**
+     * The load duration factor / time effect factor already resolved for the
+     * one load combination being evaluated. Set only on the per-combination
+     * copy this class makes of itself (see [forDemand]); leave null otherwise.
+     */
+    private val loadDuration: ResolvedLoadDuration? = null
 ) : CapacityCalculator {
 
     private val isGlulam: Boolean = material.species.isGlulam
@@ -120,27 +135,225 @@ class NdsWoodCapacityCalculator(
     private fun kips(lb: Double): String = fmt(lb / 1000.0, 2)
 
     // ------------------------------------------------------------------
+    // Selected properties — everything the checks above actually used
+    // ------------------------------------------------------------------
+
+    /**
+     * The inputs behind this evaluation, grouped for the Design tab: the
+     * material's reference design values (the resolved values the checks
+     * used, not just the picker's label), the section, every adjustment
+     * factor with its source, and the unbraced / effective lengths for each
+     * axis — including the Table 3.3.3 expression and whether a length came
+     * from the bracing input or from the conservative default.
+     */
+    private fun codeDataNotices(methodology: DesignMethodology, demand: StationDemand): List<CodeDataNotice> {
+        val notices = NdsCodeData.noticesFor(edition, methodology, isGlulam).toMutableList()
+        if (loadDuration == null) {
+            notices += CodeDataNotice(
+                dataset = if (methodology == DesignMethodology.LRFD) "Time effect factor \u03bb" else "Load duration factor CD",
+                status = CodeDataStatus.UNVERIFIED,
+                message = when {
+                    !adjustmentFactors.usesAutoLoadDuration ->
+                        "Set by hand (CD = ${fmt(adjustmentFactors.cd, 2)}), not derived from the load combination."
+                    else ->
+                        "This demand isn't tied to a load combination, so the manual value is used instead of one derived from the loads acting."
+                }
+            )
+        }
+        return notices
+    }
+
+    private fun buildSelectedProperties(u: Unbraced, methodology: DesignMethodology, demand: StationDemand): List<DesignPropertyGroup> {
+        fun row(sym: String, desc: String, value: String) = DesignPropertyRow(sym, desc, value)
+        val m = designMaterial
+        val f = adjustmentFactors
+        val groups = mutableListOf<DesignPropertyGroup>()
+
+        groups += DesignPropertyGroup("Code and standard", buildList {
+            add(row("Standard", "Edition the check was run against", NdsCodeData.standardLabel(edition)))
+            add(row("Methodology", "Design method", methodology.name))
+            demand.combinationName?.let { add(row("Combination", "Load combination this demand belongs to", it)) }
+            if (demand.combinationLoadCategories.isNotEmpty())
+                add(row("Loads acting", "In the combination and applied to the member",
+                    demand.combinationLoadCategories.joinToString(", ") { it.shortLabel }))
+        })
+
+        groups += DesignPropertyGroup("Material", listOf(
+            row("Product", "Wood product", if (isGlulam) "Structural glued laminated timber" else "Sawn lumber / solid"),
+            row("Species", "Species / combination", material.species.name),
+            row("Grade", "Grade / combination symbol", material.grade.name)
+        ))
+
+        val fby = if (isGlulam)
+            WoodPropertyService.getReferenceProperties(m.species, m.grade)?.bendingWeakAxis?.inPsi
+        else null
+        groups += DesignPropertyGroup("Reference design values", listOf(
+            row("Fb", if (isGlulam) "Bending, strong axis (Fbx)" else "Bending", "${fmt(m.referenceBending.inPsi, 0)} psi"),
+            row("Fby", "Bending, weak axis",
+                when {
+                    !isGlulam -> "= Fb (one tabulated value for sawn lumber)"
+                    fby != null -> "${fmt(fby, 0)} psi"
+                    else -> "not sourced for this combination"
+                }),
+            row("Ft", "Tension parallel to grain", "${fmt(m.referenceTensionParallel.inPsi, 0)} psi"),
+            row("Fv", "Shear parallel to grain", "${fmt(m.referenceShear.inPsi, 0)} psi"),
+            row("Fc", "Compression parallel to grain", "${fmt(m.referenceCompressionParallel.inPsi, 0)} psi"),
+            row("Fc\u22a5", "Compression perpendicular to grain", "${fmt(m.referenceCompressionPerp.inPsi, 0)} psi"),
+            row("E", "Modulus of elasticity", "${fmt(m.modulusOfElasticity.inPsi, 0)} psi"),
+            row("Emin", "Modulus for stability calculations", "${fmt(woodEmin(m), 0)} psi")
+        ))
+
+        val b = if (profile is WoodProfile) profile.dressedWidth.inInches else sqrt(profile.area.inIn2)
+        val d = profile.depth.inInches
+        groups += DesignPropertyGroup("Section", listOf(
+            row("Size", "Designation", profile.designation),
+            row("b", "Width (dressed)", "${fmt(b, 3)} in"),
+            row("d", "Depth (dressed)", "${fmt(d, 3)} in"),
+            row("A", "Area", "${fmt(profile.area.inIn2, 3)} in\u00b2"),
+            row("Sx", "Section modulus, strong axis", "${fmt(profile.propertiesStrongAxis.s.inIn3, 3)} in\u00b3"),
+            row("Sy", "Section modulus, weak axis", "${fmt(profile.propertiesWeakAxis.s.inIn3, 3)} in\u00b3"),
+            row("Ix", "Moment of inertia, strong axis", "${fmt(profile.propertiesStrongAxis.i.inIn4, 3)} in\u2074"),
+            row("Iy", "Moment of inertia, weak axis", "${fmt(profile.propertiesWeakAxis.i.inIn4, 3)} in\u2074")
+        ))
+
+        val strongAx = bendingAxis(true, u)
+        val weakAx = bendingAxis(false, u)
+        val cpParts = computeCPTraced(u.colStrong, u.colWeak)
+        val factorRows = mutableListOf(
+            if (methodology == DesignMethodology.LRFD)
+                row("\u03bb", loadDuration?.explanation ?: "Time effect factor \u2014 default (combination not known)",
+                    fmt(loadDuration?.factor ?: LAMBDA_DEFAULT, 2))
+            else
+                row("CD", loadDuration?.explanation ?: "Load duration \u2014 set by hand or combination not known", fmt(f.cd, 2)),
+            row("CM", "Wet service", fmt(f.cm, 2)),
+            row("Ct", "Temperature", fmt(f.ct, 2)),
+            row("Ci", "Incising", fmt(f.ci, 2)),
+            row("Cr", "Repetitive member", fmt(f.cr, 2))
+        )
+        if (!isGlulam) {
+            factorRows += row("CF (bending)", "Size factor, Fb (Table 4A/4B)", fmt(computeSawnCF(NdsCfProperty.BENDING), 3))
+            factorRows += row("CF (tension)", "Size factor, Ft", fmt(computeSawnCF(NdsCfProperty.TENSION), 3))
+            factorRows += row("CF (compression)", "Size factor, Fc", fmt(computeSawnCF(NdsCfProperty.COMPRESSION), 3))
+        }
+        factorRows += row("Cfu", "Flat use factor (flatwise bending only)", fmt(resolveFlatUseCfu(f, m, profile), 3))
+        if (isGlulam) factorRows += row("CV", "Volume factor (strong axis)", fmt(computeCV(u.strongBend), 3))
+        factorRows += row("CL (strong axis)", "Beam stability, bending about x-x", fmt(strongAx.cl, 3))
+        factorRows += row("CL (weak axis)", "Beam stability, bending about y-y", fmt(weakAx.cl, 3))
+        factorRows += row("CP", "Column stability", fmt(cpParts.cp, 3))
+        groups += DesignPropertyGroup("Adjustment factors", factorRows)
+
+        val bendStrong = computeNdsBeamStability(u.strongBend, profile, m, f, isGlulam, aboutStrongAxis = true)
+        val bendWeak = computeNdsBeamStability(u.weakBend, profile, m, f, isGlulam, aboutStrongAxis = false)
+        val lenRows = mutableListOf<DesignPropertyRow>()
+        lenRows += row("lu (strong-axis bending)", "Unbraced length, compression edge", "${fmt(u.strongBend, 1)} in")
+        bendStrong?.let {
+            lenRows += row("le (strong-axis bending)", "${it.effectiveLength.formula}  (${it.effectiveLength.tableReference})",
+                "${fmt(it.le, 1)} in  [lu/d = ${fmt(it.effectiveLength.luOverD, 2)}]")
+            lenRows += row("RB (strong axis)", if (it.exemptByShape) "d \u2264 b: CL = 1.0 (NDS 3.3.3.1)" else "Slenderness, \u221a(le\u00b7d/b\u00b2)",
+                fmt(it.rb, 2))
+        }
+        lenRows += row("lu (weak-axis bending)", "Unbraced length, flatwise bending" + if (u.weakIsDefault) " \u2014 default: larger of top/bottom bracing" else "",
+            "${fmt(u.weakBend, 1)} in")
+        bendWeak?.let {
+            lenRows += row("le (weak-axis bending)", "${it.effectiveLength.formula}  (${it.effectiveLength.tableReference})",
+                "${fmt(it.le, 1)} in  [lu/d = ${fmt(it.effectiveLength.luOverD, 2)}]")
+            lenRows += row("RB (weak axis)", if (it.exemptByShape) "d \u2264 b: CL = 1.0 (NDS 3.3.3.1)" else "Slenderness, \u221a(le\u00b7d/b\u00b2)",
+                fmt(it.rb, 2))
+        }
+        lenRows += row("le1 (column, strong plane)", "Ke = 1.0" + if (u.strongIsDefault) " \u2014 default: larger of top/bottom bracing" else "",
+            "${fmt(u.colStrong, 1)} in  [le1/d1 = ${fmt(if (d > 0) u.colStrong / d else 0.0, 2)}]")
+        lenRows += row("le2 (column, weak plane)", "Ke = 1.0" + if (u.weakIsDefault) " \u2014 default: larger of top/bottom bracing" else "",
+            "${fmt(u.colWeak, 1)} in  [le2/d2 = ${fmt(if (b > 0) u.colWeak / b else 0.0, 2)}]")
+        groups += DesignPropertyGroup("Unbraced and effective lengths", lenRows)
+
+        return groups
+    }
+
+    // ------------------------------------------------------------------
     // CapacityCalculator contract
     // ------------------------------------------------------------------
 
-    override fun evaluate(demand: StationDemand): RawCapacityResult {
-        val lb = if (demand.compressionFlange == Flange.TOP)
+    /**
+     * The unbraced lengths that apply to each axis, resolved separately —
+     * members are usually braced differently about their two axes, and
+     * using one length for everything under-checks whichever axis is
+     * braced less.
+     *
+     *  - [strongBend]: compression edge for edgewise (x-x) bending — the
+     *    lateral-torsional buckling length, from the flange that is in
+     *    compression (this is what lbTop / lbBottom describe).
+     *  - [weakBend]: flatwise (y-y) bending.
+     *  - [colStrong] / [colWeak]: column buckling in the plane of strong-axis
+     *    bending and about the weak axis.
+     *
+     * Where the demand carries no per-axis length ([StationDemand.luStrongAxis]
+     * / [StationDemand.luWeakAxis] null) the larger of lbTop and lbBottom is
+     * used — the conservative envelope, and the only information available.
+     */
+    private data class Unbraced(
+        val strongBend: Double,
+        val weakBend: Double,
+        val colStrong: Double,
+        val colWeak: Double,
+        val weakIsDefault: Boolean,
+        val strongIsDefault: Boolean
+    )
+
+    private fun unbraced(demand: StationDemand): Unbraced {
+        val flangeLb = if (demand.compressionFlange == Flange.TOP)
             demand.lbTop.inInches else demand.lbBottom.inInches
-        val luAxial = lb  // Unbraced length for column stability
+        val envelope = maxOf(demand.lbTop.inInches, demand.lbBottom.inInches)
+        val strongPlane = demand.luStrongAxis?.inInches ?: envelope
+        val weakPlane = demand.luWeakAxis?.inInches ?: envelope
+        return Unbraced(
+            strongBend = flangeLb, weakBend = weakPlane,
+            colStrong = strongPlane, colWeak = weakPlane,
+            weakIsDefault = demand.luWeakAxis == null, strongIsDefault = demand.luStrongAxis == null
+        )
+    }
+
+    /**
+     * A copy of this calculator carrying the load duration factor for the
+     * combination that produced [demand], or null when none is needed (the
+     * user set CD by hand, the demand isn't tied to a combination, or this
+     * already IS the per-combination copy).
+     *
+     * CD (NDS 2.3.2) is a property of the loads in a combination — the
+     * shortest-duration load acting sets it — so it can't be one number for
+     * the whole member. ASD: CD multiplies Fb, Ft, Fv, Fc (never E, Emin or
+     * Fc-perp) through the usual adjustment chain. LRFD: CD does not apply;
+     * the time effect factor lambda does instead, applied with phi
+     * ([designFactorsFor]) — so the nominal capacities carry no duration factor.
+     */
+    private fun forDemand(demand: StationDemand, methodology: DesignMethodology): NdsWoodCapacityCalculator? {
+        if (loadDuration != null || !adjustmentFactors.usesAutoLoadDuration) return null
+        val rd = NdsLoadDuration.resolve(demand.combinationLoadCategories, methodology, edition) ?: return null
+        val cd = if (methodology == DesignMethodology.LRFD) 1.0 else rd.factor
+        return NdsWoodCapacityCalculator(
+            profile, material,
+            adjustmentFactors.copy(cd = cd, loadDurationFromCombination = false),
+            edition, memberIsStrongAxis, rd
+        )
+    }
+
+    override fun evaluate(demand: StationDemand): RawCapacityResult {
+        forDemand(demand, demand.combinationMethodology ?: DesignMethodology.ASD)?.let { return it.evaluate(demand) }
+        val u = unbraced(demand)
+        val lb = u.strongBend
 
         val isAxialTension = demand.axial.pounds >= 0.0
 
-        val (nomMn, lsMn) = calculateBending(lb)
+        val (nomMn, lsMn) = calculateBending(u)
         val (nomVn, lsVn) = calculateShear()
         val (nomPn, lsPn) = if (isAxialTension)
             calculateTension()
         else
-            calculateCompression(luAxial)
+            calculateCompression(u.colStrong, u.colWeak)
 
         // The capacity about the *other* principal axis, checked against
         // StationDemand.momentY. (It used to be a flat "N/A — weak axis not
         // checked for wood", so out-of-plane moment never reached any check.)
-        val secondaryAxis = calculateBendingAbout(!memberIsStrongAxis, lb)
+        val secondaryAxis = calculateBendingAbout(!memberIsStrongAxis, u)
 
         return RawCapacityResult(
             nominalFlexureX      = nomMn,
@@ -164,22 +377,24 @@ class NdsWoodCapacityCalculator(
         demand: StationDemand,
         methodology: DesignMethodology
     ): StrengthDesignResult {
-        val lb = if (demand.compressionFlange == Flange.TOP)
-            demand.lbTop.inInches else demand.lbBottom.inInches
-        val luAxial = lb
+        forDemand(demand, methodology)?.let { return it.evaluateDetailed(demand, methodology) }
+        val u = unbraced(demand)
+        val lb = u.strongBend
         val isAxialTension = demand.axial.pounds >= 0.0
 
-        val (nomMn, lsMn, tracesMn) = calculateBending(lb)
+        val (nomMn, lsMn, tracesMn) = calculateBending(u)
         val (nomVn, lsVn, tracesVn) = calculateShear()
         val (nomPn, lsPn, tracesPn) = if (isAxialTension)
             calculateTension()
         else
-            calculateCompression(luAxial)
+            calculateCompression(u.colStrong, u.colWeak)
 
-        // NDS is inherently ASD. For LRFD, apply format conversion factor
-        // lambda per NDS Appendix N (lambda = 0.8 for occupancy live, snow,
-        // roof live; 1.0 for wind/seismic). Conservative default: 0.8.
-        val lambda = if (methodology == DesignMethodology.LRFD) 0.8 else 1.0
+        // NDS is inherently ASD. For LRFD, apply the time effect factor
+        // lambda per NDS Appendix N, Table N3 — 0.6 dead load only, 0.8
+        // occupancy live / roof live / snow / rain, 1.0 with wind or
+        // earthquake — resolved for THIS combination. When the combination
+        // isn't known (or CD was set by hand) the old default of 0.8 stands.
+        val lambda = if (methodology == DesignMethodology.LRFD) (loadDuration?.factor ?: LAMBDA_DEFAULT) else 1.0
 
         // ASD: design value = adjusted F' * S (already in nominals)
         // LRFD: design value = lambda * phi * F'n * S
@@ -216,7 +431,7 @@ class NdsWoodCapacityCalculator(
         // Moment about the other principal axis (StationDemand.momentY), when present.
         val secondaryDemand = abs(demand.momentY.lbIn)
         val secondaryCheck = if (secondaryDemand > 0.0) {
-            val sec = calculateBendingAbout(!memberIsStrongAxis, lb)
+            val sec = calculateBendingAbout(!memberIsStrongAxis, u)
             val designMnSec = if (methodology == DesignMethodology.LRFD)
                 lambda * phiBending * sec.nominal else sec.nominal
             StrengthCheckResult(
@@ -230,7 +445,7 @@ class NdsWoodCapacityCalculator(
         } else null
 
         val combinedChecks = buildCombinedChecks(
-            demand = demand, lb = lb, luAxial = luAxial,
+            demand = demand, u = u,
             kBend = kBend, kTens = kTens, kComp = kComp,
             isLrfd = methodology == DesignMethodology.LRFD
         )
@@ -277,6 +492,9 @@ class NdsWoodCapacityCalculator(
             methodology      = methodology,
             secondaryMomentCheck = secondaryCheck,
             combinedChecks   = combinedChecks,
+            selectedProperties = buildSelectedProperties(u, methodology, demand),
+            codeDataNotices  = codeDataNotices(methodology, demand),
+            standardLabel    = NdsCodeData.standardLabel(edition),
             designParameters = buildMap {
                 put("Member Type",  if (isGlulam) "Glulam" else "Sawn Lumber / SCL")
                 put("Species",      material.species.name)
@@ -284,7 +502,8 @@ class NdsWoodCapacityCalculator(
                 put("Lu (bending)", String.format(Locale.US, "%.1f in", lb))
                 put("CL",           String.format(Locale.US, "%.3f", cl))
                 if (isGlulam) put("CV", String.format(Locale.US, "%.3f", cv))
-                put("CD",           String.format(Locale.US, "%.2f", adjustmentFactors.cd))
+                if (methodology != DesignMethodology.LRFD)
+                    put("CD",       String.format(Locale.US, "%.2f", adjustmentFactors.cd))
                 put("CM",           String.format(Locale.US, "%.2f", adjustmentFactors.cm))
                 put("Ct",           String.format(Locale.US, "%.2f", adjustmentFactors.ct))
                 put("Cr",           String.format(Locale.US, "%.2f", adjustmentFactors.cr))
@@ -319,10 +538,25 @@ class NdsWoodCapacityCalculator(
             )
         }
 
-        // LRFD — NDS Appendix N. lambda = 0.8 for occupancy live/snow/roof
-        // live, 1.0 for wind/seismic; 0.8 used as the conservative default,
-        // matching evaluateDetailed().
-        val lambda = 0.8
+        return lrfdFactors(LAMBDA_DEFAULT)
+    }
+
+    /**
+     * The factors for the combination that produced [demand]. Same as
+     * [designFactors] except LRFD uses that combination's own time effect
+     * factor lambda (Table N3) instead of the 0.8 default — so a dead-load-only
+     * combination gets 0.6 and a wind combination 1.0.
+     */
+    fun designFactorsFor(demand: StationDemand, methodology: DesignMethodology): DesignFactorSet {
+        if (methodology != DesignMethodology.LRFD || !adjustmentFactors.usesAutoLoadDuration) {
+            return designFactors(methodology)
+        }
+        val rd = NdsLoadDuration.resolve(demand.combinationLoadCategories, methodology, edition)
+        return lrfdFactors(rd?.factor ?: LAMBDA_DEFAULT)
+    }
+
+    private fun lrfdFactors(lambda: Double): DesignFactorSet {
+        val methodology = DesignMethodology.LRFD
         val phiBending     = 0.85
         val phiShear       = 0.75
         val phiCompression = 0.90
@@ -330,10 +564,10 @@ class NdsWoodCapacityCalculator(
 
         return DesignFactorSet(
             methodology       = methodology,
-            flexure           = DesignFactor(lambda * phiBending,     "NDS Appendix N — Kf/phi (bending)"),
-            shear             = DesignFactor(lambda * phiShear,       "NDS Appendix N — Kf/phi (shear)"),
-            axialTension      = DesignFactor(lambda * phiTension,     "NDS Appendix N — Kf/phi (tension)"),
-            axialCompression  = DesignFactor(lambda * phiCompression, "NDS Appendix N — Kf/phi (compression)"),
+            flexure           = DesignFactor(lambda * phiBending,     "NDS Appendix N — lambda x phi (bending); KF not applied"),
+            shear             = DesignFactor(lambda * phiShear,       "NDS Appendix N — lambda x phi (shear); KF not applied"),
+            axialTension      = DesignFactor(lambda * phiTension,     "NDS Appendix N — lambda x phi (tension); KF not applied"),
+            axialCompression  = DesignFactor(lambda * phiCompression, "NDS Appendix N — lambda x phi (compression); KF not applied"),
             torsion           = DesignFactor(1.0, "Torsion not codified for wood")
         )
     }
@@ -375,8 +609,82 @@ class NdsWoodCapacityCalculator(
         val available: Boolean get() = unavailableReason == null
     }
 
-    private fun bendingAxis(strong: Boolean, lb: Double): BendingAxis =
-        if (strong) strongBendingAxis(lb) else weakBendingAxis()
+    private fun bendingAxis(strong: Boolean, u: Unbraced): BendingAxis =
+        if (strong) strongBendingAxis(u.strongBend) else weakBendingAxis(u.weakBend)
+
+    /**
+     * The NDS 3.3.3 development for one axis, as traces: the effective-length
+     * expression actually used (Table 3.3.3, with which row and which
+     * lu/d), RB, FbE, F*b and CL — or, when d <= b, the statement that
+     * CL = 1.0 and why.
+     */
+    private fun stabilityTraces(stab: NdsBeamStabilityDetail, fb: Double): List<DesignEquationTrace> {
+        val f = adjustmentFactors
+        val traces = mutableListOf<DesignEquationTrace>()
+        val el = stab.effectiveLength
+        val axisName = if (stab.aboutStrongAxis) "strong axis (x-x)" else "weak axis (y-y)"
+        traces += DesignEquationTrace(
+            symbolicEquation = el.formula,
+            substitutedEquation = "lu/d = ${fmt(stab.lb)}/${fmt(stab.d)} = ${fmt(el.luOverD, 2)} -> " +
+                (if (el.dTerm > 0.0) "le = ${el.coefficient} x ${fmt(stab.lb)} + ${el.dTerm.toInt()} x ${fmt(stab.d)}"
+                else "le = ${el.coefficient} x ${fmt(stab.lb)}") + "  [$axisName]",
+            result = fmt(stab.le, 2),
+            units = "in",
+            codeReference = el.tableReference,
+            variables = mapOf("lu" to stab.lb, "d" to stab.d, "lu/d" to el.luOverD, "le" to stab.le)
+        )
+        if (stab.exemptByShape) {
+            traces += DesignEquationTrace(
+                symbolicEquation = "d <= b  ->  CL = 1.0",
+                substitutedEquation = "d = ${fmt(stab.d)} <= b = ${fmt(stab.b)}  [$axisName]",
+                result = "1.000",
+                units = "",
+                codeReference = "NDS 3.3.3.1",
+                variables = mapOf("d" to stab.d, "b" to stab.b)
+            )
+            return traces
+        }
+        val cfStab = computeSawnCF(NdsCfProperty.BENDING)
+        val ratio = stab.fbE / stab.fStarB
+        traces += DesignEquationTrace(
+            symbolicEquation = "RB = sqrt(le x d / b^2)",
+            substitutedEquation = "RB = sqrt(${fmt(stab.le)} x ${fmt(stab.d)} / ${fmt(stab.b)}^2)",
+            result = fmt(stab.rb, 2) + if (stab.rbExceedsLimit) " (exceeds 50 — NDS 3.3.3.7)" else "",
+            units = "",
+            codeReference = "NDS 3.3.3.6, Eq. 3.3-5",
+            variables = mapOf("le" to stab.le, "d" to stab.d, "b" to stab.b)
+        )
+        traces += DesignEquationTrace(
+            symbolicEquation = "FbE = 1.20 E'min / RB^2",
+            substitutedEquation = "FbE = 1.20 x ${fmt(stab.eMinAdj, 0)} / ${fmt(stab.rb, 2)}^2",
+            result = fmt(stab.fbE, 0),
+            units = "psi",
+            codeReference = "NDS 3.3.3.8",
+            variables = mapOf("E'min" to stab.eMinAdj, "RB" to stab.rb)
+        )
+        traces += DesignEquationTrace(
+            symbolicEquation = "F*b = Fb x CD x CM x Ct x CF x Ci x Cr   (all factors except Cfu, CV, CL)",
+            substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                "${fmt(cfStab, 3)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
+            result = fmt(stab.fStarB, 0),
+            units = "psi",
+            codeReference = "NDS 3.3.3.8",
+            variables = mapOf(
+                "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
+                "CF" to cfStab, "Ci" to f.ci, "Cr" to f.cr
+            )
+        )
+        traces += DesignEquationTrace(
+            symbolicEquation = "CL = (1+(FbE/F*b))/1.9 - sqrt([(1+(FbE/F*b))/1.9]^2 - (FbE/F*b)/0.95)",
+            substitutedEquation = "CL = (1+${fmt(ratio, 3)})/1.9 - sqrt([(1+${fmt(ratio, 3)})/1.9]^2 - " +
+                "${fmt(ratio, 3)}/0.95)",
+            result = fmt(stab.cl, 3),
+            units = "",
+            codeReference = "NDS 3.3.3.8, Eq. 3.3-6",
+            variables = mapOf("FbE" to stab.fbE, "F*b" to stab.fStarB, "FbE/F*b" to ratio)
+        )
+        return traces
+    }
 
     /**
      * Strong-axis (edgewise, x-x) bending — NDS 3.3.
@@ -393,48 +701,7 @@ class NdsWoodCapacityCalculator(
         val stab = computeNdsBeamStability(lb, profile, designMaterial, f, isGlulam)
         val cl = stab?.cl ?: 1.0
 
-        val traces = mutableListOf<DesignEquationTrace>()
-        if (stab != null) {
-            val cfStab = computeSawnCF(NdsCfProperty.BENDING)
-            val ratio = stab.fbE / stab.fStarB
-            traces += DesignEquationTrace(
-                symbolicEquation = "RB = sqrt(le x d / b^2)",
-                substitutedEquation = "RB = sqrt(${fmt(stab.le)} x ${fmt(stab.d)} / ${fmt(stab.b)}^2)",
-                result = fmt(stab.rb, 2) + if (stab.rbExceedsLimit) " (exceeds 50 — NDS 3.3.3.7)" else "",
-                units = "",
-                codeReference = "NDS 3.3.3.6, Eq. 3.3-5",
-                variables = mapOf("le" to stab.le, "d" to stab.d, "b" to stab.b)
-            )
-            traces += DesignEquationTrace(
-                symbolicEquation = "FbE = 1.20 E'min / RB^2",
-                substitutedEquation = "FbE = 1.20 x ${fmt(stab.eMinAdj, 0)} / ${fmt(stab.rb, 2)}^2",
-                result = fmt(stab.fbE, 0),
-                units = "psi",
-                codeReference = "NDS 3.3.3.8",
-                variables = mapOf("E'min" to stab.eMinAdj, "RB" to stab.rb)
-            )
-            traces += DesignEquationTrace(
-                symbolicEquation = "F*b = Fb x CD x CM x Ct x CF x Ci x Cr   (all factors except Cfu, CV, CL)",
-                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
-                    "${fmt(cfStab, 3)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
-                result = fmt(stab.fStarB, 0),
-                units = "psi",
-                codeReference = "NDS 3.3.3.8",
-                variables = mapOf(
-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
-                    "CF" to cfStab, "Ci" to f.ci, "Cr" to f.cr
-                )
-            )
-            traces += DesignEquationTrace(
-                symbolicEquation = "CL = (1+(FbE/F*b))/1.9 - sqrt([(1+(FbE/F*b))/1.9]^2 - (FbE/F*b)/0.95)",
-                substitutedEquation = "CL = (1+${fmt(ratio, 3)})/1.9 - sqrt([(1+${fmt(ratio, 3)})/1.9]^2 - " +
-                    "${fmt(ratio, 3)}/0.95)",
-                result = fmt(stab.cl, 3),
-                units = "",
-                codeReference = "NDS 3.3.3.8, Eq. 3.3-6",
-                variables = mapOf("FbE" to stab.fbE, "F*b" to stab.fStarB, "FbE/F*b" to ratio)
-            )
-        }
+        val traces = if (stab != null) stabilityTraces(stab, fb).toMutableList() else mutableListOf<DesignEquationTrace>()
 
         val fbAdj: Double
         val fStar: Double
@@ -544,25 +811,48 @@ class NdsWoodCapacityCalculator(
 
     /**
      * Weak-axis (flatwise, y-y) bending — the load is on the member's wide
-     * face. CL = 1.0 because the member's depth (its narrow dimension) does
-     * not exceed its breadth (NDS 3.3.3.1), so there is no lateral-torsional
-     * buckling to check. The flat use factor Cfu applies (NDS 4.3.7; Table
-     * 4A / 4B for sawn lumber, Table 5A / 5C for glulam).
+     * face. CL comes from the same NDS 3.3.3 development as the strong axis
+     * but with d and b swapped (d = the member's width, b = its depth). For
+     * any rectangular member bent flatwise d <= b, so NDS 3.3.3.1 sets
+     * CL = 1.0 — but that is now the result of the check, shown in the
+     * traces, rather than an assumption; a member whose width exceeds its
+     * depth would go through the full RB / FbE / CL calculation with its own
+     * [lbWeak]. The flat use factor Cfu applies (NDS 4.3.7; Table 4A / 4B
+     * for sawn lumber, Table 5A / 5C for glulam).
      *
      * Sawn lumber has one tabulated Fb for both axes: F'b = Fb * CD * CM *
-     * Ct * CF * Cfu * Ci * Cr (CF as tabulated by the member's nominal width,
-     * with Cfu on top — Table 4A's note for dimension lumber used flatwise).
+     * Ct * CL * CF * Cfu * Ci * Cr (CF as tabulated by the member's nominal
+     * width, with Cfu on top — Table 4A's note for dimension lumber used
+     * flatwise).
      *
      * Glulam's Fby is tabulated separately from Fbx, and isn't sourced for
      * every combination: where it's missing this reports the axis as
      * unavailable rather than substituting Fbx.
      */
-    private fun weakBendingAxis(): BendingAxis {
+    private fun weakBendingAxis(lbWeak: Double): BendingAxis {
         val f = adjustmentFactors
         val sy = profile.propertiesWeakAxis.s.inIn3
         val cfu = resolveFlatUseCfu(f, designMaterial, profile)
 
+        val stab = computeNdsBeamStability(lbWeak, profile, designMaterial, f, isGlulam, aboutStrongAxis = false)
+        val cl = stab?.cl ?: 1.0
+        val stabTraces = mutableListOf<DesignEquationTrace>()
+        if (stab != null) {
+            stabTraces += stabilityTraces(stab, designMaterial.referenceBending.inPsi)
+        } else {
+            val dW = if (profile is WoodProfile) profile.dressedWidth.inInches else sqrt(profile.area.inIn2)
+            val bW = profile.depth.inInches
+            if (dW <= bW) stabTraces += DesignEquationTrace(
+                symbolicEquation = "d <= b  ->  CL = 1.0",
+                substitutedEquation = "d = ${fmt(dW)} <= b = ${fmt(bW)}  [weak axis (y-y)]",
+                result = "1.000", units = "", codeReference = "NDS 3.3.3.1",
+                variables = mapOf("d" to dW, "b" to bW)
+            )
+        }
+        val clLabel = fmt(cl, 3)
+
         val fbAdj: Double
+        val fStarNoCl: Double
         val adjTrace: DesignEquationTrace
         if (isGlulam) {
             val fby = WoodPropertyService
@@ -576,54 +866,57 @@ class NdsWoodCapacityCalculator(
                     unavailableReason = reason
                 )
             }
-            fbAdj = fby * f.cd * f.cm * f.ct * cfu * f.ci
+            fStarNoCl = fby * f.cd * f.cm * f.ct * cfu * f.ci
+            fbAdj = fStarNoCl * cl
             adjTrace = DesignEquationTrace(
-                symbolicEquation = "F'by = Fby x CD x CM x Ct x CL x Cfu x Ci   (CL = 1.0, flatwise)",
+                symbolicEquation = "F'by = Fby x CD x CM x Ct x CL x Cfu x Ci",
                 substitutedEquation = "F'by = ${fmt(fby, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
-                    "1.000 x ${fmt(cfu, 3)} x ${fmt(f.ci)}",
+                    "$clLabel x ${fmt(cfu, 3)} x ${fmt(f.ci)}",
                 result = fmt(fbAdj, 0),
                 units = "psi",
                 codeReference = "NDS 3.3.3.1, Table 5A (Fby, Cfu)",
                 variables = mapOf(
                     "Fby" to fby, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
-                    "CL" to 1.0, "Cfu" to cfu, "Ci" to f.ci
+                    "CL" to cl, "Cfu" to cfu, "Ci" to f.ci
                 )
             )
         } else {
             val fb = designMaterial.referenceBending.inPsi
             val cf = computeSawnCF(NdsCfProperty.BENDING)
-            fbAdj = fb * f.cd * f.cm * f.ct * cf * cfu * f.ci * f.cr
+            fStarNoCl = fb * f.cd * f.cm * f.ct * cf * cfu * f.ci * f.cr
+            fbAdj = fStarNoCl * cl
             adjTrace = DesignEquationTrace(
-                symbolicEquation = "F'b = Fb x CD x CM x Ct x CL x CF x Cfu x Ci x Cr   (CL = 1.0, flatwise)",
+                symbolicEquation = "F'b = Fb x CD x CM x Ct x CL x CF x Cfu x Ci x Cr",
                 substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
-                    "1.000 x ${fmt(cf, 3)} x ${fmt(cfu, 3)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
+                    "$clLabel x ${fmt(cf, 3)} x ${fmt(cfu, 3)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
                 result = fmt(fbAdj, 0),
                 units = "psi",
                 codeReference = "NDS 3.3.3.1, 4.3.7, Table 4A (CF, Cfu)",
                 variables = mapOf(
-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "CL" to 1.0,
+                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "CL" to cl,
                     "CF" to cf, "Cfu" to cfu, "Ci" to f.ci, "Cr" to f.cr
                 )
             )
         }
 
         return BendingAxis(
-            strong = false, s = sy, fbAdj = fbAdj, fStar = fbAdj, fStarStar = fbAdj, cl = 1.0,
-            rbExceedsLimit = false,
+            strong = false, s = sy, fbAdj = fbAdj, fStar = fStarNoCl, fStarStar = fbAdj, cl = cl,
+            rbExceedsLimit = stab?.rbExceedsLimit ?: false,
             limitState = "Bending — Weak axis / flatwise, Cfu = ${fmt(cfu, 2)} (NDS 4.3.7)",
-            traces = listOf(adjTrace),
+            traces = stabTraces + adjTrace,
             fStarTrace = adjTrace.copy(
-                symbolicEquation = "F*b = F'b   (flatwise: CL = 1.0, no CV)", codeReference = "NDS 3.9.1"
+                symbolicEquation = "F*b = F'b / CL   (flatwise: all factors except CL; no CV)", codeReference = "NDS 3.9.1",
+                result = fmt(fStarNoCl, 0)
             ),
             fStarStarTrace = adjTrace.copy(
-                symbolicEquation = "F**b = F'b   (flatwise: CL = 1.0, no CV)", codeReference = "NDS 3.9.1"
+                symbolicEquation = "F**b = F'b   (flatwise: CL in, no CV)", codeReference = "NDS 3.9.1"
             )
         )
     }
 
     /** Bending capacity about the given principal axis: F'b x S, with its traces. */
-    private fun calculateBendingAbout(strong: Boolean, lb: Double): LimitStateResult {
-        val ax = bendingAxis(strong, lb)
+    private fun calculateBendingAbout(strong: Boolean, u: Unbraced): LimitStateResult {
+        val ax = bendingAxis(strong, u)
         if (!ax.available) return LimitStateResult(0.0, ax.limitState, ax.traces)
         if (ax.rbExceedsLimit) {
             return LimitStateResult(
@@ -645,8 +938,8 @@ class NdsWoodCapacityCalculator(
     }
 
     /** Bending capacity about the axis the member is oriented to bend about. */
-    private fun calculateBending(lb: Double): LimitStateResult =
-        calculateBendingAbout(memberIsStrongAxis, lb)
+    private fun calculateBending(u: Unbraced): LimitStateResult =
+        calculateBendingAbout(memberIsStrongAxis, u)
 
     /**
      * NDS 3.3.3 Beam Stability Factor CL.
@@ -692,6 +985,9 @@ class NdsWoodCapacityCalculator(
         resolveSawnCf(adjustmentFactors, designMaterial, profile, property)
 
     companion object {
+        /** Time effect factor used when the combination isn't known (NDS Table N3, occupancy live load). */
+        const val LAMBDA_DEFAULT = 0.8
+
         /** Cap on a point-path combined ratio — see [pointInteractionCheck]. */
         const val POINT_RATIO_CAP = 99.0
 
@@ -814,7 +1110,7 @@ class NdsWoodCapacityCalculator(
             variables = mapOf("F'v" to fvAdj, "A" to area)
         )
 
-        return LimitStateResult(vn, "Shear (NDS 3.4)", listOf(fvTrace, vnTrace))
+        return LimitStateResult(vn, "Shear \u2014 Vn = (2/3) F'v A (NDS 3.4.2)", listOf(fvTrace, vnTrace))
     }
 
     // ------------------------------------------------------------------
@@ -833,11 +1129,11 @@ class NdsWoodCapacityCalculator(
         val traces: List<DesignEquationTrace>
     )
 
-    private fun compressionParts(lu: Double): CompressionParts {
+    private fun compressionParts(luStrong: Double, luWeak: Double): CompressionParts {
         val fc = designMaterial.referenceCompressionParallel.inPsi
         val f = adjustmentFactors
 
-        val cpResult = computeCPTraced(lu)
+        val cpResult = computeCPTraced(luStrong, luWeak)
         val fStarC = fc * f.cd * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
         val fcAdj = fStarC * cpResult.cp
 
@@ -857,9 +1153,9 @@ class NdsWoodCapacityCalculator(
      * F'c = Fc * CD * CM * Ct * CF * Ci * CP
      * CP computed from NDS 3.7.1 using slenderness ratio le/d.
      */
-    private fun calculateCompression(lu: Double): LimitStateResult {
+    private fun calculateCompression(luStrong: Double, luWeak: Double): LimitStateResult {
         val area = profile.area.inIn2
-        val parts = compressionParts(lu)
+        val parts = compressionParts(luStrong, luWeak)
 
         val pn = parts.fcAdj * area
         val pnTrace = DesignEquationTrace(
@@ -886,16 +1182,21 @@ class NdsWoodCapacityCalculator(
      * CP = (1 + ratio) / (2c) - sqrt(((1 + ratio) / (2c))^2 - ratio/c)
      * where ratio = FcE / F*c, c = 0.8 (sawn) or 0.9 (glulam/SCL)
      */
-    private fun computeCPTraced(lu: Double): CpResult {
-        if (lu <= 0.0) return CpResult(1.0, emptyList())
+    private fun computeCPTraced(luStrong: Double, luWeak: Double): CpResult {
+        if (luStrong <= 0.0 && luWeak <= 0.0) return CpResult(1.0, emptyList())
 
         val d = profile.depth.inInches
         val b = if (profile is WoodProfile) profile.dressedWidth.inInches
         else sqrt(profile.area.inIn2)
 
-        // NDS 3.7.1: slenderness ratio le/d, must not exceed 50
-        val le    = lu  // Effective length — caller responsible for ke * lu if needed
-        val slenderness = le / minOf(d, b)
+        // NDS 3.7.1.2 / 3.7.1.4: le/d is evaluated for BOTH buckling planes —
+        // le1/d1 in the plane of strong-axis bending, le2/d2 about the weak
+        // axis — and the larger governs (each plane has its own unbraced
+        // length; Ke = 1.0). It must not exceed 50.
+        val slenderStrong = if (d > 0.0) luStrong / d else 0.0
+        val slenderWeak = if (b > 0.0) luWeak / b else 0.0
+        val weakGoverns = slenderWeak >= slenderStrong
+        val slenderness = maxOf(slenderStrong, slenderWeak)
         if (slenderness > 50.0) return CpResult(0.0, emptyList())  // Exceeds NDS max — inadequate
 
         // Critical buckling stress FcE (NDS 3.7.1)
@@ -909,13 +1210,23 @@ class NdsWoodCapacityCalculator(
             codeReference = "NDS 3.7.1",
             variables = mapOf("E'min" to eMin, "le/d" to slenderness)
         )
+        val planeTrace = DesignEquationTrace(
+            symbolicEquation = "le/d = max(le1/d1, le2/d2)   (Ke = 1.0)",
+            substitutedEquation = "le1/d1 = ${fmt(luStrong)}/${fmt(d)} = ${fmt(slenderStrong, 2)};  " +
+                "le2/d2 = ${fmt(luWeak)}/${fmt(b)} = ${fmt(slenderWeak, 2)}  ->  " +
+                (if (weakGoverns) "weak axis governs" else "strong axis governs"),
+            result = fmt(slenderness, 2),
+            units = "",
+            codeReference = "NDS 3.7.1.2, 3.7.1.4",
+            variables = mapOf("le1" to luStrong, "d1" to d, "le2" to luWeak, "d2" to b)
+        )
 
         // F*c = Fc with all adjustments except CP
         val f = adjustmentFactors
         val fcStar    = designMaterial.referenceCompressionParallel.inPsi *
                 f.cd * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
 
-        if (fcStar <= 0.0) return CpResult(1.0, listOf(fceTrace))
+        if (fcStar <= 0.0) return CpResult(1.0, listOf(planeTrace, fceTrace))
 
         val ratio = fce / fcStar
         val c     = if (isGlulam) 0.90 else 0.80
@@ -932,7 +1243,7 @@ class NdsWoodCapacityCalculator(
             variables = mapOf("FcE" to fce, "F*c" to fcStar, "FcE/F*c" to ratio, "c" to c)
         )
 
-        return CpResult(cp, listOf(fceTrace, cpTrace))
+        return CpResult(cp, listOf(planeTrace, fceTrace, cpTrace))
     }
 
     // ------------------------------------------------------------------
@@ -1014,8 +1325,7 @@ class NdsWoodCapacityCalculator(
      */
     private fun buildCombinedChecks(
         demand: StationDemand,
-        lb: Double,
-        luAxial: Double,
+        u: Unbraced,
         kBend: Double,
         kTens: Double,
         kComp: Double,
@@ -1028,8 +1338,8 @@ class NdsWoodCapacityCalculator(
         val primaryM = abs(demand.moment.lbIn)
         val otherM = abs(demand.momentY.lbIn)
 
-        val strongAx = bendingAxis(true, lb)
-        val weakAx = bendingAxis(false, lb)
+        val strongAx = bendingAxis(true, u)
+        val weakAx = bendingAxis(false, u)
 
         val mStrong = if (memberIsStrongAxis) primaryM else otherM
         val mWeak = if (memberIsStrongAxis) otherM else primaryM
@@ -1050,7 +1360,7 @@ class NdsWoodCapacityCalculator(
             )
             axial < 0.0 || (fb1 > 0.0 && fb2 > 0.0) -> listOf(
                 combinedCompression(
-                    axial, area, luAxial, lb, mStrong, mWeak, fb1, fb2, strongAx, weakAx, kBend, kComp, notes
+                    axial, area, u, mStrong, mWeak, fb1, fb2, strongAx, weakAx, kBend, kComp, notes
                 )
             )
             else -> emptyList()
@@ -1177,7 +1487,7 @@ class NdsWoodCapacityCalculator(
 
     /** NDS 3.9.2 — bending and axial compression (and biaxial bending, per 3.3.3.10). */
     private fun combinedCompression(
-        axialLb: Double, area: Double, luAxial: Double, lb: Double,
+        axialLb: Double, area: Double, u: Unbraced,
         mStrong: Double, mWeak: Double, fb1: Double, fb2: Double,
         strongAx: BendingAxis, weakAx: BendingAxis,
         kBend: Double, kComp: Double, notes: List<String>
@@ -1189,18 +1499,21 @@ class NdsWoodCapacityCalculator(
         val equations = mutableListOf<InteractionEquationResult>()
         val problems = mutableListOf<String>()
 
-        val parts = compressionParts(luAxial)
+        val parts = compressionParts(u.colStrong, u.colWeak)
         val fcAdj = parts.fcAdj * kComp
 
         // d1 = wide face dimension (edgewise bending), d2 = narrow face (flatwise) — NDS Fig. 3H.
         val d1 = profile.depth.inInches
         val d2 = if (profile is WoodProfile) profile.dressedWidth.inInches else sqrt(area)
-        val le = luAxial
+        // Each buckling plane has its own effective length (Ke = 1.0 on the
+        // unbraced length for that axis).
+        val le1 = u.colStrong
+        val le2 = u.colWeak
         val eMinAdj = woodAdjustedEmin(designMaterial, adjustmentFactors)
-        val fcE1 = if (le > 0.0 && d1 > 0.0) 0.822 * eMinAdj / (le / d1).pow(2) else inf
-        val fcE2 = if (le > 0.0 && d2 > 0.0) 0.822 * eMinAdj / (le / d2).pow(2) else inf
+        val fcE1 = if (le1 > 0.0 && d1 > 0.0) 0.822 * eMinAdj / (le1 / d1).pow(2) else inf
+        val fcE2 = if (le2 > 0.0 && d2 > 0.0) 0.822 * eMinAdj / (le2 / d2).pow(2) else inf
 
-        val stab = computeNdsBeamStability(lb, profile, designMaterial, adjustmentFactors, isGlulam)
+        val stab = computeNdsBeamStability(u.strongBend, profile, designMaterial, adjustmentFactors, isGlulam, aboutStrongAxis = true)
         val fbE = stab?.fbE ?: inf
 
         val fb1Adj = strongAx.fbAdj * kBend
@@ -1231,21 +1544,21 @@ class NdsWoodCapacityCalculator(
         if (fcE1.isFinite() && (fb1 > 0.0 || fb2 > 0.0)) {
             traces += DesignEquationTrace(
                 symbolicEquation = "FcE1 = 0.822 E'min / (le1/d1)^2",
-                substitutedEquation = "FcE1 = 0.822 x ${fmt(eMinAdj, 0)} / (${fmt(le)}/${fmt(d1)})^2",
+                substitutedEquation = "FcE1 = 0.822 x ${fmt(eMinAdj, 0)} / (${fmt(le1)}/${fmt(d1)})^2",
                 result = fmt(fcE1, 0),
                 units = "psi",
                 codeReference = "NDS 3.9.2",
-                variables = mapOf("E'min" to eMinAdj, "le1" to le, "d1" to d1)
+                variables = mapOf("E'min" to eMinAdj, "le1" to le1, "d1" to d1)
             )
         }
         if (fcE2.isFinite() && (fb2 > 0.0)) {
             traces += DesignEquationTrace(
                 symbolicEquation = "FcE2 = 0.822 E'min / (le2/d2)^2",
-                substitutedEquation = "FcE2 = 0.822 x ${fmt(eMinAdj, 0)} / (${fmt(le)}/${fmt(d2)})^2",
+                substitutedEquation = "FcE2 = 0.822 x ${fmt(eMinAdj, 0)} / (${fmt(le2)}/${fmt(d2)})^2",
                 result = fmt(fcE2, 0),
                 units = "psi",
                 codeReference = "NDS 3.9.2",
-                variables = mapOf("E'min" to eMinAdj, "le2" to le, "d2" to d2)
+                variables = mapOf("E'min" to eMinAdj, "le2" to le2, "d2" to d2)
             )
         }
         if (fb1 > 0.0 && fb2 > 0.0 && stab != null) {
