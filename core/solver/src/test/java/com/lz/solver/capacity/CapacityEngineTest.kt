@@ -5,6 +5,7 @@ import com.lz.model.units.*
 import com.lz.solver.material.AiscSteelCapacityCalculator
 import com.lz.solver.material.NdsWoodCapacityCalculator
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.UUID
 
@@ -75,12 +76,13 @@ class CapacityEngineTest {
     }
 
     @Test
-    fun `wood LRFD uses real NDS phi, not the old flat 0_9`() {
-        val calculator = NdsWoodCapacityCalculator(woodProfile, woodMaterial)
+    fun `wood LRFD capacity already includes KF phi lambda and the engine does not scale it again`() {
+        // LRFD needs the calculator told so: KF x phi x lambda go INTO the design values
+        // (before CL / CP), they are not a factor applied to the finished capacity.
+        val calculator = NdsWoodCapacityCalculator(woodProfile, woodMaterial, defaultMethodology = DesignMethodology.LRFD)
         val demand = woodDemand()
-
-        val nominal = calculator.evaluate(demand).nominalFlexureX
         val factors = calculator.designFactors(DesignMethodology.LRFD)
+        assertEquals(1.0, factors.flexure.value, 0.0)
 
         val result = CapacityEngine.evaluate(
             demands = listOf(demand),
@@ -89,11 +91,12 @@ class CapacityEngineTest {
             factors = factors
         ) { calculator.evaluate(it) }.first()
 
-        // Expected: lambda (0.8) * phiBending (0.85) * nominal — matches
-        // NdsWoodCapacityCalculator.evaluateDetailed()'s own logic, NOT the
-        // old flat 0.9 placeholder.
-        val expected = 0.8 * 0.85 * nominal
-        assertEquals(expected, result.flexureCheckX.capacity, 1e-6)
+        // Point path and detailed path agree on the LRFD capacity...
+        val detailed = calculator.evaluateDetailed(demand, DesignMethodology.LRFD)
+        assertEquals(detailed.momentCheck.capacity.lbIn, result.flexureCheckX.capacity, 1e-6)
+        // ...and it is the format-converted value, far above the ASD allowable.
+        val asdNominal = NdsWoodCapacityCalculator(woodProfile, woodMaterial).evaluate(demand).nominalFlexureX
+        assertTrue(result.flexureCheckX.capacity > asdNominal)
     }
 
     @Test

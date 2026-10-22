@@ -367,7 +367,7 @@ object MemberAnalysisSolver {
         demandsByCategory: Map<com.lz.model.regulatory.LoadCategory, List<StationDemand>>,
         appliedCategories: Set<com.lz.model.regulatory.LoadCategory> = emptySet()
     ): List<StationDemand> {
-        val actingCategories = loadCategoriesActing(combo, appliedCategories)
+        val actingLoads = loadFactorsActing(combo, appliedCategories)
         val stationCount = demandsByCategory.values.firstOrNull()?.size ?: return emptyList()
         return (0 until stationCount).map { index ->
             var mX = 0.0; var vY = 0.0; var pZ = 0.0
@@ -389,24 +389,24 @@ object MemberAnalysisSolver {
                 momentY = Moment(mY), shearY = Force(vX), torque = Moment(tZ),
                 deflection = Length(delta),
                 combinationName = combo.name,
-                combinationLoadCategories = actingCategories,
+                combinationLoadFactors = actingLoads,
                 combinationMethodology = combo.methodology
             )
         }
     }
 
     /**
-     * The load categories that actually act in [combo]: those it gives a
-     * non-zero factor AND that have at least one load applied to the member.
-     * (A combination can list snow, but if no snow load was entered the
-     * member never sees snow's duration.) Duration-dependent factors — NDS
-     * CD / lambda — are derived from this set.
+     * The loads that actually act in [combo], with their factors: those it
+     * gives a non-zero factor AND that have at least one load applied to the
+     * member. (A combination can list snow, but if no snow load was entered
+     * the member never sees snow's duration.) Duration-dependent factors —
+     * NDS CD / lambda — are derived from this.
      */
-    internal fun loadCategoriesActing(
+    internal fun loadFactorsActing(
         combo: com.lz.model.regulatory.LoadCombination,
         appliedCategories: Set<com.lz.model.regulatory.LoadCategory>
-    ): Set<com.lz.model.regulatory.LoadCategory> =
-        combo.factors.filter { (category, factor) -> factor != 0.0 && category in appliedCategories }.keys
+    ): Map<com.lz.model.regulatory.LoadCategory, Double> =
+        combo.factors.filter { (category, factor) -> factor != 0.0 && category in appliedCategories }
 
     private fun buildFactoredReactions(
         resultsByCategory: Map<com.lz.model.regulatory.LoadCategory, AnalysisResult>,

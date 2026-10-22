@@ -21,15 +21,21 @@ import com.lz.model.structural.DesignMethodology
  *  - Reference design values and size / flat-use factors: sourced from the
  *    NDS 2018 Supplement only.
  *  - Glulam tables: mixed provenance (see the notice text), 2018-era.
+ *  - CD (Table 2.3.2, §2.3.2), KF (Table 2.3.5) and phi (Table 2.3.6):
+ *    checked against the NDS 2018 text published by the AWC; not checked for
+ *    2015 or 2024.
+ *  - Lambda (Appendix N, Table N3): implemented from published summaries of
+ *    the table; Appendix N has not been checked against any edition's text.
  *  - Stability / combined-stress provisions and Table 3.3.3: implemented from
  *    page images of an unspecified edition — not checked per edition.
- *  - CD (ASD) and lambda (LRFD): implemented, unchecked against the pages.
- *  - LRFD format conversion factor KF: not applied.
  */
 object NdsCodeData {
 
     /** Editions the Supplement design values and factors have actually been sourced for. */
     private val designValueEditions = setOf(NdsEdition.NDS_2018)
+
+    /** Editions whose Chapter 2 (CD, KF, phi) has been checked against the published text. */
+    private val chapter2Editions = setOf(NdsEdition.NDS_2018)
 
     fun standardLabel(edition: NdsEdition) = "NDS ${edition.year}"
 
@@ -65,25 +71,40 @@ object NdsCodeData {
             message = "Implemented from page images of an unspecified edition; not yet checked against the $label text."
         )
 
+        val ch2Checked = edition in chapter2Editions
         if (methodology == DesignMethodology.LRFD) {
+            if (!ch2Checked) {
+                out += CodeDataNotice(
+                    dataset = "Format conversion KF and resistance factor phi (NDS 2.3.5, 2.3.6)",
+                    status = CodeDataStatus.UNVERIFIED,
+                    message = "The values (KF 2.54 / 2.70 / 2.88 / 2.40 / 1.67 / 1.76; phi 0.85 / 0.80 / 0.75 / 0.90 / 0.85) " +
+                        "were checked against the NDS 2018 text; they have not been checked against the $label text."
+                )
+            }
             out += CodeDataNotice(
                 dataset = "Time effect factor \u03bb (NDS Appendix N, Table N3)",
                 status = CodeDataStatus.UNVERIFIED,
-                message = "\u03bb is derived per load combination from Table N3 as commonly published; not yet checked " +
-                    "against the $label pages."
-            )
-            out += CodeDataNotice(
-                dataset = "LRFD format conversion factor KF (NDS Appendix N)",
-                status = CodeDataStatus.NOT_IMPLEMENTED,
-                message = "KF is not applied, so LRFD wood capacities are conservative \u2014 roughly 2.5 times too low " +
-                    "(KF \u2248 2.4\u20132.9 on the reference values). Use ASD, or treat LRFD wood results as a lower bound."
+                message = "\u03bb is derived per load combination from Table N3 as published in design references " +
+                    "(0.6 dead only, 0.8 gravity loads, 1.0 wind or earthquake at a strength-level factor); " +
+                    "Appendix N has not been checked against the $label text. Occupancy live load is assumed " +
+                    "(storage 0.7 and impact 1.25 are not distinguished)."
             )
         } else {
+            if (!ch2Checked) {
+                out += CodeDataNotice(
+                    dataset = "Load duration factor CD (NDS 2.3.2, Table 2.3.2)",
+                    status = CodeDataStatus.UNVERIFIED,
+                    message = "The CD values and the shortest-duration-load rule were checked against the NDS 2018 text; " +
+                        "they have not been checked against the $label text."
+                )
+            }
             out += CodeDataNotice(
-                dataset = "Load duration factor CD (NDS 2.3.2, Appendix B)",
+                dataset = "Load type to duration (CD) assignment",
                 status = CodeDataStatus.UNVERIFIED,
-                message = "CD is derived per load combination from the NDS duration classes; not yet checked against " +
-                    "the $label pages. Rain load has no tabulated duration (CD = 1.0 assumed)."
+                message = "Table 2.3.2 lists dead, occupancy live, snow, construction, wind / earthquake and impact loads. " +
+                    "Roof live load is treated here as seven-day (construction) duration, rain load has no tabulated duration " +
+                    "(CD = 1.0 assumed), and snow is taken at two months. CD above 1.0 is not restricted for members treated " +
+                    "with water-borne preservatives or fire retardant (CD must not exceed 1.6 there; Table 2.3.2 note 2)."
             )
         }
         return out

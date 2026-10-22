@@ -2632,6 +2632,7 @@ private val ndsVariableDescriptions: Map<String, String> = mapOf(
     "P" to "Axial compression demand on the member at this station, from the governing load combination.",
     "M" to "Bending moment about the axis being checked at this station.",
     "RB" to "Slenderness ratio for bending members, sqrt(le x d / b^2) (NDS 3.3.3.6). Must not exceed 50 (NDS 3.3.3.7).",
+    "KF\u03c6\u03bb" to "LRFD only. The product of the format conversion factor KF (NDS Table 2.3.5), the resistance factor \u03c6 (Table 2.3.6) and the time effect factor \u03bb (Appendix N, set per load combination) that multiplies the reference design value in place of CD. It is applied before the stability factors are computed, so CL and CP see it.",
     "lu" to "Unbraced length of the compression edge — the distance between points of lateral support for the axis being checked. Strong-axis and weak-axis bending, and the two column-buckling planes, can each have a different one.",
     "lu/d" to "Unbraced length divided by the member's depth in the plane of bending. It selects the row of NDS Table 3.3.3 used for the effective length (below 7, 7 to 14.3, or above 14.3).",
     "le" to "Effective length of the compression edge, accounting for how the load and bracing affect lateral buckling (NDS Table 3.3.3). With the load pattern not specified, the table's footnote 1 expressions are used: 2.06 lu (lu/d < 7), 1.63 lu + 3d (7 to 14.3), or 1.84 lu (> 14.3) — never less than any specific row of the table.",

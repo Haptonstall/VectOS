@@ -232,7 +232,7 @@ internal fun computeNdsBeamStability(
     val fbE = 1.20 * eMinAdj / rbSquared
 
     val fStarB = designMaterial.referenceBending.inPsi *
-            adjustmentFactors.cd * adjustmentFactors.cm *
+            adjustmentFactors.cdBending * adjustmentFactors.cm *
             adjustmentFactors.ct *
             resolveSawnCf(adjustmentFactors, designMaterial, profile, NdsCfProperty.BENDING) *
             adjustmentFactors.ci * adjustmentFactors.cr
@@ -291,7 +291,8 @@ internal fun computeNdsCL(
 internal fun woodAdjustedEmin(
     material: MaterialGrade.Wood,
     adjustmentFactors: NdsAdjustmentFactors
-): Double = woodEmin(material) * adjustmentFactors.cm * adjustmentFactors.ct * adjustmentFactors.ci
+): Double = woodEmin(material) * adjustmentFactors.cm * adjustmentFactors.ct * adjustmentFactors.ci *
+    adjustmentFactors.formatEmin   // 1.0 for ASD; KF x phi-s for LRFD (NDS 2.3.5, 2.3.6)
 
 /**
  * Flat use factor Cfu for bending about the member's weak axis (load on

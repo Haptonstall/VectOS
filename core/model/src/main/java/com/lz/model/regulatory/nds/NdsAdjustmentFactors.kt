@@ -25,8 +25,24 @@ data class NdsAdjustmentFactors(
      * the loads in a combination (the shortest-duration one governs), so a
      * single number is only right for a single combination.
      */
-    val loadDurationFromCombination: Boolean = true
+    val loadDurationFromCombination: Boolean = true,
+    // --- LRFD only: set by the wood calculator, not by the user -------------
+    // For LRFD the reference design values are multiplied by KF x phi x lambda
+    // (Fb, Ft, Fv, Fc) and KF x phi-s (Emin) BEFORE the stability factors are
+    // computed, because CL and CP are nonlinear in F*b / F*c and E'min. These
+    // carry those products; they are 1.0 for ASD. (NDS 2.3.5 - 2.3.7, App. N.)
+    val formatBending: Double = 1.0,
+    val formatTension: Double = 1.0,
+    val formatShear: Double = 1.0,
+    val formatCompression: Double = 1.0,
+    val formatEmin: Double = 1.0
 ) {
+    /** The duration factor (ASD: CD) or its LRFD replacement (KF x phi x lambda), per property. */
+    val cdBending: Double get() = cd * formatBending
+    val cdTension: Double get() = cd * formatTension
+    val cdShear: Double get() = cd * formatShear
+    val cdCompression: Double get() = cd * formatCompression
+
     /**
      * Automatic CD / lambda is in force only while [cd] is still the untouched
      * 1.0 default. A CD the user typed in (anything else) is a deliberate
@@ -46,15 +62,15 @@ data class NdsAdjustmentFactors(
      * should not call these `adjusted*` helpers for any factor that
      * includes `cf` — see that resolver's doc for why.
      */
-    fun adjustedBending(fb: Double)              = fb * cd * cm * ct * cl * cf * cfu * ci * cr
+    fun adjustedBending(fb: Double)              = fb * cdBending * cm * ct * cl * cf * cfu * ci * cr
     /** Adjusted shear design value F'v */
-    fun adjustedShear(fv: Double)                = fv * cd * cm * ct * ci
+    fun adjustedShear(fv: Double)                = fv * cdShear * cm * ct * ci
     /** Adjusted compression parallel F'c. CAUTION: raw `cf` — see [adjustedBending]. */
-    fun adjustedCompressionParallel(fc: Double)  = fc * cd * cm * ct * cf * ci * cp
+    fun adjustedCompressionParallel(fc: Double)  = fc * cdCompression * cm * ct * cf * ci * cp
     /** Adjusted compression perpendicular F'c⊥ */
     fun adjustedCompressionPerp(fcPerp: Double)  = fcPerp * cm * ct * ci * cb
     /** Adjusted tension parallel F't. CAUTION: raw `cf` — see [adjustedBending]. */
-    fun adjustedTension(ft: Double)              = ft * cd * cm * ct * cf * ci
+    fun adjustedTension(ft: Double)              = ft * cdTension * cm * ct * cf * ci
     /** Adjusted modulus of elasticity E' */
     fun adjustedModulus(e: Double)               = e * cm * ct * ci
 }

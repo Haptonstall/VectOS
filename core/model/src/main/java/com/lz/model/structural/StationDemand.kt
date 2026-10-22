@@ -69,9 +69,14 @@ data class StationDemand(
     // means the demand isn't tied to a combination (a legacy single-case
     // solve), and capacity code falls back to its manual setting.
     val combinationName: String? = null,
-    // Load categories that are BOTH in the combination (non-zero factor) AND
-    // actually applied to the member — a combination that lists snow doesn't
-    // involve snow duration if no snow load was entered.
-    val combinationLoadCategories: Set<LoadCategory> = emptySet(),
+    // The loads that are BOTH in the combination (non-zero factor) AND actually
+    // applied to the member, with their factors — a combination that lists snow
+    // doesn't involve snow's duration if no snow load was entered. The factors
+    // matter, not just the categories: NDS Table N3 gives lambda 0.8 to
+    // "1.2D + 1.6S + 0.5W" but 1.0 to "1.2D + 1.0W + L + 0.5S".
+    val combinationLoadFactors: Map<LoadCategory, Double> = emptyMap(),
     val combinationMethodology: DesignMethodology? = null
-)
+) {
+    /** The categories of [combinationLoadFactors]. */
+    val combinationLoadCategories: Set<LoadCategory> get() = combinationLoadFactors.keys
+}

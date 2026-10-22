@@ -60,17 +60,10 @@ object CapacityEngine {
         // own interaction rules (NDS 3.9 for wood) supplies its own here
         // instead of being silently judged by the steel equation.
         interactionCheckProvider: ((StationDemand) -> CodeCheck)? = null,
-        // Design factors for a specific station. Null (the default) uses
-        // [factors] everywhere. Some factors depend on the load combination a
-        // station's demand came from — the NDS LRFD time effect factor lambda
-        // follows the combination's load mix — so a material can supply them
-        // per demand instead of one set for the whole member.
-        factorsProvider: ((StationDemand) -> DesignFactorSet)? = null,
         capacityCalculator: (StationDemand) -> RawCapacityResult
     ): List<PointCapacityResult> {
 
         return demands.map { demand ->
-            val factors = factorsProvider?.invoke(demand) ?: factors
             val raw = capacityCalculator(demand)
             val isAxialTension = demand.axial.pounds >= 0.0
 

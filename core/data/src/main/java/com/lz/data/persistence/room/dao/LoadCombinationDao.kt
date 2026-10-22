@@ -40,4 +40,12 @@ interface LoadCombinationDao {
 
     @Query("SELECT COUNT(*) FROM load_combination_sets")
     suspend fun getCount(): Int
+
+    /** Ids of the combinations currently stored in a set (empty if the set doesn't exist). */
+    @Query("SELECT id FROM load_combinations WHERE set_id = :setId")
+    suspend fun getCombinationIds(setId: String): List<String>
+
+    /** Deletes a set; its combinations and their factors go with it (ON DELETE CASCADE). */
+    @Query("DELETE FROM load_combination_sets WHERE id = :setId")
+    suspend fun deleteCombinationSet(setId: String)
 }

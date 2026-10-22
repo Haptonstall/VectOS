@@ -61,12 +61,12 @@ object NdsLoadDuration {
      * tied to a combination) — the caller then uses its manual setting.
      */
     fun resolve(
-        categories: Set<LoadCategory>,
+        loads: Map<LoadCategory, Double>,
         methodology: DesignMethodology,
         @Suppress("UNUSED_PARAMETER") edition: NdsEdition
     ): ResolvedLoadDuration? {
-        if (categories.isEmpty()) return null
-        return if (methodology == DesignMethodology.LRFD) lrfdLambda(categories) else asdCd(categories)
+        if (loads.isEmpty()) return null
+        return if (methodology == DesignMethodology.LRFD) lrfdLambda(loads) else asdCd(loads.keys)
     }
 
     private fun asdCd(categories: Set<LoadCategory>): ResolvedLoadDuration {
@@ -87,14 +87,29 @@ object NdsLoadDuration {
         )
     }
 
-    private fun lrfdLambda(categories: Set<LoadCategory>): ResolvedLoadDuration {
-        val names = categories.joinToString(" + ") { it.shortLabel }
+    /**
+     * Table N3 assigns lambda by combination, and it keys on how big the wind
+     * or earthquake factor is, not just whether one is present:
+     *   1.4D                                   0.6
+     *   1.2D + 1.6L + 0.5(Lr or S or R)        0.8  (L = occupancy)
+     *   1.2D + 1.6(Lr or S or R) + (L or 0.5W) 0.8  <- wind present, factor 0.5
+     *   1.2D + 1.0W + L + 0.5(Lr or S or R)    1.0
+     *   1.2D + 1.0E + L + 0.2S                 1.0
+     *   0.9D + 1.0W,  0.9D + 1.0E              1.0
+     * So wind / earthquake at a strength-level factor (>= 1.0) gives 1.0;
+     * otherwise any gravity load besides dead gives 0.8; dead alone gives 0.6.
+     */
+    private fun lrfdLambda(loads: Map<LoadCategory, Double>): ResolvedLoadDuration {
+        val names = loads.entries.joinToString(" + ") { (c, f) ->
+            (if (f == 1.0) "" else f.toString().removeSuffix(".0")) + c.shortLabel
+        }
+        fun strongLateral(c: LoadCategory) = (loads[c] ?: 0.0) >= 1.0
         val (lambda, why) = when {
-            LoadCategory.WIND in categories || LoadCategory.SEISMIC in categories ->
-                1.0 to "wind or earthquake acting (Table N3: 1.2D + 1.0W + ..., 1.2D + 1.0E + ..., 0.9D + 1.0W/E)"
-            categories.any { it != LoadCategory.DEAD } ->
-                0.8 to "occupancy live / roof live / snow / rain acting, no wind or earthquake " +
-                    "(Table N3: 1.2D + 1.6L + ..., 1.2D + 1.6(Lr or S or R) + ...); storage live load (0.7) and impact (1.25) are not distinguished"
+            strongLateral(LoadCategory.WIND) || strongLateral(LoadCategory.SEISMIC) ->
+                1.0 to "wind or earthquake at a strength-level factor (Table N3: 1.2D + 1.0W + ..., 1.2D + 1.0E + ..., 0.9D + 1.0W/E)"
+            loads.keys.any { it != LoadCategory.DEAD } ->
+                0.8 to "gravity loads besides dead (Table N3: 1.2D + 1.6L + ..., 1.2D + 1.6(Lr or S or R) + (L or 0.5W)); " +
+                    "storage live load (0.7) and impact (1.25) are not distinguished"
             else ->
                 0.6 to "dead load only (Table N3: 1.4D)"
         }

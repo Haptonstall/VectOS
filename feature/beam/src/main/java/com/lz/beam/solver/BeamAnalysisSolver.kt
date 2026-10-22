@@ -150,7 +150,8 @@ object BeamAnalysisSolver {
                 profile, material,
                 adjustmentFactors = config.ndsAdjustmentFactors,
                 edition = resolveNdsEdition(config) ?: NdsEdition.NDS_2018,
-                memberIsStrongAxis = config.isStrongAxis
+                memberIsStrongAxis = config.isStrongAxis,
+                defaultMethodology = config.designMethodology
             )
             else                   -> null
         }
@@ -166,10 +167,6 @@ object BeamAnalysisSolver {
             // default, which is only right for steel).
             interactionCheckProvider = (calculator as? NdsWoodCapacityCalculator)?.let { wood ->
                 { demand -> wood.pointInteractionCheck(demand, config.designMethodology) }
-            },
-            // NDS LRFD lambda follows each combination's loads.
-            factorsProvider = (calculator as? NdsWoodCapacityCalculator)?.let { wood ->
-                { demand -> wood.designFactorsFor(demand, config.designMethodology) }
             }
         ) { demand -> calculator.evaluate(demand) }
             .map { cap ->

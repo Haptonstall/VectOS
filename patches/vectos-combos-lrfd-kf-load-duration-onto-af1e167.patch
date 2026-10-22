@@ -1,0 +1,1868 @@
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/dao/LoadCombinationDao.kt b/core/data/src/main/java/com/lz/data/persistence/room/dao/LoadCombinationDao.kt
+index 95400a7..657d3a5 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/dao/LoadCombinationDao.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/dao/LoadCombinationDao.kt
+@@ -40,4 +40,12 @@ interface LoadCombinationDao {
+ 
+     @Query("SELECT COUNT(*) FROM load_combination_sets")
+     suspend fun getCount(): Int
++
++    /** Ids of the combinations currently stored in a set (empty if the set doesn't exist). */
++    @Query("SELECT id FROM load_combinations WHERE set_id = :setId")
++    suspend fun getCombinationIds(setId: String): List<String>
++
++    /** Deletes a set; its combinations and their factors go with it (ON DELETE CASCADE). */
++    @Query("DELETE FROM load_combination_sets WHERE id = :setId")
++    suspend fun deleteCombinationSet(setId: String)
+ }
+\ No newline at end of file
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/seeder/StructuralDataSeeder.kt b/core/data/src/main/java/com/lz/data/persistence/room/seeder/StructuralDataSeeder.kt
+index aaa7c86..208d644 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/seeder/StructuralDataSeeder.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/seeder/StructuralDataSeeder.kt
+@@ -4,115 +4,57 @@ import com.lz.data.persistence.room.dao.LoadCombinationDao
+ import com.lz.data.persistence.room.entity.LoadCombinationEntity
+ import com.lz.data.persistence.room.entity.LoadCombinationSetEntity
+ import com.lz.data.persistence.room.entity.LoadFactorEntity
+-import com.lz.model.regulatory.LoadCategory
++import com.lz.model.regulatory.loads.AsceEdition
++import com.lz.model.regulatory.loads.AsceLoadCombinationCatalog
+ import com.lz.model.regulatory.loads.CombinationType
+ import com.lz.model.structural.DesignMethodology
+ 
++/**
++ * Seeds the ASCE 7 load combination sets from [AsceLoadCombinationCatalog].
++ *
++ * Each set is checked on every launch against the catalog and re-seeded when
++ * it differs — so an install that was seeded with an older (incomplete)
++ * definition is corrected, instead of the table being left alone forever
++ * once it is non-empty. "Differs" means the stored combination ids aren't
++ * exactly the catalog's; the ids are derived from each combination's factors
++ * ([AsceLoadCombinationCatalog.combinationId]), so a changed factor or an
++ * added / removed alternative changes an id and triggers the re-seed. The
++ * set ids themselves (e.g. "ASCE_7_16_ASD") never change, so building codes
++ * and projects that point at a set keep working.
++ */
+ class StructuralDataSeeder(private val dao: LoadCombinationDao) {
++
+     suspend fun seed() {
+-        if (dao.getCount() > 0) return
+-        createAsce7ComboSet("ASCE_7_10", "ASCE 7-10")
+-        createAsce7ComboSet("ASCE_7_16", "ASCE 7-16")
+-        createAsce7ComboSet("ASCE_7_22", "ASCE 7-22")
++        for (edition in AsceLoadCombinationCatalog.editions) {
++            seedSet(edition, DesignMethodology.LRFD)
++            seedSet(edition, DesignMethodology.ASD)
++        }
+     }
+ 
+-    private suspend fun createAsce7ComboSet(sourceId: String, sourceName: String) {
+-        val lrfdSetId = "${sourceId}_LRFD"
+-        val asdSetId  = "${sourceId}_ASD"
++    private suspend fun seedSet(edition: AsceEdition, methodology: DesignMethodology) {
++        val setId = AsceLoadCombinationCatalog.setId(edition, methodology)
++        val combos = AsceLoadCombinationCatalog.combinations(edition, methodology)
++        val desiredIds = combos.map { AsceLoadCombinationCatalog.combinationId(edition, methodology, it) }.toSet()
++
++        val existingIds = dao.getCombinationIds(setId).toSet()
++        if (existingIds == desiredIds) return                 // already up to date
++        if (existingIds.isNotEmpty()) dao.deleteCombinationSet(setId)   // stale definition — replace it
+ 
+         dao.insertCombinationSet(
+             LoadCombinationSetEntity(
+-                lrfdSetId,
+-                sourceId,
+-                sourceName,
+-                DesignMethodology.LRFD,
+-                "$sourceName LRFD Load Combinations"
+-            )
+-        )
+-        dao.insertCombinationSet(
+-            LoadCombinationSetEntity(
+-                asdSetId,
+-                sourceId,
+-                sourceName,
+-                DesignMethodology.ASD,
+-                "$sourceName ASD Load Combinations"
++                setId,
++                edition.sourceId,
++                edition.sourceName,
++                methodology,
++                "${edition.sourceName} ${methodology.name} Load Combinations"
+             )
+         )
+-
+-        val lrfdCombos = listOf(
+-            Triple("1.4D",                                          "1.4D",                  mapOf(
+-                LoadCategory.DEAD to 1.4)),
+-            Triple("1.2D + 1.6L + 0.5(Lr or S or R)",             "1.2D_1.6L_0.5Lr",       mapOf(
+-                LoadCategory.DEAD to 1.2, LoadCategory.LIVE to 1.6, LoadCategory.ROOF_LIVE to 0.5)),
+-            Triple("1.2D + 1.6(Lr or S or R) + (L or 0.5W)",      "1.2D_1.6Lr_L",          mapOf(
+-                LoadCategory.DEAD to 1.2, LoadCategory.ROOF_LIVE to 1.6, LoadCategory.LIVE to 1.0)),
+-            Triple("1.2D + 1.0W + L + 0.5(Lr or S or R)",         "1.2D_1.0W_L_0.5Lr",     mapOf(
+-                LoadCategory.DEAD to 1.2, LoadCategory.WIND to 1.0, LoadCategory.LIVE to 1.0, LoadCategory.ROOF_LIVE to 0.5)),
+-            Triple("1.2D + 1.0E + L + 0.2S",                      "1.2D_1.0E_L_0.2S",      mapOf(
+-                LoadCategory.DEAD to 1.2, LoadCategory.SEISMIC to 1.0, LoadCategory.LIVE to 1.0, LoadCategory.SNOW to 0.2)),
+-            Triple("0.9D + 1.0W",                                  "0.9D_1.0W",             mapOf(
+-                LoadCategory.DEAD to 0.9, LoadCategory.WIND to 1.0)),
+-            Triple("0.9D + 1.0E",                                  "0.9D_1.0E",             mapOf(
+-                LoadCategory.DEAD to 0.9, LoadCategory.SEISMIC to 1.0))
+-        )
+-
+-        val asdCombos = listOf(
+-            Triple("D",                                             "D",                     mapOf(
+-                LoadCategory.DEAD to 1.0)),
+-            Triple("D + L",                                        "D_L",                   mapOf(
+-                LoadCategory.DEAD to 1.0, LoadCategory.LIVE to 1.0)),
+-            Triple("D + (Lr or S or R)",                           "D_Lr",                  mapOf(
+-                LoadCategory.DEAD to 1.0, LoadCategory.ROOF_LIVE to 1.0)),
+-            Triple("D + 0.75L + 0.75(Lr or S or R)",              "D_075L_075Lr",          mapOf(
+-                LoadCategory.DEAD to 1.0, LoadCategory.LIVE to 0.75, LoadCategory.ROOF_LIVE to 0.75)),
+-            Triple("D + (0.6W or 0.7E)",                           "D_06W",                 mapOf(
+-                LoadCategory.DEAD to 1.0, LoadCategory.WIND to 0.6)),
+-            Triple("D + 0.75L + 0.75(0.6W) + 0.75(Lr or S or R)","D_075L_075_06W_075Lr",  mapOf(
+-                LoadCategory.DEAD to 1.0, LoadCategory.LIVE to 0.75, LoadCategory.WIND to 0.45, LoadCategory.ROOF_LIVE to 0.75)),
+-            Triple("D + 0.75L + 0.75(0.7E) + 0.75S",             "D_075L_075_07E_075S",   mapOf(
+-                LoadCategory.DEAD to 1.0, LoadCategory.LIVE to 0.75, LoadCategory.SEISMIC to 0.525, LoadCategory.SNOW to 0.75)),
+-            Triple("0.6D + 0.6W",                                  "06D_06W",               mapOf(
+-                LoadCategory.DEAD to 0.6, LoadCategory.WIND to 0.6)),
+-            Triple("0.6D + 0.7E",                                  "06D_07E",               mapOf(
+-                LoadCategory.DEAD to 0.6, LoadCategory.SEISMIC to 0.7))
+-        )
+-
+-        lrfdCombos.forEach { (name, idSuffix, factors) ->
+-            val comboId = "${lrfdSetId}_$idSuffix"
+-            dao.insertCombination(
+-                LoadCombinationEntity(
+-                    comboId,
+-                    lrfdSetId,
+-                    name,
+-                    CombinationType.STRENGTH
+-                )
+-            )
+-            dao.insertLoadFactors(factors.map {
+-                LoadFactorEntity(
+-                    combination_id = comboId,
+-                    category = it.key,
+-                    factor = it.value
+-                )
+-            })
+-        }
+-
+-        asdCombos.forEach { (name, idSuffix, factors) ->
+-            val comboId = "${asdSetId}_$idSuffix"
+-            dao.insertCombination(
+-                LoadCombinationEntity(
+-                    comboId,
+-                    asdSetId,
+-                    name,
+-                    CombinationType.STRENGTH
+-                )
+-            )
+-            dao.insertLoadFactors(factors.map {
+-                LoadFactorEntity(
+-                    combination_id = comboId,
+-                    category = it.key,
+-                    factor = it.value
+-                )
++        combos.forEach { combo ->
++            val comboId = AsceLoadCombinationCatalog.combinationId(edition, methodology, combo)
++            dao.insertCombination(LoadCombinationEntity(comboId, setId, combo.name, CombinationType.STRENGTH))
++            dao.insertLoadFactors(combo.factors.map {
++                LoadFactorEntity(combination_id = comboId, category = it.key, factor = it.value)
+             })
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/loads/AsceLoadCombinationCatalog.kt b/core/model/src/main/java/com/lz/model/regulatory/loads/AsceLoadCombinationCatalog.kt
+new file mode 100644
+index 0000000..4c168c8
+--- /dev/null
++++ b/core/model/src/main/java/com/lz/model/regulatory/loads/AsceLoadCombinationCatalog.kt
+@@ -0,0 +1,159 @@
++package com.lz.model.regulatory.loads
++
++import com.lz.model.regulatory.LoadCategory
++import com.lz.model.structural.DesignMethodology
++
++/** One load combination as defined by the catalog (before it is stored). */
++data class CatalogCombination(
++    /** Display name, e.g. "1.2D + 1.6S + 0.5W". */
++    val name: String,
++    /** Stable id fragment derived from the factors, so a changed factor is a new id. */
++    val idSuffix: String,
++    val factors: Map<LoadCategory, Double>,
++    /** The ASCE 7 equation this expands, e.g. "Eq. 3 (L or 0.5W)". */
++    val reference: String
++)
++
++/** ASCE 7 editions whose basic combinations are catalogued. */
++enum class AsceEdition(val sourceId: String, val sourceName: String, val lrfdSection: String, val asdSection: String) {
++    ASCE_7_10("ASCE_7_10", "ASCE 7-10", "ASCE 7-10 \u00a72.3.2", "ASCE 7-10 \u00a72.4.1"),
++    ASCE_7_16("ASCE_7_16", "ASCE 7-16", "ASCE 7-16 \u00a72.3.1", "ASCE 7-16 \u00a72.4.1"),
++    ASCE_7_22("ASCE_7_22", "ASCE 7-22", "ASCE 7-22 \u00a72.3.1", "ASCE 7-22 \u00a72.4.1")
++}
++
++/**
++ * The ASCE 7 basic load combinations for strength design (LRFD) and
++ * allowable stress design (ASD), with EVERY "or" alternative written out as
++ * its own combination.
++ *
++ * The code writes several combinations with alternatives, e.g.
++ *   1.2D + 1.6(Lr or S or R) + (L or 0.5W)
++ * which is six separate combinations: each of Lr, S, R with each of L, 0.5W.
++ * A member carrying snow must be checked against the snow combinations —
++ * folding the alternatives into one combination that carries only the first
++ * (roof live load) silently drops snow and rain from the design.
++ *
++ * LRFD (ASCE 7-16 / 7-22 \u00a72.3.1, ASCE 7-10 \u00a72.3.2), 16 combinations:
++ *  1. 1.4D
++ *  2. 1.2D + 1.6L + 0.5(Lr or S or R)                 x3
++ *  3. 1.2D + 1.6(Lr or S or R) + (L or 0.5W)          x6
++ *  4. 1.2D + 1.0W + L + 0.5(Lr or S or R)             x3
++ *  5. 1.2D + 1.0E + L + 0.2S
++ *  6. 0.9D + 1.0W
++ *  7. 0.9D + 1.0E
++ *
++ * ASD (\u00a72.4.1), 16 combinations:
++ *  1. D            2. D + L
++ *  3. D + (Lr or S or R)                               x3
++ *  4. D + 0.75L + 0.75(Lr or S or R)                   x3
++ *  5. D + (0.6W or 0.7E)                               x2
++ *  6. D + 0.75L + 0.75(0.6W) + 0.75(Lr or S or R)      x3
++ *  7. D + 0.75L + 0.75(0.7E) + 0.75S
++ *  8. 0.6D + 0.6W  9. 0.6D + 0.7E
++ * (the 0.75 x 0.6 and 0.75 x 0.7 products are stored as 0.45 and 0.525).
++ *
++ * L is taken at its full factor in every combination that contains it —
++ * conservative where the code allows 0.5L (e.g. L <= 100 psf, not garages).
++ *
++ * STATUS: transcribed from the published ASCE 7 combinations. The basic
++ * combinations have the same structure in 7-10, 7-16 and 7-22 as far as is
++ * known, so all three editions currently share one definition and differ
++ * only in their section reference; they have NOT yet been checked against
++ * each edition's own pages — branch on [AsceEdition] in [combinations] where
++ * an edition is found to differ.
++ */
++object AsceLoadCombinationCatalog {
++
++    val editions: List<AsceEdition> = AsceEdition.values().toList()
++
++    /** Number of combinations in each of the LRFD and ASD sets. */
++    const val LRFD_COUNT = 16
++    const val ASD_COUNT = 16
++
++    private val D = LoadCategory.DEAD
++    private val L = LoadCategory.LIVE
++    private val W = LoadCategory.WIND
++    private val E = LoadCategory.SEISMIC
++    private val S = LoadCategory.SNOW
++
++    /** The "(Lr or S or R)" alternatives, in a fixed order. */
++    private val roofAlternatives = listOf(LoadCategory.ROOF_LIVE, LoadCategory.SNOW, LoadCategory.RAIN)
++
++    fun setId(edition: AsceEdition, methodology: DesignMethodology) = "${edition.sourceId}_${methodology.name}"
++
++    fun combinationId(edition: AsceEdition, methodology: DesignMethodology, combo: CatalogCombination) =
++        "${setId(edition, methodology)}_${combo.idSuffix}"
++
++    fun combinations(edition: AsceEdition, methodology: DesignMethodology): List<CatalogCombination> =
++        if (methodology == DesignMethodology.LRFD) lrfd(edition) else asd(edition)
++
++    // ------------------------------------------------------------------
++
++    private fun lrfd(edition: AsceEdition): List<CatalogCombination> {
++        val ref = edition.lrfdSection
++        val out = mutableListOf<CatalogCombination>()
++        out += combo(mapOf(D to 1.4), "$ref Eq. 1")
++        for (alt in roofAlternatives)
++            out += combo(mapOf(D to 1.2, L to 1.6, alt to 0.5), "$ref Eq. 2 (${label(alt)})")
++        for (alt in roofAlternatives) {
++            out += combo(mapOf(D to 1.2, alt to 1.6, L to 1.0), "$ref Eq. 3 (${label(alt)}, L)")
++            out += combo(mapOf(D to 1.2, alt to 1.6, W to 0.5), "$ref Eq. 3 (${label(alt)}, 0.5W)")
++        }
++        for (alt in roofAlternatives)
++            out += combo(mapOf(D to 1.2, W to 1.0, L to 1.0, alt to 0.5), "$ref Eq. 4 (${label(alt)})")
++        out += combo(mapOf(D to 1.2, E to 1.0, L to 1.0, S to 0.2), "$ref Eq. 5")
++        out += combo(mapOf(D to 0.9, W to 1.0), "$ref Eq. 6")
++        out += combo(mapOf(D to 0.9, E to 1.0), "$ref Eq. 7")
++        return out
++    }
++
++    private fun asd(edition: AsceEdition): List<CatalogCombination> {
++        val ref = edition.asdSection
++        val out = mutableListOf<CatalogCombination>()
++        out += combo(mapOf(D to 1.0), "$ref Eq. 1")
++        out += combo(mapOf(D to 1.0, L to 1.0), "$ref Eq. 2")
++        for (alt in roofAlternatives)
++            out += combo(mapOf(D to 1.0, alt to 1.0), "$ref Eq. 3 (${label(alt)})")
++        for (alt in roofAlternatives)
++            out += combo(mapOf(D to 1.0, L to 0.75, alt to 0.75), "$ref Eq. 4 (${label(alt)})")
++        out += combo(mapOf(D to 1.0, W to 0.6), "$ref Eq. 5 (0.6W)")
++        out += combo(mapOf(D to 1.0, E to 0.7), "$ref Eq. 5 (0.7E)")
++        for (alt in roofAlternatives)
++            out += combo(mapOf(D to 1.0, L to 0.75, W to 0.45, alt to 0.75), "$ref Eq. 6 (${label(alt)})")
++        out += combo(mapOf(D to 1.0, L to 0.75, E to 0.525, S to 0.75), "$ref Eq. 7")
++        out += combo(mapOf(D to 0.6, W to 0.6), "$ref Eq. 8")
++        out += combo(mapOf(D to 0.6, E to 0.7), "$ref Eq. 9")
++        return out
++    }
++
++    // ------------------------------------------------------------------
++
++    private fun label(c: LoadCategory) = when (c) {
++        LoadCategory.DEAD -> "D"
++        LoadCategory.LIVE -> "L"
++        LoadCategory.ROOF_LIVE -> "Lr"
++        LoadCategory.SNOW -> "S"
++        LoadCategory.WIND -> "W"
++        LoadCategory.SEISMIC -> "E"
++        LoadCategory.RAIN -> "R"
++    }
++
++    private fun num(v: Double): String = if (v == 1.0) "" else v.toString().removeSuffix(".0")
++
++    /** Dead first, then the rest in a fixed order, so names read like the code's equations. */
++    private val nameOrder = listOf(
++        LoadCategory.DEAD, LoadCategory.LIVE, LoadCategory.ROOF_LIVE, LoadCategory.SNOW,
++        LoadCategory.RAIN, LoadCategory.WIND, LoadCategory.SEISMIC
++    )
++
++    private fun combo(factors: Map<LoadCategory, Double>, reference: String): CatalogCombination {
++        val terms = nameOrder.filter { it in factors }.map { num(factors.getValue(it)) + label(it) }
++        val name = terms.joinToString(" + ")
++        return CatalogCombination(
++            name = name,
++            idSuffix = terms.joinToString("_"),
++            factors = factors,
++            reference = reference
++        )
++    }
++}
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
+index eeaef03..eb8d8d1 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
+@@ -25,8 +25,24 @@ data class NdsAdjustmentFactors(
+      * the loads in a combination (the shortest-duration one governs), so a
+      * single number is only right for a single combination.
+      */
+-    val loadDurationFromCombination: Boolean = true
++    val loadDurationFromCombination: Boolean = true,
++    // --- LRFD only: set by the wood calculator, not by the user -------------
++    // For LRFD the reference design values are multiplied by KF x phi x lambda
++    // (Fb, Ft, Fv, Fc) and KF x phi-s (Emin) BEFORE the stability factors are
++    // computed, because CL and CP are nonlinear in F*b / F*c and E'min. These
++    // carry those products; they are 1.0 for ASD. (NDS 2.3.5 - 2.3.7, App. N.)
++    val formatBending: Double = 1.0,
++    val formatTension: Double = 1.0,
++    val formatShear: Double = 1.0,
++    val formatCompression: Double = 1.0,
++    val formatEmin: Double = 1.0
+ ) {
++    /** The duration factor (ASD: CD) or its LRFD replacement (KF x phi x lambda), per property. */
++    val cdBending: Double get() = cd * formatBending
++    val cdTension: Double get() = cd * formatTension
++    val cdShear: Double get() = cd * formatShear
++    val cdCompression: Double get() = cd * formatCompression
++
+     /**
+      * Automatic CD / lambda is in force only while [cd] is still the untouched
+      * 1.0 default. A CD the user typed in (anything else) is a deliberate
+@@ -46,15 +62,15 @@ data class NdsAdjustmentFactors(
+      * should not call these `adjusted*` helpers for any factor that
+      * includes `cf` — see that resolver's doc for why.
+      */
+-    fun adjustedBending(fb: Double)              = fb * cd * cm * ct * cl * cf * cfu * ci * cr
++    fun adjustedBending(fb: Double)              = fb * cdBending * cm * ct * cl * cf * cfu * ci * cr
+     /** Adjusted shear design value F'v */
+-    fun adjustedShear(fv: Double)                = fv * cd * cm * ct * ci
++    fun adjustedShear(fv: Double)                = fv * cdShear * cm * ct * ci
+     /** Adjusted compression parallel F'c. CAUTION: raw `cf` — see [adjustedBending]. */
+-    fun adjustedCompressionParallel(fc: Double)  = fc * cd * cm * ct * cf * ci * cp
++    fun adjustedCompressionParallel(fc: Double)  = fc * cdCompression * cm * ct * cf * ci * cp
+     /** Adjusted compression perpendicular F'c⊥ */
+     fun adjustedCompressionPerp(fcPerp: Double)  = fcPerp * cm * ct * ci * cb
+     /** Adjusted tension parallel F't. CAUTION: raw `cf` — see [adjustedBending]. */
+-    fun adjustedTension(ft: Double)              = ft * cd * cm * ct * cf * ci
++    fun adjustedTension(ft: Double)              = ft * cdTension * cm * ct * cf * ci
+     /** Adjusted modulus of elasticity E' */
+     fun adjustedModulus(e: Double)               = e * cm * ct * ci
+ }
+\ No newline at end of file
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsVersions.kt b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsVersions.kt
+index 3d97ca2..e594287 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsVersions.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsVersions.kt
+@@ -88,13 +88,17 @@ data class WetServiceFactors(
+ )
+ 
+ /**
+- * Temperature factors (Ct) per NDS Table 2.3.3.
++ * Temperature factors (Ct) per NDS Table 2.3.3 (NDS 2018 text).
+  * Applied when sustained temperatures exceed 100°F.
++ *
++ * Table 2.3.3 groups the properties as: Ft, E, Emin (the same for wet or dry
++ * service) and Fb, Fv, Fc, Fc⊥ (lower, and lower again when wet).
+  */
+ @Serializable
+ data class TemperatureFactors(
+-    val ctBending: Double,          // Ct for Fb, Ft, Fv, Fc
+-    val ctCompPerp: Double,         // Ct for Fc⊥
++    val ctTension: Double,          // Ct for Ft
++    val ctBending: Double,          // Ct for Fb, Fv, Fc
++    val ctCompPerp: Double,         // Ct for Fc⊥ (same column as Fb, Fv, Fc)
+     val ctModulus: Double           // Ct for E, Emin
+ )
+ 
+@@ -120,8 +124,8 @@ data class NdsSpecificationConstants(
+     // NDS Supplement Table 4A footnote — applied to Fb only
+     val cfuFlatUse: Boolean = true,
+ 
+-    // Format conversion factor (KF) for LRFD — NDS Appendix N
+-    // Introduced formally in NDS 2015; values consistent across editions
++    // Format conversion factor (KF) for LRFD — NDS 2018 Table 2.3.5 (checked against the
++    // AWC-published NDS 2018 text; not checked for 2015 / 2024)
+     val kfBending: Double      = 2.54,  // KF for Fb
+     val kfTension: Double      = 2.70,  // KF for Ft
+     val kfShear: Double        = 2.88,  // KF for Fv
+@@ -129,7 +133,7 @@ data class NdsSpecificationConstants(
+     val kfCompPerp: Double     = 1.67,  // KF for Fc⊥
+     val kfModulusMin: Double   = 1.76,  // KF for Emin
+ 
+-    // Resistance factors (phi) for LRFD — NDS Appendix N Table N1
++    // Resistance factors (phi) for LRFD — NDS 2018 Table 2.3.6 (phiStability is the Emin factor)
+     val phiBending: Double      = 0.85,
+     val phiTension: Double      = 0.80,
+     val phiShear: Double        = 0.75,
+@@ -148,31 +152,24 @@ object NdsVersionRegistry {
+     /**
+      * Resolves edition-specific specification constants.
+      *
+-     * NDS 2015 — introduced LRFD format conversion factors (Appendix N)
+-     *            and updated beam stability provisions.
+-     * NDS 2018 — clarified cross-laminated timber (CLT) provisions,
+-     *            updated connection provisions in Chapter 10-12.
+-     * NDS 2024 — updated species-specific reference design values in
+-     *            the NDS Supplement; expanded mass timber provisions.
++     * The KF and phi values are checked against NDS 2018 only. The per-edition
++     * history that used to be written here was not sourced and has been
++     * removed; whether 2015 / 2024 differ is unverified (see NdsCodeData in
++     * the solver, which reports it).
+      */
+     fun getConstantsFor(edition: NdsEdition): NdsSpecificationConstants {
+         return when (edition) {
+             NdsEdition.NDS_2015 -> NdsSpecificationConstants(
+                 edition = NdsEdition.NDS_2015
+-                // LRFD format conversion factors (KF) formally introduced this edition.
+-                // All KF and phi values above reflect NDS 2015 Appendix N Table N1.
++                // Not checked against the NDS 2015 text (2018 values assumed).
+             )
+             NdsEdition.NDS_2018 -> NdsSpecificationConstants(
+                 edition = NdsEdition.NDS_2018
+-                // Connection provisions updated in Chapters 10-12.
+-                // KF and phi values unchanged from NDS 2015.
+-                // CLT provisions expanded — mass timber chapter added.
++                // KF / phi checked against the NDS 2018 text (Tables 2.3.5, 2.3.6).
+             )
+             NdsEdition.NDS_2024 -> NdsSpecificationConstants(
+                 edition = NdsEdition.NDS_2024
+-                // NDS Supplement reference design values updated for several species.
+-                // Mass timber provisions further expanded.
+-                // KF and phi values unchanged from prior editions.
++                // Not checked against the NDS 2024 text (2018 values assumed).
+             )
+         }
+     }
+@@ -209,28 +206,27 @@ object NdsVersionRegistry {
+     }
+ 
+     /**
+-     * Resolves temperature factors (Ct) per NDS Table 2.3.3.
+-     * Consistent across all supported editions.
++     * Resolves temperature factors (Ct) per NDS 2018 Table 2.3.3 (checked
++     * against the AWC-published text; not checked for 2015 / 2024):
++     *
++     *                          T <= 100F   100 < T <= 125F   125 < T <= 150F
++     *  Ft, E, Emin (wet/dry)     1.0          0.9               0.9
++     *  Fb, Fv, Fc, Fc-perp  dry  1.0          0.8               0.7
++     *                       wet  1.0          0.7               0.5
+      */
+-    fun getTemperatureFactors(temperatureRange: TemperatureRange): TemperatureFactors {
++    fun getTemperatureFactors(temperatureRange: TemperatureRange, wetService: Boolean = false): TemperatureFactors {
+         return when (temperatureRange) {
+             TemperatureRange.T_100_OR_LESS -> TemperatureFactors(
+-                ctBending  = 1.00,
+-                ctCompPerp = 1.00,
+-                ctModulus  = 1.00
+-            )
+-            TemperatureRange.T_101_TO_125 -> TemperatureFactors(
+-                // NDS Table 2.3.3 — wet service conditions reduce Ct further,
+-                // but these values apply to dry service at elevated temperature
+-                ctBending  = 0.80,
+-                ctCompPerp = 0.67,
+-                ctModulus  = 0.90
+-            )
+-            TemperatureRange.T_126_TO_150 -> TemperatureFactors(
+-                ctBending  = 0.70,
+-                ctCompPerp = 0.50,
+-                ctModulus  = 0.80
++                ctTension = 1.00, ctBending = 1.00, ctCompPerp = 1.00, ctModulus = 1.00
+             )
++            TemperatureRange.T_101_TO_125 -> {
++                val strength = if (wetService) 0.70 else 0.80
++                TemperatureFactors(ctTension = 0.90, ctBending = strength, ctCompPerp = strength, ctModulus = 0.90)
++            }
++            TemperatureRange.T_126_TO_150 -> {
++                val strength = if (wetService) 0.50 else 0.70
++                TemperatureFactors(ctTension = 0.90, ctBending = strength, ctCompPerp = strength, ctModulus = 0.90)
++            }
+         }
+     }
+ 
+diff --git a/core/model/src/main/java/com/lz/model/structural/StationDemand.kt b/core/model/src/main/java/com/lz/model/structural/StationDemand.kt
+index 6d79401..e6a2d4f 100644
+--- a/core/model/src/main/java/com/lz/model/structural/StationDemand.kt
++++ b/core/model/src/main/java/com/lz/model/structural/StationDemand.kt
+@@ -69,9 +69,14 @@ data class StationDemand(
+     // means the demand isn't tied to a combination (a legacy single-case
+     // solve), and capacity code falls back to its manual setting.
+     val combinationName: String? = null,
+-    // Load categories that are BOTH in the combination (non-zero factor) AND
+-    // actually applied to the member — a combination that lists snow doesn't
+-    // involve snow duration if no snow load was entered.
+-    val combinationLoadCategories: Set<LoadCategory> = emptySet(),
++    // The loads that are BOTH in the combination (non-zero factor) AND actually
++    // applied to the member, with their factors — a combination that lists snow
++    // doesn't involve snow's duration if no snow load was entered. The factors
++    // matter, not just the categories: NDS Table N3 gives lambda 0.8 to
++    // "1.2D + 1.6S + 0.5W" but 1.0 to "1.2D + 1.0W + L + 0.5S".
++    val combinationLoadFactors: Map<LoadCategory, Double> = emptyMap(),
+     val combinationMethodology: DesignMethodology? = null
+-)
+\ No newline at end of file
++) {
++    /** The categories of [combinationLoadFactors]. */
++    val combinationLoadCategories: Set<LoadCategory> get() = combinationLoadFactors.keys
++}
+\ No newline at end of file
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+index 6e5babb..979cfdf 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+@@ -367,7 +367,7 @@ object MemberAnalysisSolver {
+         demandsByCategory: Map<com.lz.model.regulatory.LoadCategory, List<StationDemand>>,
+         appliedCategories: Set<com.lz.model.regulatory.LoadCategory> = emptySet()
+     ): List<StationDemand> {
+-        val actingCategories = loadCategoriesActing(combo, appliedCategories)
++        val actingLoads = loadFactorsActing(combo, appliedCategories)
+         val stationCount = demandsByCategory.values.firstOrNull()?.size ?: return emptyList()
+         return (0 until stationCount).map { index ->
+             var mX = 0.0; var vY = 0.0; var pZ = 0.0
+@@ -389,24 +389,24 @@ object MemberAnalysisSolver {
+                 momentY = Moment(mY), shearY = Force(vX), torque = Moment(tZ),
+                 deflection = Length(delta),
+                 combinationName = combo.name,
+-                combinationLoadCategories = actingCategories,
++                combinationLoadFactors = actingLoads,
+                 combinationMethodology = combo.methodology
+             )
+         }
+     }
+ 
+     /**
+-     * The load categories that actually act in [combo]: those it gives a
+-     * non-zero factor AND that have at least one load applied to the member.
+-     * (A combination can list snow, but if no snow load was entered the
+-     * member never sees snow's duration.) Duration-dependent factors — NDS
+-     * CD / lambda — are derived from this set.
++     * The loads that actually act in [combo], with their factors: those it
++     * gives a non-zero factor AND that have at least one load applied to the
++     * member. (A combination can list snow, but if no snow load was entered
++     * the member never sees snow's duration.) Duration-dependent factors —
++     * NDS CD / lambda — are derived from this.
+      */
+-    internal fun loadCategoriesActing(
++    internal fun loadFactorsActing(
+         combo: com.lz.model.regulatory.LoadCombination,
+         appliedCategories: Set<com.lz.model.regulatory.LoadCategory>
+-    ): Set<com.lz.model.regulatory.LoadCategory> =
+-        combo.factors.filter { (category, factor) -> factor != 0.0 && category in appliedCategories }.keys
++    ): Map<com.lz.model.regulatory.LoadCategory, Double> =
++        combo.factors.filter { (category, factor) -> factor != 0.0 && category in appliedCategories }
+ 
+     private fun buildFactoredReactions(
+         resultsByCategory: Map<com.lz.model.regulatory.LoadCategory, AnalysisResult>,
+diff --git a/core/solver/src/main/java/com/lz/solver/capacity/CapacityEngine.kt b/core/solver/src/main/java/com/lz/solver/capacity/CapacityEngine.kt
+index 208b4b8..47dfbc4 100644
+--- a/core/solver/src/main/java/com/lz/solver/capacity/CapacityEngine.kt
++++ b/core/solver/src/main/java/com/lz/solver/capacity/CapacityEngine.kt
+@@ -60,17 +60,10 @@ object CapacityEngine {
+         // own interaction rules (NDS 3.9 for wood) supplies its own here
+         // instead of being silently judged by the steel equation.
+         interactionCheckProvider: ((StationDemand) -> CodeCheck)? = null,
+-        // Design factors for a specific station. Null (the default) uses
+-        // [factors] everywhere. Some factors depend on the load combination a
+-        // station's demand came from — the NDS LRFD time effect factor lambda
+-        // follows the combination's load mix — so a material can supply them
+-        // per demand instead of one set for the whole member.
+-        factorsProvider: ((StationDemand) -> DesignFactorSet)? = null,
+         capacityCalculator: (StationDemand) -> RawCapacityResult
+     ): List<PointCapacityResult> {
+ 
+         return demands.map { demand ->
+-            val factors = factorsProvider?.invoke(demand) ?: factors
+             val raw = capacityCalculator(demand)
+             val isAxialTension = demand.axial.pounds >= 0.0
+ 
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+index 941fa6e..b97ed6a 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+@@ -232,7 +232,7 @@ internal fun computeNdsBeamStability(
+     val fbE = 1.20 * eMinAdj / rbSquared
+ 
+     val fStarB = designMaterial.referenceBending.inPsi *
+-            adjustmentFactors.cd * adjustmentFactors.cm *
++            adjustmentFactors.cdBending * adjustmentFactors.cm *
+             adjustmentFactors.ct *
+             resolveSawnCf(adjustmentFactors, designMaterial, profile, NdsCfProperty.BENDING) *
+             adjustmentFactors.ci * adjustmentFactors.cr
+@@ -291,7 +291,8 @@ internal fun computeNdsCL(
+ internal fun woodAdjustedEmin(
+     material: MaterialGrade.Wood,
+     adjustmentFactors: NdsAdjustmentFactors
+-): Double = woodEmin(material) * adjustmentFactors.cm * adjustmentFactors.ct * adjustmentFactors.ci
++): Double = woodEmin(material) * adjustmentFactors.cm * adjustmentFactors.ct * adjustmentFactors.ci *
++    adjustmentFactors.formatEmin   // 1.0 for ASD; KF x phi-s for LRFD (NDS 2.3.5, 2.3.6)
+ 
+ /**
+  * Flat use factor Cfu for bending about the member's weak axis (load on
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+index 954dd90..0772e86 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+@@ -21,16 +21,22 @@ import com.lz.model.structural.DesignMethodology
+  *  - Reference design values and size / flat-use factors: sourced from the
+  *    NDS 2018 Supplement only.
+  *  - Glulam tables: mixed provenance (see the notice text), 2018-era.
++ *  - CD (Table 2.3.2, §2.3.2), KF (Table 2.3.5) and phi (Table 2.3.6):
++ *    checked against the NDS 2018 text published by the AWC; not checked for
++ *    2015 or 2024.
++ *  - Lambda (Appendix N, Table N3): implemented from published summaries of
++ *    the table; Appendix N has not been checked against any edition's text.
+  *  - Stability / combined-stress provisions and Table 3.3.3: implemented from
+  *    page images of an unspecified edition — not checked per edition.
+- *  - CD (ASD) and lambda (LRFD): implemented, unchecked against the pages.
+- *  - LRFD format conversion factor KF: not applied.
+  */
+ object NdsCodeData {
+ 
+     /** Editions the Supplement design values and factors have actually been sourced for. */
+     private val designValueEditions = setOf(NdsEdition.NDS_2018)
+ 
++    /** Editions whose Chapter 2 (CD, KF, phi) has been checked against the published text. */
++    private val chapter2Editions = setOf(NdsEdition.NDS_2018)
++
+     fun standardLabel(edition: NdsEdition) = "NDS ${edition.year}"
+ 
+     fun noticesFor(
+@@ -65,25 +71,40 @@ object NdsCodeData {
+             message = "Implemented from page images of an unspecified edition; not yet checked against the $label text."
+         )
+ 
++        val ch2Checked = edition in chapter2Editions
+         if (methodology == DesignMethodology.LRFD) {
++            if (!ch2Checked) {
++                out += CodeDataNotice(
++                    dataset = "Format conversion KF and resistance factor phi (NDS 2.3.5, 2.3.6)",
++                    status = CodeDataStatus.UNVERIFIED,
++                    message = "The values (KF 2.54 / 2.70 / 2.88 / 2.40 / 1.67 / 1.76; phi 0.85 / 0.80 / 0.75 / 0.90 / 0.85) " +
++                        "were checked against the NDS 2018 text; they have not been checked against the $label text."
++                )
++            }
+             out += CodeDataNotice(
+                 dataset = "Time effect factor \u03bb (NDS Appendix N, Table N3)",
+                 status = CodeDataStatus.UNVERIFIED,
+-                message = "\u03bb is derived per load combination from Table N3 as commonly published; not yet checked " +
+-                    "against the $label pages."
+-            )
+-            out += CodeDataNotice(
+-                dataset = "LRFD format conversion factor KF (NDS Appendix N)",
+-                status = CodeDataStatus.NOT_IMPLEMENTED,
+-                message = "KF is not applied, so LRFD wood capacities are conservative \u2014 roughly 2.5 times too low " +
+-                    "(KF \u2248 2.4\u20132.9 on the reference values). Use ASD, or treat LRFD wood results as a lower bound."
++                message = "\u03bb is derived per load combination from Table N3 as published in design references " +
++                    "(0.6 dead only, 0.8 gravity loads, 1.0 wind or earthquake at a strength-level factor); " +
++                    "Appendix N has not been checked against the $label text. Occupancy live load is assumed " +
++                    "(storage 0.7 and impact 1.25 are not distinguished)."
+             )
+         } else {
++            if (!ch2Checked) {
++                out += CodeDataNotice(
++                    dataset = "Load duration factor CD (NDS 2.3.2, Table 2.3.2)",
++                    status = CodeDataStatus.UNVERIFIED,
++                    message = "The CD values and the shortest-duration-load rule were checked against the NDS 2018 text; " +
++                        "they have not been checked against the $label text."
++                )
++            }
+             out += CodeDataNotice(
+-                dataset = "Load duration factor CD (NDS 2.3.2, Appendix B)",
++                dataset = "Load type to duration (CD) assignment",
+                 status = CodeDataStatus.UNVERIFIED,
+-                message = "CD is derived per load combination from the NDS duration classes; not yet checked against " +
+-                    "the $label pages. Rain load has no tabulated duration (CD = 1.0 assumed)."
++                message = "Table 2.3.2 lists dead, occupancy live, snow, construction, wind / earthquake and impact loads. " +
++                    "Roof live load is treated here as seven-day (construction) duration, rain load has no tabulated duration " +
++                    "(CD = 1.0 assumed), and snow is taken at two months. CD above 1.0 is not restricted for members treated " +
++                    "with water-borne preservatives or fire retardant (CD must not exceed 1.6 there; Table 2.3.2 note 2)."
+             )
+         }
+         return out
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsLoadDuration.kt b/core/solver/src/main/java/com/lz/solver/material/NdsLoadDuration.kt
+index 624e843..5ba8099 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsLoadDuration.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsLoadDuration.kt
+@@ -61,12 +61,12 @@ object NdsLoadDuration {
+      * tied to a combination) — the caller then uses its manual setting.
+      */
+     fun resolve(
+-        categories: Set<LoadCategory>,
++        loads: Map<LoadCategory, Double>,
+         methodology: DesignMethodology,
+         @Suppress("UNUSED_PARAMETER") edition: NdsEdition
+     ): ResolvedLoadDuration? {
+-        if (categories.isEmpty()) return null
+-        return if (methodology == DesignMethodology.LRFD) lrfdLambda(categories) else asdCd(categories)
++        if (loads.isEmpty()) return null
++        return if (methodology == DesignMethodology.LRFD) lrfdLambda(loads) else asdCd(loads.keys)
+     }
+ 
+     private fun asdCd(categories: Set<LoadCategory>): ResolvedLoadDuration {
+@@ -87,14 +87,29 @@ object NdsLoadDuration {
+         )
+     }
+ 
+-    private fun lrfdLambda(categories: Set<LoadCategory>): ResolvedLoadDuration {
+-        val names = categories.joinToString(" + ") { it.shortLabel }
++    /**
++     * Table N3 assigns lambda by combination, and it keys on how big the wind
++     * or earthquake factor is, not just whether one is present:
++     *   1.4D                                   0.6
++     *   1.2D + 1.6L + 0.5(Lr or S or R)        0.8  (L = occupancy)
++     *   1.2D + 1.6(Lr or S or R) + (L or 0.5W) 0.8  <- wind present, factor 0.5
++     *   1.2D + 1.0W + L + 0.5(Lr or S or R)    1.0
++     *   1.2D + 1.0E + L + 0.2S                 1.0
++     *   0.9D + 1.0W,  0.9D + 1.0E              1.0
++     * So wind / earthquake at a strength-level factor (>= 1.0) gives 1.0;
++     * otherwise any gravity load besides dead gives 0.8; dead alone gives 0.6.
++     */
++    private fun lrfdLambda(loads: Map<LoadCategory, Double>): ResolvedLoadDuration {
++        val names = loads.entries.joinToString(" + ") { (c, f) ->
++            (if (f == 1.0) "" else f.toString().removeSuffix(".0")) + c.shortLabel
++        }
++        fun strongLateral(c: LoadCategory) = (loads[c] ?: 0.0) >= 1.0
+         val (lambda, why) = when {
+-            LoadCategory.WIND in categories || LoadCategory.SEISMIC in categories ->
+-                1.0 to "wind or earthquake acting (Table N3: 1.2D + 1.0W + ..., 1.2D + 1.0E + ..., 0.9D + 1.0W/E)"
+-            categories.any { it != LoadCategory.DEAD } ->
+-                0.8 to "occupancy live / roof live / snow / rain acting, no wind or earthquake " +
+-                    "(Table N3: 1.2D + 1.6L + ..., 1.2D + 1.6(Lr or S or R) + ...); storage live load (0.7) and impact (1.25) are not distinguished"
++            strongLateral(LoadCategory.WIND) || strongLateral(LoadCategory.SEISMIC) ->
++                1.0 to "wind or earthquake at a strength-level factor (Table N3: 1.2D + 1.0W + ..., 1.2D + 1.0E + ..., 0.9D + 1.0W/E)"
++            loads.keys.any { it != LoadCategory.DEAD } ->
++                0.8 to "gravity loads besides dead (Table N3: 1.2D + 1.6L + ..., 1.2D + 1.6(Lr or S or R) + (L or 0.5W)); " +
++                    "storage live load (0.7) and impact (1.25) are not distinguished"
+             else ->
+                 0.6 to "dead load only (Table N3: 1.4D)"
+         }
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index 36dd90b..b1b0da4 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -3,6 +3,7 @@ package com.lz.solver.material
+ import com.lz.model.regulatory.aisc.DesignFactor
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.regulatory.nds.NdsEdition
++import com.lz.model.regulatory.nds.NdsVersionRegistry
+ import com.lz.model.structural.CodeCheck
+ import com.lz.model.structural.CodeDataNotice
+ import com.lz.model.structural.CodeDataStatus
+@@ -60,7 +61,7 @@ import kotlin.math.sqrt
+  * phi/omega factors are NOT applied here for the [evaluate] path —
+  * [CapacityEngine] owns that step. [evaluateDetailed] applies NDS
+  * ASD factors directly for report output (NDS is inherently ASD;
+- * LRFD format factor lambda is applied when methodology is LRFD).
++ * LRFD KF x phi x lambda are applied inside the adjusted design values when the methodology is LRFD).
+  *
+  * Member type is inferred from [WoodSpecies.isGlulam]:
+  *   isGlulam = true  → glulam provisions (CV, NDS Chapter 5)
+@@ -102,7 +103,13 @@ class NdsWoodCapacityCalculator(
+      * one load combination being evaluated. Set only on the per-combination
+      * copy this class makes of itself (see [forDemand]); leave null otherwise.
+      */
+-    private val loadDuration: ResolvedLoadDuration? = null
++    private val loadDuration: ResolvedLoadDuration? = null,
++    /**
++     * The design methodology for demands that don't say (a demand tied to a
++     * load combination carries its own). LRFD needs it because it changes the
++     * capacity itself, not just a factor applied afterwards.
++     */
++    private val defaultMethodology: DesignMethodology = DesignMethodology.ASD
+ ) : CapacityCalculator {
+ 
+     private val isGlulam: Boolean = material.species.isGlulam
+@@ -290,6 +297,14 @@ class NdsWoodCapacityCalculator(
+      * / [StationDemand.luWeakAxis] null) the larger of lbTop and lbBottom is
+      * used — the conservative envelope, and the only information available.
+      */
++    /**
++     * What multiplies the reference design values in place of CD in the
++     * traces: "CD" for ASD, "KF\u03c6\u03bb" for LRFD (format conversion x
++     * resistance x time effect factor — NDS 2.3.5 - 2.3.7).
++     */
++    private val durSym: String
++        get() = if (loadDuration?.symbol == "\u03bb") "KF\u03c6\u03bb" else "CD"
++
+     private data class Unbraced(
+         val strongBend: Double,
+         val weakBend: Double,
+@@ -322,22 +337,50 @@ class NdsWoodCapacityCalculator(
+      * shortest-duration load acting sets it — so it can't be one number for
+      * the whole member. ASD: CD multiplies Fb, Ft, Fv, Fc (never E, Emin or
+      * Fc-perp) through the usual adjustment chain. LRFD: CD does not apply;
+-     * the time effect factor lambda does instead, applied with phi
+-     * ([designFactorsFor]) — so the nominal capacities carry no duration factor.
++     * the design values are instead multiplied by KF x phi x lambda (Emin by
++     * KF x phi-s) before any stability factor is computed, with lambda taken
++     * from the combination (NDS 2.3.5 - 2.3.7, Appendix N).
+      */
+     private fun forDemand(demand: StationDemand, methodology: DesignMethodology): NdsWoodCapacityCalculator? {
+-        if (loadDuration != null || !adjustmentFactors.usesAutoLoadDuration) return null
+-        val rd = NdsLoadDuration.resolve(demand.combinationLoadCategories, methodology, edition) ?: return null
+-        val cd = if (methodology == DesignMethodology.LRFD) 1.0 else rd.factor
++        if (loadDuration != null) return null    // already the per-combination copy
++
++        if (methodology == DesignMethodology.LRFD) {
++            // LRFD always needs its own copy: KF, phi and lambda go into the
++            // design values (CD does not apply). lambda comes from the load
++            // combination when it is known and automatic mode is on, else 0.8.
++            val auto = adjustmentFactors.usesAutoLoadDuration
++            val rd = (if (auto) NdsLoadDuration.resolve(demand.combinationLoadFactors, methodology, edition) else null)
++                ?: ResolvedLoadDuration(
++                    factor = LAMBDA_DEFAULT, symbol = "\u03bb", governingCategory = null, durationLabel = "Time effect",
++                    explanation = "\u03bb = ${"%.2f".format(LAMBDA_DEFAULT)}: default \u2014 " +
++                        if (auto) "load combination not known" else "automatic load duration is off"
++                )
++            val c = NdsVersionRegistry.getConstantsFor(edition)
++            return NdsWoodCapacityCalculator(
++                profile, material,
++                adjustmentFactors.copy(
++                    cd = 1.0, loadDurationFromCombination = false,
++                    formatBending = c.kfBending * c.phiBending * rd.factor,
++                    formatTension = c.kfTension * c.phiTension * rd.factor,
++                    formatShear = c.kfShear * c.phiShear * rd.factor,
++                    formatCompression = c.kfCompParallel * c.phiCompression * rd.factor,
++                    formatEmin = c.kfModulusMin * c.phiStability          // lambda does not apply to Emin
++                ),
++                edition, memberIsStrongAxis, rd, methodology
++            )
++        }
++
++        if (!adjustmentFactors.usesAutoLoadDuration) return null
++        val rd = NdsLoadDuration.resolve(demand.combinationLoadFactors, methodology, edition) ?: return null
+         return NdsWoodCapacityCalculator(
+             profile, material,
+-            adjustmentFactors.copy(cd = cd, loadDurationFromCombination = false),
+-            edition, memberIsStrongAxis, rd
++            adjustmentFactors.copy(cd = rd.factor, loadDurationFromCombination = false),
++            edition, memberIsStrongAxis, rd, methodology
+         )
+     }
+ 
+     override fun evaluate(demand: StationDemand): RawCapacityResult {
+-        forDemand(demand, demand.combinationMethodology ?: DesignMethodology.ASD)?.let { return it.evaluate(demand) }
++        forDemand(demand, demand.combinationMethodology ?: defaultMethodology)?.let { return it.evaluate(demand) }
+         val u = unbraced(demand)
+         val lb = u.strongBend
+ 
+@@ -389,27 +432,17 @@ class NdsWoodCapacityCalculator(
+         else
+             calculateCompression(u.colStrong, u.colWeak)
+ 
+-        // NDS is inherently ASD. For LRFD, apply the time effect factor
+-        // lambda per NDS Appendix N, Table N3 — 0.6 dead load only, 0.8
+-        // occupancy live / roof live / snow / rain, 1.0 with wind or
+-        // earthquake — resolved for THIS combination. When the combination
+-        // isn't known (or CD was set by hand) the old default of 0.8 stands.
++        // The nominal capacities above ARE the design capacities, for both
++        // methodologies. ASD: adjusted design values (CD per combination).
++        // LRFD: the reference design values were multiplied by KF x phi x lambda
++        // (Emin by KF x phi-s) inside the adjustment chain, BEFORE CL and CP were
++        // computed — they are nonlinear in F*b / F*c and E'min, so scaling the
++        // finished capacity by phi afterwards (what this used to do, and without
++        // KF) is not the same thing. See [forDemand] and NDS 2.3.5 - 2.3.7, App. N.
+         val lambda = if (methodology == DesignMethodology.LRFD) (loadDuration?.factor ?: LAMBDA_DEFAULT) else 1.0
+-
+-        // ASD: design value = adjusted F' * S (already in nominals)
+-        // LRFD: design value = lambda * phi * F'n * S
+-        val phiBending     = 0.85
+-        val phiShear       = 0.75
+-        val phiCompression = 0.90
+-        val phiTension     = 0.80
+-
+-        val designMn = if (methodology == DesignMethodology.LRFD)
+-            lambda * phiBending * nomMn else nomMn
+-        val designVn = if (methodology == DesignMethodology.LRFD)
+-            lambda * phiShear * nomVn else nomVn
+-        val designPn = if (methodology == DesignMethodology.LRFD)
+-            lambda * (if (isAxialTension) phiTension else phiCompression) * nomPn
+-        else nomPn
++        val designMn = nomMn
++        val designVn = nomVn
++        val designPn = nomPn
+ 
+         // Utilization is always demand vs. capacity as magnitudes — the
+         // signed value only matters upstream (e.g. isAxialTension, or
+@@ -424,16 +457,16 @@ class NdsWoodCapacityCalculator(
+         val ratioVn = utilizationRatio(abs(demand.shear.pounds), designVn)
+         val ratioPn = utilizationRatio(abs(demand.axial.pounds), designPn)
+ 
+-        val kBend = if (methodology == DesignMethodology.LRFD) lambda * phiBending else 1.0
+-        val kTens = if (methodology == DesignMethodology.LRFD) lambda * phiTension else 1.0
+-        val kComp = if (methodology == DesignMethodology.LRFD) lambda * phiCompression else 1.0
++        // Combined checks use the adjusted values as they stand (already factored for LRFD).
++        val kBend = 1.0
++        val kTens = 1.0
++        val kComp = 1.0
+ 
+         // Moment about the other principal axis (StationDemand.momentY), when present.
+         val secondaryDemand = abs(demand.momentY.lbIn)
+         val secondaryCheck = if (secondaryDemand > 0.0) {
+             val sec = calculateBendingAbout(!memberIsStrongAxis, u)
+-            val designMnSec = if (methodology == DesignMethodology.LRFD)
+-                lambda * phiBending * sec.nominal else sec.nominal
++            val designMnSec = sec.nominal
+             StrengthCheckResult(
+                 demand               = Moment(secondaryDemand),
+                 capacity             = Moment(designMnSec),
+@@ -514,60 +547,29 @@ class NdsWoodCapacityCalculator(
+     }
+ 
+     /**
+-     * NDS is inherently ASD: [evaluate]'s nominal values already ARE the
+-     * fully code-adjusted allowable capacity (F' * S, with CD/CM/Ct/CL/CF/
+-     * etc. baked in). So for ASD, `value = 1.0` here — CapacityEngine will
+-     * divide by 1.0, i.e. use the nominal as-is. Dividing by anything else
+-     * would double-count NDS's own adjustment factors.
+-     *
+-     * For LRFD, reproduces exactly the same lambda*phi logic already used in
+-     * [evaluateDetailed] (NDS Appendix N format conversion). Folding lambda
+-     * into the returned factor's `value` lets [DesignFactorSet.apply] use
+-     * the same `nominal * value` shape as the AISC LRFD case.
++     * [evaluate]'s nominal values already ARE the fully adjusted design
++     * capacity for BOTH methodologies, so every factor here is 1.0 —
++     * CapacityEngine uses the nominal as-is. ASD: F' x S with CD / CM / Ct /
++     * CL / CF ... baked in. LRFD: the same chain with KF x phi x lambda
++     * (NDS 2.3.5 - 2.3.7) multiplied into the design values up front, and
++     * KF x phi-s into Emin, so that CL and CP see them (see [forDemand]).
++     * Applying phi here instead would scale a finished capacity, which is not
++     * equivalent once a stability factor is involved, and would double-count.
+      */
+     override fun designFactors(methodology: DesignMethodology): DesignFactorSet {
+-        if (methodology == DesignMethodology.ASD) {
+-            val one = DesignFactor(1.0, "NDS ASD — nominal is already the adjusted allowable capacity")
+-            return DesignFactorSet(
+-                methodology       = methodology,
+-                flexure           = one,
+-                shear             = one,
+-                axialTension      = one,
+-                axialCompression  = one,
+-                torsion           = one
+-            )
+-        }
+-
+-        return lrfdFactors(LAMBDA_DEFAULT)
+-    }
+-
+-    /**
+-     * The factors for the combination that produced [demand]. Same as
+-     * [designFactors] except LRFD uses that combination's own time effect
+-     * factor lambda (Table N3) instead of the 0.8 default — so a dead-load-only
+-     * combination gets 0.6 and a wind combination 1.0.
+-     */
+-    fun designFactorsFor(demand: StationDemand, methodology: DesignMethodology): DesignFactorSet {
+-        if (methodology != DesignMethodology.LRFD || !adjustmentFactors.usesAutoLoadDuration) {
+-            return designFactors(methodology)
+-        }
+-        val rd = NdsLoadDuration.resolve(demand.combinationLoadCategories, methodology, edition)
+-        return lrfdFactors(rd?.factor ?: LAMBDA_DEFAULT)
+-    }
+-
+-    private fun lrfdFactors(lambda: Double): DesignFactorSet {
+-        val methodology = DesignMethodology.LRFD
+-        val phiBending     = 0.85
+-        val phiShear       = 0.75
+-        val phiCompression = 0.90
+-        val phiTension     = 0.80
+-
++        val one = DesignFactor(
++            1.0,
++            if (methodology == DesignMethodology.LRFD)
++                "NDS LRFD \u2014 nominal already includes KF x phi x lambda"
++            else
++                "NDS ASD \u2014 nominal is already the adjusted allowable capacity"
++        )
+         return DesignFactorSet(
+             methodology       = methodology,
+-            flexure           = DesignFactor(lambda * phiBending,     "NDS Appendix N — lambda x phi (bending); KF not applied"),
+-            shear             = DesignFactor(lambda * phiShear,       "NDS Appendix N — lambda x phi (shear); KF not applied"),
+-            axialTension      = DesignFactor(lambda * phiTension,     "NDS Appendix N — lambda x phi (tension); KF not applied"),
+-            axialCompression  = DesignFactor(lambda * phiCompression, "NDS Appendix N — lambda x phi (compression); KF not applied"),
++            flexure           = one,
++            shear             = one,
++            axialTension      = one,
++            axialCompression  = one,
+             torsion           = DesignFactor(1.0, "Torsion not codified for wood")
+         )
+     }
+@@ -663,14 +665,14 @@ class NdsWoodCapacityCalculator(
+             variables = mapOf("E'min" to stab.eMinAdj, "RB" to stab.rb)
+         )
+         traces += DesignEquationTrace(
+-            symbolicEquation = "F*b = Fb x CD x CM x Ct x CF x Ci x Cr   (all factors except Cfu, CV, CL)",
+-            substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
++            symbolicEquation = "F*b = Fb x ${durSym} x CM x Ct x CF x Ci x Cr   (all factors except Cfu, CV, CL)",
++            substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                 "${fmt(cfStab, 3)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
+             result = fmt(stab.fStarB, 0),
+             units = "psi",
+             codeReference = "NDS 3.3.3.8",
+             variables = mapOf(
+-                "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
++                "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
+                 "CF" to cfStab, "Ci" to f.ci, "Cr" to f.cr
+             )
+         )
+@@ -715,81 +717,81 @@ class NdsWoodCapacityCalculator(
+             val cv = computeCV(lb)
+             // NDS 5.3.6: use lesser of CV and CL
+             val stabilityFactor = min(cl, cv)
+-            fbAdj = fb * f.cd * f.cm * f.ct * stabilityFactor * f.cfu * f.ci
+-            fStar = fb * f.cd * f.cm * f.ct * cv * f.cfu * f.ci
+-            fStarStar = fb * f.cd * f.cm * f.ct * cl * f.cfu * f.ci
++            fbAdj = fb * f.cdBending * f.cm * f.ct * stabilityFactor * f.cfu * f.ci
++            fStar = fb * f.cdBending * f.cm * f.ct * cv * f.cfu * f.ci
++            fStarStar = fb * f.cdBending * f.cm * f.ct * cl * f.cfu * f.ci
+             limitState = if (cv <= cl)
+                 "Bending — Volume Factor CV (NDS 5.3.6)"
+             else
+                 "Bending — Beam Stability CL (NDS 3.3.3)"
+             adjTrace = DesignEquationTrace(
+-                symbolicEquation = "F'b = Fb x CD x CM x Ct x min(CL, CV) x Cfu x Ci",
+-                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x " +
++                symbolicEquation = "F'b = Fb x ${durSym} x CM x Ct x min(CL, CV) x Cfu x Ci",
++                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x " +
+                     "${fmt(f.ct)} x min(${fmt(cl, 3)}, ${fmt(cv, 3)}) x ${fmt(f.cfu)} x ${fmt(f.ci)}",
+                 result = fmt(fbAdj, 0),
+                 units = "psi",
+                 codeReference = "NDS 5.3.2, 5.3.6",
+                 variables = mapOf(
+-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
++                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
+                     "CL" to cl, "CV" to cv, "Cfu" to f.cfu, "Ci" to f.ci
+                 )
+             )
+             fStarTrace = DesignEquationTrace(
+-                symbolicEquation = "F*b = Fb x CD x CM x Ct x CV x Cfu x Ci   (all factors except CL)",
+-                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
++                symbolicEquation = "F*b = Fb x ${durSym} x CM x Ct x CV x Cfu x Ci   (all factors except CL)",
++                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                     "${fmt(cv, 3)} x ${fmt(f.cfu)} x ${fmt(f.ci)}",
+                 result = fmt(fStar, 0),
+                 units = "psi",
+                 codeReference = "NDS 3.9.1",
+                 variables = mapOf(
+-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
++                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
+                     "CV" to cv, "Cfu" to f.cfu, "Ci" to f.ci
+                 )
+             )
+             fStarStarTrace = DesignEquationTrace(
+-                symbolicEquation = "F**b = Fb x CD x CM x Ct x CL x Cfu x Ci   (all factors except CV)",
+-                substitutedEquation = "F**b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
++                symbolicEquation = "F**b = Fb x ${durSym} x CM x Ct x CL x Cfu x Ci   (all factors except CV)",
++                substitutedEquation = "F**b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                     "${fmt(cl, 3)} x ${fmt(f.cfu)} x ${fmt(f.ci)}",
+                 result = fmt(fStarStar, 0),
+                 units = "psi",
+                 codeReference = "NDS 3.9.1",
+                 variables = mapOf(
+-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
++                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
+                     "CL" to cl, "Cfu" to f.cfu, "Ci" to f.ci
+                 )
+             )
+         } else {
+             // Sawn lumber / SCL: CF from adjustmentFactors (caller must set it)
+             val cfEffective = computeSawnCF(NdsCfProperty.BENDING)
+-            fbAdj = fb * f.cd * f.cm * f.ct * cl * cfEffective * f.cfu * f.ci * f.cr
+-            fStar = fb * f.cd * f.cm * f.ct * cfEffective * f.cfu * f.ci * f.cr
++            fbAdj = fb * f.cdBending * f.cm * f.ct * cl * cfEffective * f.cfu * f.ci * f.cr
++            fStar = fb * f.cdBending * f.cm * f.ct * cfEffective * f.cfu * f.ci * f.cr
+             fStarStar = fbAdj
+             limitState = if (cl < 1.0)
+                 "Bending — Beam Stability CL (NDS 3.3.3)"
+             else
+                 "Bending — Size Factor CF (NDS Table 4A)"
+             adjTrace = DesignEquationTrace(
+-                symbolicEquation = "F'b = Fb x CD x CM x Ct x CL x CF x Cfu x Ci x Cr",
+-                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x " +
++                symbolicEquation = "F'b = Fb x ${durSym} x CM x Ct x CL x CF x Cfu x Ci x Cr",
++                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x " +
+                     "${fmt(f.ct)} x ${fmt(cl, 3)} x ${fmt(cfEffective, 3)} x ${fmt(f.cfu)} x " +
+                     "${fmt(f.ci)} x ${fmt(f.cr)}",
+                 result = fmt(fbAdj, 0),
+                 units = "psi",
+                 codeReference = "NDS 3.3.2, 3.3.3, Table 4A",
+                 variables = mapOf(
+-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "CL" to cl,
++                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct, "CL" to cl,
+                     "CF" to cfEffective, "Cfu" to f.cfu, "Ci" to f.ci, "Cr" to f.cr
+                 )
+             )
+             fStarTrace = DesignEquationTrace(
+-                symbolicEquation = "F*b = Fb x CD x CM x Ct x CF x Cfu x Ci x Cr   (all factors except CL)",
+-                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
++                symbolicEquation = "F*b = Fb x ${durSym} x CM x Ct x CF x Cfu x Ci x Cr   (all factors except CL)",
++                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                     "${fmt(cfEffective, 3)} x ${fmt(f.cfu)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
+                 result = fmt(fStar, 0),
+                 units = "psi",
+                 codeReference = "NDS 3.9.1",
+                 variables = mapOf(
+-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
++                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
+                     "CF" to cfEffective, "Cfu" to f.cfu, "Ci" to f.ci, "Cr" to f.cr
+                 )
+             )
+@@ -866,34 +868,34 @@ class NdsWoodCapacityCalculator(
+                     unavailableReason = reason
+                 )
+             }
+-            fStarNoCl = fby * f.cd * f.cm * f.ct * cfu * f.ci
++            fStarNoCl = fby * f.cdBending * f.cm * f.ct * cfu * f.ci
+             fbAdj = fStarNoCl * cl
+             adjTrace = DesignEquationTrace(
+-                symbolicEquation = "F'by = Fby x CD x CM x Ct x CL x Cfu x Ci",
+-                substitutedEquation = "F'by = ${fmt(fby, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
++                symbolicEquation = "F'by = Fby x ${durSym} x CM x Ct x CL x Cfu x Ci",
++                substitutedEquation = "F'by = ${fmt(fby, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                     "$clLabel x ${fmt(cfu, 3)} x ${fmt(f.ci)}",
+                 result = fmt(fbAdj, 0),
+                 units = "psi",
+                 codeReference = "NDS 3.3.3.1, Table 5A (Fby, Cfu)",
+                 variables = mapOf(
+-                    "Fby" to fby, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
++                    "Fby" to fby, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
+                     "CL" to cl, "Cfu" to cfu, "Ci" to f.ci
+                 )
+             )
+         } else {
+             val fb = designMaterial.referenceBending.inPsi
+             val cf = computeSawnCF(NdsCfProperty.BENDING)
+-            fStarNoCl = fb * f.cd * f.cm * f.ct * cf * cfu * f.ci * f.cr
++            fStarNoCl = fb * f.cdBending * f.cm * f.ct * cf * cfu * f.ci * f.cr
+             fbAdj = fStarNoCl * cl
+             adjTrace = DesignEquationTrace(
+-                symbolicEquation = "F'b = Fb x CD x CM x Ct x CL x CF x Cfu x Ci x Cr",
+-                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
++                symbolicEquation = "F'b = Fb x ${durSym} x CM x Ct x CL x CF x Cfu x Ci x Cr",
++                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                     "$clLabel x ${fmt(cf, 3)} x ${fmt(cfu, 3)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
+                 result = fmt(fbAdj, 0),
+                 units = "psi",
+                 codeReference = "NDS 3.3.3.1, 4.3.7, Table 4A (CF, Cfu)",
+                 variables = mapOf(
+-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "CL" to cl,
++                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct, "CL" to cl,
+                     "CF" to cf, "Cfu" to cfu, "Ci" to f.ci, "Cr" to f.cr
+                 )
+             )
+@@ -1091,13 +1093,13 @@ class NdsWoodCapacityCalculator(
+         val area  = profile.area.inIn2
+ 
+         val fvTrace = DesignEquationTrace(
+-            symbolicEquation = "F'v = Fv x CD x CM x Ct x Ci",
+-            substitutedEquation = "F'v = ${fmt(fv, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x " +
++            symbolicEquation = "F'v = Fv x ${durSym} x CM x Ct x Ci",
++            substitutedEquation = "F'v = ${fmt(fv, 0)} x ${fmt(f.cdShear)} x ${fmt(f.cm)} x " +
+                 "${fmt(f.ct)} x ${fmt(f.ci)}",
+             result = fmt(fvAdj, 0),
+             units = "psi",
+             codeReference = "NDS 3.4.1",
+-            variables = mapOf("Fv" to fv, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "Ci" to f.ci)
++            variables = mapOf("Fv" to fv, durSym to f.cdShear, "CM" to f.cm, "Ct" to f.ct, "Ci" to f.ci)
+         )
+ 
+         val vn = (2.0 / 3.0) * fvAdj * area
+@@ -1134,7 +1136,7 @@ class NdsWoodCapacityCalculator(
+         val f = adjustmentFactors
+ 
+         val cpResult = computeCPTraced(luStrong, luWeak)
+-        val fStarC = fc * f.cd * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
++        val fStarC = fc * f.cdCompression * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
+         val fcAdj = fStarC * cpResult.cp
+ 
+         val fcAdjTrace = DesignEquationTrace(
+@@ -1224,7 +1226,7 @@ class NdsWoodCapacityCalculator(
+         // F*c = Fc with all adjustments except CP
+         val f = adjustmentFactors
+         val fcStar    = designMaterial.referenceCompressionParallel.inPsi *
+-                f.cd * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
++                f.cdCompression * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
+ 
+         if (fcStar <= 0.0) return CpResult(1.0, listOf(planeTrace, fceTrace))
+ 
+@@ -1266,14 +1268,14 @@ class NdsWoodCapacityCalculator(
+         val area = profile.area.inIn2
+ 
+         val ftTrace = DesignEquationTrace(
+-            symbolicEquation = "F't = Ft x CD x CM x Ct x CF x Ci",
+-            substitutedEquation = "F't = ${fmt(ft, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x " +
++            symbolicEquation = "F't = Ft x ${durSym} x CM x Ct x CF x Ci",
++            substitutedEquation = "F't = ${fmt(ft, 0)} x ${fmt(f.cdTension)} x ${fmt(f.cm)} x " +
+                 "${fmt(f.ct)} x ${fmt(cf, 3)} x ${fmt(f.ci)}",
+             result = fmt(ftAdj, 0),
+             units = "psi",
+             codeReference = "NDS 3.8.1, Table 4A",
+             variables = mapOf(
+-                "Ft" to ft, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "CF" to cf, "Ci" to f.ci
++                "Ft" to ft, durSym to f.cdTension, "CM" to f.cm, "Ct" to f.ct, "CF" to cf, "Ci" to f.ci
+             )
+         )
+         val pn = ftAdj * area
+@@ -1299,10 +1301,10 @@ class NdsWoodCapacityCalculator(
+         else if (demandAbs > 0.0) Double.POSITIVE_INFINITY
+         else 0.0
+ 
+-    /** F't = Ft x CD x CM x Ct x CF x Ci (psi) — shared by the tension capacity and NDS 3.9.1. */
++    /** F't = Ft x ${durSym} x CM x Ct x CF x Ci (psi) — shared by the tension capacity and NDS 3.9.1. */
+     private fun adjustedTensionStress(): Double {
+         val f = adjustmentFactors
+-        return designMaterial.referenceTensionParallel.inPsi * f.cd * f.cm * f.ct *
++        return designMaterial.referenceTensionParallel.inPsi * f.cdTension * f.cm * f.ct *
+             computeSawnCF(NdsCfProperty.TENSION) * f.ci
+     }
+ 
+@@ -1349,9 +1351,9 @@ class NdsWoodCapacityCalculator(
+ 
+         val notes = mutableListOf<String>()
+         if (isLrfd) {
+-            notes += "LRFD: adjusted design values are scaled by lambda x phi exactly as in the " +
+-                "individual member checks (lambda = 0.8; phi = 0.85 bending, 0.80 tension, " +
+-                "0.90 compression). The NDS Appendix N format conversion factor KF is not applied."
++            notes += "LRFD: every adjusted design value already includes KF x phi x lambda " +
++                "(Fb, Ft, Fv, Fc) and Emin includes KF x phi-s (NDS 2.3.5 - 2.3.7, Appendix N), " +
++                "so the interaction equations use them as they stand."
+         }
+ 
+         return when {
+diff --git a/core/solver/src/test/java/com/lz/solver/capacity/CapacityEngineTest.kt b/core/solver/src/test/java/com/lz/solver/capacity/CapacityEngineTest.kt
+index fcd7446..8dcab30 100644
+--- a/core/solver/src/test/java/com/lz/solver/capacity/CapacityEngineTest.kt
++++ b/core/solver/src/test/java/com/lz/solver/capacity/CapacityEngineTest.kt
+@@ -5,6 +5,7 @@ import com.lz.model.units.*
+ import com.lz.solver.material.AiscSteelCapacityCalculator
+ import com.lz.solver.material.NdsWoodCapacityCalculator
+ import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
+ import org.junit.Test
+ import java.util.UUID
+ 
+@@ -75,12 +76,13 @@ class CapacityEngineTest {
+     }
+ 
+     @Test
+-    fun `wood LRFD uses real NDS phi, not the old flat 0_9`() {
+-        val calculator = NdsWoodCapacityCalculator(woodProfile, woodMaterial)
++    fun `wood LRFD capacity already includes KF phi lambda and the engine does not scale it again`() {
++        // LRFD needs the calculator told so: KF x phi x lambda go INTO the design values
++        // (before CL / CP), they are not a factor applied to the finished capacity.
++        val calculator = NdsWoodCapacityCalculator(woodProfile, woodMaterial, defaultMethodology = DesignMethodology.LRFD)
+         val demand = woodDemand()
+-
+-        val nominal = calculator.evaluate(demand).nominalFlexureX
+         val factors = calculator.designFactors(DesignMethodology.LRFD)
++        assertEquals(1.0, factors.flexure.value, 0.0)
+ 
+         val result = CapacityEngine.evaluate(
+             demands = listOf(demand),
+@@ -89,11 +91,12 @@ class CapacityEngineTest {
+             factors = factors
+         ) { calculator.evaluate(it) }.first()
+ 
+-        // Expected: lambda (0.8) * phiBending (0.85) * nominal — matches
+-        // NdsWoodCapacityCalculator.evaluateDetailed()'s own logic, NOT the
+-        // old flat 0.9 placeholder.
+-        val expected = 0.8 * 0.85 * nominal
+-        assertEquals(expected, result.flexureCheckX.capacity, 1e-6)
++        // Point path and detailed path agree on the LRFD capacity...
++        val detailed = calculator.evaluateDetailed(demand, DesignMethodology.LRFD)
++        assertEquals(detailed.momentCheck.capacity.lbIn, result.flexureCheckX.capacity, 1e-6)
++        // ...and it is the format-converted value, far above the ASD allowable.
++        val asdNominal = NdsWoodCapacityCalculator(woodProfile, woodMaterial).evaluate(demand).nominalFlexureX
++        assertTrue(result.flexureCheckX.capacity > asdNominal)
+     }
+ 
+     @Test
+diff --git a/core/solver/src/test/java/com/lz/solver/material/AsceLoadCombinationCatalogTest.kt b/core/solver/src/test/java/com/lz/solver/material/AsceLoadCombinationCatalogTest.kt
+new file mode 100644
+index 0000000..3f7ab12
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/material/AsceLoadCombinationCatalogTest.kt
+@@ -0,0 +1,119 @@
++package com.lz.solver.material
++
++import com.lz.model.regulatory.LoadCategory
++import com.lz.model.regulatory.loads.AsceEdition
++import com.lz.model.regulatory.loads.AsceLoadCombinationCatalog
++import com.lz.model.structural.DesignMethodology
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/**
++ * The ASCE 7 combination catalog with every "or" expanded. The expected lists
++ * below are written out by hand from the code's equations (ASCE 7 §2.3 LRFD,
++ * §2.4.1 ASD), not generated from the catalog.
++ */
++class AsceLoadCombinationCatalogTest {
++
++    private val lrfd = DesignMethodology.LRFD
++    private val asd = DesignMethodology.ASD
++
++    private fun names(e: AsceEdition, m: DesignMethodology) =
++        AsceLoadCombinationCatalog.combinations(e, m).map { it.name }
++
++    private val expectedLrfd = listOf(
++        "1.4D",
++        // Eq 2: 1.2D + 1.6L + 0.5(Lr or S or R)
++        "1.2D + 1.6L + 0.5Lr", "1.2D + 1.6L + 0.5S", "1.2D + 1.6L + 0.5R",
++        // Eq 3: 1.2D + 1.6(Lr or S or R) + (L or 0.5W)  -> 3 x 2
++        "1.2D + L + 1.6Lr", "1.2D + 1.6Lr + 0.5W",
++        "1.2D + L + 1.6S", "1.2D + 1.6S + 0.5W",
++        "1.2D + L + 1.6R", "1.2D + 1.6R + 0.5W",
++        // Eq 4: 1.2D + 1.0W + L + 0.5(Lr or S or R)
++        "1.2D + L + 0.5Lr + W", "1.2D + L + 0.5S + W", "1.2D + L + 0.5R + W",
++        // Eq 5, 6, 7
++        "1.2D + L + 0.2S + E", "0.9D + W", "0.9D + E"
++    )
++
++    private val expectedAsd = listOf(
++        "D", "D + L",
++        // Eq 3: D + (Lr or S or R)
++        "D + Lr", "D + S", "D + R",
++        // Eq 4: D + 0.75L + 0.75(Lr or S or R)
++        "D + 0.75L + 0.75Lr", "D + 0.75L + 0.75S", "D + 0.75L + 0.75R",
++        // Eq 5: D + (0.6W or 0.7E)
++        "D + 0.6W", "D + 0.7E",
++        // Eq 6: D + 0.75L + 0.75(0.6W) + 0.75(Lr or S or R)  (0.75 x 0.6 = 0.45)
++        "D + 0.75L + 0.75Lr + 0.45W", "D + 0.75L + 0.75S + 0.45W", "D + 0.75L + 0.75R + 0.45W",
++        // Eq 7: D + 0.75L + 0.75(0.7E) + 0.75S  (0.75 x 0.7 = 0.525)
++        "D + 0.75L + 0.75S + 0.525E",
++        // Eq 8, 9
++        "0.6D + 0.6W", "0.6D + 0.7E"
++    )
++
++    @Test
++    fun `every or alternative is its own combination for every edition`() {
++        for (e in AsceEdition.values()) {
++            assertEquals("LRFD ${e.sourceName}", expectedLrfd, names(e, lrfd))
++            assertEquals("ASD ${e.sourceName}", expectedAsd, names(e, asd))
++            assertEquals(AsceLoadCombinationCatalog.LRFD_COUNT, names(e, lrfd).size)
++            assertEquals(AsceLoadCombinationCatalog.ASD_COUNT, names(e, asd).size)
++        }
++    }
++
++    @Test
++    fun `roof live, snow and rain each get the same number of gravity combinations`() {
++        for (m in listOf(lrfd, asd)) {
++            val combos = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_16, m)
++            fun count(c: LoadCategory) = combos.count { c in it.factors }
++            assertEquals("Lr vs R, $m", count(LoadCategory.ROOF_LIVE), count(LoadCategory.RAIN))
++            // Snow additionally appears in the 0.2S / 0.75(0.7E) seismic combination.
++            assertEquals("S, $m", count(LoadCategory.ROOF_LIVE) + 1, count(LoadCategory.SNOW))
++        }
++        val l = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_16, lrfd)
++        assertEquals(4, l.count { LoadCategory.ROOF_LIVE in it.factors })   // Eq 2, Eq 3 (x2), Eq 4
++        val a = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_16, asd)
++        assertEquals(3, a.count { LoadCategory.ROOF_LIVE in it.factors })   // Eq 3, 4, 6
++    }
++
++    @Test
++    fun `factors are exactly the code's, including the 0_75 products`() {
++        val a = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_22, asd)
++        val wind = a.first { it.name == "D + 0.75L + 0.75S + 0.45W" }.factors
++        assertEquals(0.45, wind.getValue(LoadCategory.WIND), 0.0)
++        val eq = a.first { it.name == "D + 0.75L + 0.75S + 0.525E" }.factors
++        assertEquals(0.525, eq.getValue(LoadCategory.SEISMIC), 0.0)
++        assertEquals(0.75, eq.getValue(LoadCategory.SNOW), 0.0)
++        val l = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_22, lrfd)
++        assertEquals(0.5, l.first { it.name == "1.2D + 1.6R + 0.5W" }.factors.getValue(LoadCategory.WIND), 0.0)
++        assertEquals(1.6, l.first { it.name == "1.2D + 1.6R + 0.5W" }.factors.getValue(LoadCategory.RAIN), 0.0)
++        assertEquals(0.2, l.first { it.name == "1.2D + L + 0.2S + E" }.factors.getValue(LoadCategory.SNOW), 0.0)
++    }
++
++    @Test
++    fun `ids are unique, stable, and change when a factor changes`() {
++        for (m in listOf(lrfd, asd)) {
++            val ids = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_16, m)
++                .map { AsceLoadCombinationCatalog.combinationId(AsceEdition.ASCE_7_16, m, it) }
++            assertEquals(ids.size, ids.toSet().size)
++        }
++        // Existing installs stored this id for the first combination; it must not change.
++        assertEquals(
++            "ASCE_7_16_LRFD_1.4D",
++            AsceLoadCombinationCatalog.combinationId(
++                AsceEdition.ASCE_7_16, lrfd,
++                AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_16, lrfd).first()
++            )
++        )
++        assertEquals("ASCE_7_22_ASD", AsceLoadCombinationCatalog.setId(AsceEdition.ASCE_7_22, asd))
++    }
++
++    @Test
++    fun `dead load is in every combination and no combination is a duplicate`() {
++        for (e in AsceEdition.values()) for (m in listOf(lrfd, asd)) {
++            val combos = AsceLoadCombinationCatalog.combinations(e, m)
++            assertTrue(combos.all { LoadCategory.DEAD in it.factors })
++            assertEquals(combos.size, combos.map { it.factors }.toSet().size)
++        }
++    }
++}
+diff --git a/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt b/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
+index 9a3341e..3ccd9ab 100644
+--- a/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
++++ b/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
+@@ -5,22 +5,24 @@ import com.lz.model.regulatory.LoadCombination
+ import com.lz.model.regulatory.loads.CombinationType
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.regulatory.nds.NdsEdition
++import com.lz.model.regulatory.nds.NdsVersionRegistry
++import com.lz.model.regulatory.nds.TemperatureRange
+ import com.lz.model.structural.*
+ import com.lz.model.units.*
+ import com.lz.solver.analysis.MemberAnalysisSolver
+ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertFalse
+-import org.junit.Assert.assertNotNull
+ import org.junit.Assert.assertNull
+ import org.junit.Assert.assertTrue
+ import org.junit.Test
+ import java.util.UUID
+ 
+ /**
+- * Load duration (CD / lambda) per load combination, and edition awareness.
+- * Expected numbers come from `nds_hand_calcs_261015.py` (T18, T19), worked from
+- * NDS 2.3.2 / Appendix N and the adjustment chain — not read back from the code.
+- * Fixture: 2x10 DF-L No.2 as in NdsWoodCombinedChecksTest, lb = 120 in, strong axis.
++ * Load duration (ASD CD, LRFD lambda), LRFD format conversion (KF, phi) and
++ * edition awareness. Expected numbers come from `nds_hand_calcs_261015.py`
++ * (T18, T20, T21), worked from NDS 2018 Tables 2.3.2 / 2.3.5 / 2.3.6 and the
++ * adjustment chain — not read back from the code under test.
++ * Fixture: 2x10 DF-L No.2 as in NdsWoodCombinedChecksTest, strong axis.
+  */
+ class NdsLoadDurationAndEditionTest {
+ 
+@@ -39,32 +41,41 @@ class NdsLoadDurationAndEditionTest {
+     )
+     private val spanId: UUID = UUID.randomUUID()
+ 
++    private val D = LoadCategory.DEAD
++    private val L = LoadCategory.LIVE
++    private val S = LoadCategory.SNOW
++    private val W = LoadCategory.WIND
++
+     private fun demand(
+-        cats: Set<LoadCategory>, method: DesignMethodology? = DesignMethodology.ASD,
+-        moment: Double = 5000.0, shear: Double = 100.0, name: String? = "combo"
++        loads: Map<LoadCategory, Double>, method: DesignMethodology? = DesignMethodology.ASD,
++        moment: Double = 5000.0, shear: Double = 100.0, axial: Double = 0.0, lb: Double = 120.0,
++        name: String? = "combo"
+     ) = StationDemand(
+-        spanId = spanId, x = 60.0.inches, moment = Moment(moment), shear = Force(shear),
+-        lbTop = 120.0.inches, lbBottom = 120.0.inches, compressionFlange = Flange.TOP,
+-        combinationName = name, combinationLoadCategories = cats, combinationMethodology = method
++        spanId = spanId, x = 60.0.inches, moment = Moment(moment), shear = Force(shear), axial = Force(axial),
++        lbTop = lb.inches, lbBottom = lb.inches, compressionFlange = Flange.TOP,
++        combinationName = name, combinationLoadFactors = loads, combinationMethodology = method
+     )
+ 
+     private fun calc(
+-        f: NdsAdjustmentFactors = NdsAdjustmentFactors(), edition: NdsEdition = NdsEdition.NDS_2018
+-    ) = NdsWoodCapacityCalculator(profile, material, adjustmentFactors = f, edition = edition)
++        f: NdsAdjustmentFactors = NdsAdjustmentFactors(), edition: NdsEdition = NdsEdition.NDS_2018,
++        default: DesignMethodology = DesignMethodology.ASD
++    ) = NdsWoodCapacityCalculator(profile, material, adjustmentFactors = f, edition = edition, defaultMethodology = default)
+ 
+     private fun near(expected: Double, actual: Double, what: String) =
+         assertEquals(what, expected, actual, kotlin.math.abs(expected) * 1e-6 + 1e-9)
+ 
+-    private val D = LoadCategory.DEAD
+-    private val L = LoadCategory.LIVE
+-    private val S = LoadCategory.SNOW
+-    private val W = LoadCategory.WIND
++    // the combinations used below, with their real ASCE 7 factors
++    private val dOnly = mapOf(D to 1.0)                           // D
++    private val dPlusL = mapOf(D to 1.0, L to 1.0)                // D + L
++    private val dPlusS = mapOf(D to 1.0, S to 1.0)                // D + S
++    private val dPlusW = mapOf(D to 1.0, W to 0.6)                // D + 0.6W
+ 
+     // ------------------------------------------------------------------ CD (ASD)
+ 
+     @Test
+     fun `CD follows the shortest-duration load acting in the combination`() {
+-        fun cd(vararg c: LoadCategory) = NdsLoadDuration.resolve(c.toSet(), DesignMethodology.ASD, NdsEdition.NDS_2018)!!
++        fun cd(vararg c: LoadCategory) =
++            NdsLoadDuration.resolve(c.associateWith { 1.0 }, DesignMethodology.ASD, NdsEdition.NDS_2018)!!
+         assertEquals(0.9, cd(D).factor, 0.0)            // permanent
+         assertEquals(1.0, cd(D, L).factor, 0.0)         // ten years
+         assertEquals(1.15, cd(D, S).factor, 0.0)        // two months
+@@ -73,56 +84,53 @@ class NdsLoadDurationAndEditionTest {
+         assertEquals(1.6, cd(D, L, S, W).factor, 0.0)   // wind is the shortest
+         assertEquals(1.6, cd(D, LoadCategory.SEISMIC).factor, 0.0)
+         assertEquals(LoadCategory.WIND, cd(D, L, W).governingCategory)
+-        assertNull(NdsLoadDuration.resolve(emptySet(), DesignMethodology.ASD, NdsEdition.NDS_2018))
++        assertNull(NdsLoadDuration.resolve(emptyMap(), DesignMethodology.ASD, NdsEdition.NDS_2018))
+     }
+ 
+     @Test
+     fun `ASD capacity uses the CD of each combination, including its effect on CL`() {
+         val c = calc()
+         // CD also multiplies F*b, which changes CL, so capacity is not simply proportional to CD.
+-        near(14028.108797140261, c.evaluateDetailed(demand(setOf(D)), DesignMethodology.ASD).momentCheck.capacity.lbIn, "D only, CD 0.9")
+-        near(14491.636560084275, c.evaluateDetailed(demand(setOf(D, L)), DesignMethodology.ASD).momentCheck.capacity.lbIn, "D + L, CD 1.0")
+-        near(14937.35645948547, c.evaluateDetailed(demand(setOf(D, S)), DesignMethodology.ASD).momentCheck.capacity.lbIn, "D + S, CD 1.15")
+-        near(15522.305391143278, c.evaluateDetailed(demand(setOf(D, W)), DesignMethodology.ASD).momentCheck.capacity.lbIn, "D + W, CD 1.6")
+-        // The point path (evaluate) agrees with the detailed path.
+-        near(15522.305391143278, c.evaluate(demand(setOf(D, W))).nominalFlexureX, "evaluate() D + W")
+-        // Shear: Vn = (2/3) Fv CD A
+-        near(1498.5, c.evaluateDetailed(demand(setOf(D)), DesignMethodology.ASD).shearCheck.capacity.pounds, "shear, CD 0.9")
+-        near(2664.0, c.evaluateDetailed(demand(setOf(D, W)), DesignMethodology.ASD).shearCheck.capacity.pounds, "shear, CD 1.6")
++        near(14028.108797140261, c.evaluateDetailed(demand(dOnly), DesignMethodology.ASD).momentCheck.capacity.lbIn, "D only, CD 0.9")
++        near(14491.636560084275, c.evaluateDetailed(demand(dPlusL), DesignMethodology.ASD).momentCheck.capacity.lbIn, "D + L, CD 1.0")
++        near(14937.35645948547, c.evaluateDetailed(demand(dPlusS), DesignMethodology.ASD).momentCheck.capacity.lbIn, "D + S, CD 1.15")
++        near(15522.305391143278, c.evaluateDetailed(demand(dPlusW), DesignMethodology.ASD).momentCheck.capacity.lbIn, "D + 0.6W, CD 1.6")
++        near(15522.305391143278, c.evaluate(demand(dPlusW)).nominalFlexureX, "evaluate() D + 0.6W")
++        near(1498.5, c.evaluateDetailed(demand(dOnly), DesignMethodology.ASD).shearCheck.capacity.pounds, "shear, CD 0.9")
++        near(2664.0, c.evaluateDetailed(demand(dPlusW), DesignMethodology.ASD).shearCheck.capacity.pounds, "shear, CD 1.6")
+     }
+ 
+     @Test
+     fun `a hand-entered CD, or auto turned off, overrides the combination`() {
+-        val manual = calc(NdsAdjustmentFactors(cd = 0.9))
+-        near(14028.108797140261, manual.evaluateDetailed(demand(setOf(D, W)), DesignMethodology.ASD).momentCheck.capacity.lbIn, "manual 0.9 under wind")
+-        val off = calc(NdsAdjustmentFactors(loadDurationFromCombination = false))
+-        near(14491.636560084275, off.evaluateDetailed(demand(setOf(D)), DesignMethodology.ASD).momentCheck.capacity.lbIn, "auto off -> CD 1.0 under dead load")
++        near(14028.108797140261, calc(NdsAdjustmentFactors(cd = 0.9)).evaluateDetailed(demand(dPlusW), DesignMethodology.ASD)
++            .momentCheck.capacity.lbIn, "manual 0.9 under wind")
++        near(14491.636560084275, calc(NdsAdjustmentFactors(loadDurationFromCombination = false))
++            .evaluateDetailed(demand(dOnly), DesignMethodology.ASD).momentCheck.capacity.lbIn, "auto off -> CD 1.0 under dead load")
+         assertFalse(NdsAdjustmentFactors(cd = 0.9).usesAutoLoadDuration)
+         assertTrue(NdsAdjustmentFactors().usesAutoLoadDuration)
+     }
+ 
+     @Test
+     fun `a demand not tied to a combination falls back to the manual CD and says so`() {
+-        val r = calc().evaluateDetailed(demand(emptySet(), method = null, name = null), DesignMethodology.ASD)
++        val r = calc().evaluateDetailed(demand(emptyMap(), method = null, name = null), DesignMethodology.ASD)
+         near(14491.636560084275, r.momentCheck.capacity.lbIn, "CD 1.0 fallback")
+         assertTrue(r.codeDataNotices.any { it.dataset.contains("Load duration") && it.message.contains("isn't tied") })
+     }
+ 
+     @Test
+-    fun `only loads that are both in the combination and applied count`() {
+-        fun combo(vararg f: Pair<LoadCategory, Double>) = LoadCombination(
++    fun `only loads that are both in the combination and applied count, with their factors`() {
++        val combo = LoadCombination(
+             id = "x", name = "x", methodology = DesignMethodology.ASD, type = CombinationType.STRENGTH,
+-            equationText = "x", factors = mapOf(*f), codeReference = "test"
++            equationText = "x", factors = mapOf(D to 1.0, S to 0.75, W to 0.0), codeReference = "test"
+         )
+-        val c = combo(D to 1.0, S to 0.75, W to 0.0)
+         // Snow is in the combination but no snow load was entered; wind has a zero factor.
+-        assertEquals(setOf(D), MemberAnalysisSolver.loadCategoriesActing(c, setOf(D, W)))
+-        assertEquals(setOf(D, S), MemberAnalysisSolver.loadCategoriesActing(c, setOf(D, S, W)))
++        assertEquals(mapOf(D to 1.0), MemberAnalysisSolver.loadFactorsActing(combo, setOf(D, W)))
++        assertEquals(mapOf(D to 1.0, S to 0.75), MemberAnalysisSolver.loadFactorsActing(combo, setOf(D, S, W)))
+     }
+ 
+     @Test
+     fun `selected properties name the CD, where it came from, and the loads acting`() {
+-        val r = calc().evaluateDetailed(demand(setOf(D, W), name = "D + 0.6W"), DesignMethodology.ASD)
++        val r = calc().evaluateDetailed(demand(dPlusW, name = "D + 0.6W"), DesignMethodology.ASD)
+         val cdRow = r.selectedProperties.first { it.title == "Adjustment factors" }.rows.first { it.symbol == "CD" }
+         assertEquals("1.60", cdRow.value)
+         assertTrue(cdRow.description.contains("wind"))
+@@ -131,44 +139,96 @@ class NdsLoadDurationAndEditionTest {
+         assertEquals("DL, W", code.rows.first { it.symbol == "Loads acting" }.value)
+     }
+ 
+-    // ------------------------------------------------------------------ lambda (LRFD)
++    // ------------------------------------------------------------------ lambda (LRFD), Table N3
+ 
+     @Test
+-    fun `lambda follows the combination under LRFD, and CD does not apply`() {
+-        fun lam(vararg c: LoadCategory) = NdsLoadDuration.resolve(c.toSet(), DesignMethodology.LRFD, NdsEdition.NDS_2018)!!.factor
+-        assertEquals(0.6, lam(D), 0.0)               // 1.4D
+-        assertEquals(0.8, lam(D, L), 0.0)            // 1.2D + 1.6L
+-        assertEquals(0.8, lam(D, S), 0.0)            // 1.2D + 1.6S
+-        assertEquals(1.0, lam(D, L, W), 0.0)         // 1.2D + 1.0W + L
+-        assertEquals(1.0, lam(D, LoadCategory.SEISMIC), 0.0)
++    fun `lambda follows Table N3 by the combination's factors`() {
++        fun lam(vararg f: Pair<LoadCategory, Double>) =
++            NdsLoadDuration.resolve(mapOf(*f), DesignMethodology.LRFD, NdsEdition.NDS_2018)!!.factor
++        assertEquals(0.6, lam(D to 1.4), 0.0)                                       // 1.4D
++        assertEquals(0.8, lam(D to 1.2, L to 1.6), 0.0)                              // 1.2D + 1.6L (+ 0.5 roof)
++        assertEquals(0.8, lam(D to 1.2, L to 1.6, S to 0.5), 0.0)
++        assertEquals(0.8, lam(D to 1.2, S to 1.6, L to 1.0), 0.0)                    // 1.2D + 1.6S + L
++        // 1.2D + 1.6S + 0.5W: wind is present but at 0.5, so Table N3 gives 0.8 (not 1.0)
++        assertEquals(0.8, lam(D to 1.2, S to 1.6, W to 0.5), 0.0)
++        assertEquals(1.0, lam(D to 1.2, W to 1.0, L to 1.0, S to 0.5), 0.0)          // 1.2D + 1.0W + L + 0.5S
++        assertEquals(1.0, lam(D to 1.2, LoadCategory.SEISMIC to 1.0, L to 1.0, S to 0.2), 0.0)
++        assertEquals(1.0, lam(D to 0.9, W to 1.0), 0.0)                              // 0.9D + 1.0W
++        assertEquals(1.0, lam(D to 0.9, LoadCategory.SEISMIC to 1.0), 0.0)
++    }
+ 
++    @Test
++    fun `LRFD puts KF x phi x lambda inside the design values, before CL and CP`() {
+         val c = calc()
+-        fun mn(vararg cats: LoadCategory) =
+-            c.evaluateDetailed(demand(cats.toSet(), DesignMethodology.LRFD), DesignMethodology.LRFD).momentCheck.capacity.lbIn
+-        near(7390.7346456429805, mn(D), "LRFD D only: 0.6 x 0.85 x Mn(CD=1)")
+-        near(9854.312860857308, mn(D, L), "LRFD D + L: 0.8 x 0.85")
+-        near(12317.891076071634, mn(D, W), "LRFD wind: 1.0 x 0.85")
++        fun r(loads: Map<LoadCategory, Double>, moment: Double = 5000.0, axial: Double = 0.0, lb: Double = 120.0) =
++            c.evaluateDetailed(demand(loads, DesignMethodology.LRFD, moment = moment, axial = axial, lb = lb), DesignMethodology.LRFD)
++        val d14 = mapOf(D to 1.4)                       // 1.4D            lambda 0.6
++        val l16 = mapOf(D to 1.2, L to 1.6)             // 1.2D + 1.6L     lambda 0.8
++        val w10 = mapOf(D to 0.9, W to 1.0)             // 0.9D + 1.0W     lambda 1.0
++        // Bending: F*b = Fb x KF(2.54) x phi(0.85) x lambda x CF ; E'min = Emin x 1.76 x 0.85 ; then CL ; Mn = F*b CL Sx
++        near(20683.286125837058, r(d14).momentCheck.capacity.lbIn, "Mn, 1.4D")
++        near(22361.700708587065, r(l16).momentCheck.capacity.lbIn, "Mn, 1.2D + 1.6L")
++        near(23019.681453128185, r(w10).momentCheck.capacity.lbIn, "Mn, 0.9D + 1.0W")
++        // Shear: Vn = 2/3 Fv KF(2.88) phi(0.75) lambda A
++        near(2157.84, r(d14, moment = 0.0).shearCheck.capacity.pounds, "Vn, 1.4D")
++        near(3596.4000000000005, r(w10, moment = 0.0).shearCheck.capacity.pounds, "Vn, 0.9D + 1.0W")
++        // Compression: F*c = Fc KF(2.40) phi(0.90) lambda ; FcE uses the LRFD E'min ; CP ; Pn = F*c CP A  (lb = 60)
++        near(5818.254784916252, r(d14, moment = 0.0, axial = -500.0, lb = 60.0).axialCheck.capacity.pounds, "Pn, 1.4D")
++        near(5920.038100017735, r(l16, moment = 0.0, axial = -500.0, lb = 60.0).axialCheck.capacity.pounds, "Pn, 1.2D + 1.6L")
++        near(5977.802765150828, r(w10, moment = 0.0, axial = -500.0, lb = 60.0).axialCheck.capacity.pounds, "Pn, 0.9D + 1.0W")
++        // Tension: F't = Ft KF(2.70) phi(0.80) lambda CF A
++        near(11373.615000000002, r(d14, moment = 0.0, axial = 500.0).axialCheck.capacity.pounds, "Tn, 1.4D")
++        near(18956.025, r(w10, moment = 0.0, axial = 500.0).axialCheck.capacity.pounds, "Tn, 0.9D + 1.0W")
++    }
++
++    @Test
++    fun `LRFD nominal capacities from evaluate() match the detailed path`() {
++        val c = calc(default = DesignMethodology.LRFD)
++        val w10 = mapOf(D to 0.9, W to 1.0)
++        near(23019.681453128185, c.evaluate(demand(w10, DesignMethodology.LRFD)).nominalFlexureX, "evaluate() LRFD")
++        // A demand with no combination takes lambda = 0.8 and the calculator's default methodology.
++        near(22361.700708587065, c.evaluate(demand(emptyMap(), method = null, name = null)).nominalFlexureX, "evaluate() default lambda 0.8")
++        // ASD default: the same legacy demand is NOT given KF x phi.
++        near(14491.636560084275, calc().evaluate(demand(emptyMap(), method = null, name = null)).nominalFlexureX, "evaluate() ASD default")
++    }
++
++    @Test
++    fun `LRFD combined bending and tension uses the factored values directly`() {
++        val w = mapOf(D to 1.2, W to 1.0, L to 1.0, S to 0.5)    // 1.2D + 1.0W + L + 0.5S, lambda 1.0
++        val r = calc().evaluateDetailed(
++            demand(w, DesignMethodology.LRFD, moment = 12000.0, axial = 1000.0), DesignMethodology.LRFD
++        )
++        val c = r.combinedChecks.single()
++        near(0.32271676653033665, c.equations.first { it.equation == "Eq. 3.9-1" }.value, "Eq 3.9-1 (LRFD)")
++        near(0.45432137515144166, c.equations.first { it.equation.startsWith("Eq. 3.9-2") }.value, "Eq 3.9-2 (LRFD)")
++        assertTrue(c.notes.any { it.contains("KF x phi x lambda") })
+     }
+ 
+     @Test
+-    fun `design factors per demand carry lambda x phi for that combination`() {
++    fun `design factors are 1 for both methodologies because the nominals are already factored`() {
+         val c = calc()
+-        near(0.6 * 0.85, c.designFactorsFor(demand(setOf(D), DesignMethodology.LRFD), DesignMethodology.LRFD).flexure.value, "D only")
+-        near(0.8 * 0.75, c.designFactorsFor(demand(setOf(D, L), DesignMethodology.LRFD), DesignMethodology.LRFD).shear.value, "D + L shear")
+-        near(1.0 * 0.90, c.designFactorsFor(demand(setOf(D, W), DesignMethodology.LRFD), DesignMethodology.LRFD).axialCompression.value, "wind compression")
+-        // Unknown combination -> the 0.8 default; ASD is untouched.
+-        near(0.8 * 0.85, c.designFactorsFor(demand(emptySet(), null, name = null), DesignMethodology.LRFD).flexure.value, "default")
+-        near(1.0, c.designFactorsFor(demand(setOf(D)), DesignMethodology.ASD).flexure.value, "ASD")
+-
+-        // The point-path engine picks them up per station.
+-        val results = com.lz.solver.capacity.CapacityEngine.evaluate(
+-            demands = listOf(demand(setOf(D), DesignMethodology.LRFD), demand(setOf(D, W), DesignMethodology.LRFD)),
+-            section = profile, methodology = DesignMethodology.LRFD,
+-            factors = c.designFactors(DesignMethodology.LRFD),
+-            factorsProvider = { c.designFactorsFor(it, DesignMethodology.LRFD) }
++        for (m in DesignMethodology.values()) {
++            val f = c.designFactors(m)
++            assertEquals(1.0, f.flexure.value, 0.0); assertEquals(1.0, f.shear.value, 0.0)
++            assertEquals(1.0, f.axialTension.value, 0.0); assertEquals(1.0, f.axialCompression.value, 0.0)
++        }
++        // The point-path engine therefore reports the nominal as the design capacity.
++        val w10 = mapOf(D to 0.9, W to 1.0)
++        val res = com.lz.solver.capacity.CapacityEngine.evaluate(
++            demands = listOf(demand(w10, DesignMethodology.LRFD)), section = profile,
++            methodology = DesignMethodology.LRFD, factors = c.designFactors(DesignMethodology.LRFD)
+         ) { c.evaluate(it) }
+-        near(0.6 * 0.85 * 14491.636560084275, results[0].flexureCheckX.capacity, "station 1 capacity")
+-        near(1.0 * 0.85 * 14491.636560084275, results[1].flexureCheckX.capacity, "station 2 capacity")
++        near(23019.681453128185, res.single().flexureCheckX.capacity, "engine design capacity")
++    }
++
++    @Test
++    fun `the LRFD result states the factors that were applied`() {
++        val r = calc().evaluateDetailed(
++            demand(mapOf(D to 1.2, L to 1.6), DesignMethodology.LRFD), DesignMethodology.LRFD
++        )
++        val row = r.selectedProperties.first { it.title == "Adjustment factors" }.rows.first { it.symbol == "\u03bb" }
++        assertEquals("0.80", row.value)
++        assertTrue(r.momentCheck.traces.any { it.symbolicEquation.contains("KF\u03c6\u03bb") })
+     }
+ 
+     // ------------------------------------------------------------------ edition awareness
+@@ -176,7 +236,7 @@ class NdsLoadDurationAndEditionTest {
+     @Test
+     fun `a sawn-lumber check against NDS 2018 has no missing-data notice, 2015 and 2024 do`() {
+         val asd = DesignMethodology.ASD
+-        fun notices(e: NdsEdition) = calc(edition = e).evaluateDetailed(demand(setOf(D, L)), asd).codeDataNotices
++        fun notices(e: NdsEdition) = calc(edition = e).evaluateDetailed(demand(dPlusL), asd).codeDataNotices
+         assertTrue(notices(NdsEdition.NDS_2018).none { it.status == CodeDataStatus.NOT_SOURCED })
+         for (e in listOf(NdsEdition.NDS_2015, NdsEdition.NDS_2024)) {
+             val n = notices(e).first { it.status == CodeDataStatus.NOT_SOURCED }
+@@ -184,11 +244,27 @@ class NdsLoadDurationAndEditionTest {
+             assertTrue(n.message.contains("NDS ${e.year}"))
+             assertTrue(n.message.contains("NDS 2018"))
+         }
+-        assertEquals("NDS 2024", calc(edition = NdsEdition.NDS_2024).evaluateDetailed(demand(setOf(D)), asd).standardLabel)
+-        assertEquals("NDS 2015", calc(edition = NdsEdition.NDS_2015).evaluateDetailed(demand(setOf(D)), asd)
++        assertEquals("NDS 2024", calc(edition = NdsEdition.NDS_2024).evaluateDetailed(demand(dOnly), asd).standardLabel)
++        assertEquals("NDS 2015", calc(edition = NdsEdition.NDS_2015).evaluateDetailed(demand(dOnly), asd)
+             .selectedProperties.first { it.title == "Code and standard" }.rows.first { it.symbol == "Standard" }.value)
+     }
+ 
++    @Test
++    fun `Chapter 2 factors are checked for NDS 2018 only`() {
++        fun asd(e: NdsEdition) = NdsCodeData.noticesFor(e, DesignMethodology.ASD, isGlulam = false)
++        fun lrfd(e: NdsEdition) = NdsCodeData.noticesFor(e, DesignMethodology.LRFD, isGlulam = false)
++        assertTrue(asd(NdsEdition.NDS_2018).none { it.dataset.startsWith("Load duration factor CD") })
++        assertTrue(asd(NdsEdition.NDS_2024).any { it.dataset.startsWith("Load duration factor CD") })
++        assertTrue(lrfd(NdsEdition.NDS_2018).none { it.dataset.startsWith("Format conversion") })
++        assertTrue(lrfd(NdsEdition.NDS_2015).any { it.dataset.startsWith("Format conversion") })
++        // Lambda (Appendix N) is unchecked for every edition; the duration mapping assumptions are always disclosed.
++        for (e in NdsEdition.values()) {
++            assertTrue(lrfd(e).any { it.dataset.contains("\u03bb") && it.status == CodeDataStatus.UNVERIFIED })
++            assertTrue(asd(e).any { it.dataset.startsWith("Load type to duration") })
++            assertTrue((asd(e) + lrfd(e)).none { it.status == CodeDataStatus.NOT_IMPLEMENTED })
++        }
++    }
++
+     @Test
+     fun `glulam is flagged as mixed provenance even for 2018`() {
+         val n = NdsCodeData.noticesFor(NdsEdition.NDS_2018, DesignMethodology.ASD, isGlulam = true)
+@@ -197,13 +273,35 @@ class NdsLoadDurationAndEditionTest {
+             .any { it.status == CodeDataStatus.NOT_SOURCED && it.dataset.contains("glulam") })
+     }
+ 
++    // ------------------------------------------------------------------ registry values, NDS 2018 text
++
++    @Test
++    fun `registry KF and phi match NDS 2018 Tables 2_3_5 and 2_3_6`() {
++        val c = NdsVersionRegistry.getConstantsFor(NdsEdition.NDS_2018)
++        assertEquals(2.54, c.kfBending, 0.0); assertEquals(2.70, c.kfTension, 0.0); assertEquals(2.88, c.kfShear, 0.0)
++        assertEquals(2.40, c.kfCompParallel, 0.0); assertEquals(1.67, c.kfCompPerp, 0.0); assertEquals(1.76, c.kfModulusMin, 0.0)
++        assertEquals(0.85, c.phiBending, 0.0); assertEquals(0.80, c.phiTension, 0.0); assertEquals(0.75, c.phiShear, 0.0)
++        assertEquals(0.90, c.phiCompression, 0.0); assertEquals(0.85, c.phiStability, 0.0)
++        // KF x phi is 2.16 for the strength properties (a useful consistency check on the table).
++        assertEquals(2.16, c.kfBending * c.phiBending, 0.005); assertEquals(2.16, c.kfTension * c.phiTension, 0.005)
++        assertEquals(2.16, c.kfShear * c.phiShear, 0.005); assertEquals(2.16, c.kfCompParallel * c.phiCompression, 0.005)
++    }
++
+     @Test
+-    fun `LRFD reports that KF is not applied, ASD does not`() {
+-        val lrfd = NdsCodeData.noticesFor(NdsEdition.NDS_2018, DesignMethodology.LRFD, isGlulam = false)
+-        assertTrue(lrfd.any { it.status == CodeDataStatus.NOT_IMPLEMENTED && it.dataset.contains("KF") })
+-        assertTrue(NdsCodeData.noticesFor(NdsEdition.NDS_2018, DesignMethodology.ASD, isGlulam = false)
+-            .none { it.status == CodeDataStatus.NOT_IMPLEMENTED })
+-        val r = calc().evaluateDetailed(demand(setOf(D, L), DesignMethodology.LRFD), DesignMethodology.LRFD)
+-        assertTrue(r.codeDataNotices.any { it.status == CodeDataStatus.NOT_IMPLEMENTED })
++    fun `registry temperature factors match NDS 2018 Table 2_3_3`() {
++        fun ct(r: TemperatureRange, wet: Boolean) = NdsVersionRegistry.getTemperatureFactors(r, wet)
++        for (wet in listOf(false, true)) {
++            val a = ct(TemperatureRange.T_100_OR_LESS, wet)
++            assertEquals(listOf(1.0, 1.0, 1.0, 1.0), listOf(a.ctTension, a.ctBending, a.ctCompPerp, a.ctModulus))
++            // Ft, E, Emin: 0.9 and 0.9 whether wet or dry
++            assertEquals(0.9, ct(TemperatureRange.T_101_TO_125, wet).ctTension, 0.0)
++            assertEquals(0.9, ct(TemperatureRange.T_126_TO_150, wet).ctModulus, 0.0)
++        }
++        // Fb, Fv, Fc, Fc-perp: dry 0.8 / 0.7, wet 0.7 / 0.5
++        assertEquals(0.8, ct(TemperatureRange.T_101_TO_125, false).ctBending, 0.0)
++        assertEquals(0.8, ct(TemperatureRange.T_101_TO_125, false).ctCompPerp, 0.0)
++        assertEquals(0.7, ct(TemperatureRange.T_126_TO_150, false).ctBending, 0.0)
++        assertEquals(0.7, ct(TemperatureRange.T_101_TO_125, true).ctBending, 0.0)
++        assertEquals(0.5, ct(TemperatureRange.T_126_TO_150, true).ctCompPerp, 0.0)
+     }
+ }
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 4e804d0..7f4a6f5 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -261,7 +261,8 @@ class BeamViewModel @Inject constructor(
+                 section, mat,
+                 adjustmentFactors = ndsAdjustmentFactors,
+                 edition = activeNdsEdition ?: NdsEdition.NDS_2018,
+-                memberIsStrongAxis = isStrongAxis
++                memberIsStrongAxis = isStrongAxis,
++                defaultMethodology = methodology
+             )
+             else                   -> null
+         }
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+index e9dc2dd..57daff1 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+@@ -150,7 +150,8 @@ object BeamAnalysisSolver {
+                 profile, material,
+                 adjustmentFactors = config.ndsAdjustmentFactors,
+                 edition = resolveNdsEdition(config) ?: NdsEdition.NDS_2018,
+-                memberIsStrongAxis = config.isStrongAxis
++                memberIsStrongAxis = config.isStrongAxis,
++                defaultMethodology = config.designMethodology
+             )
+             else                   -> null
+         }
+@@ -166,10 +167,6 @@ object BeamAnalysisSolver {
+             // default, which is only right for steel).
+             interactionCheckProvider = (calculator as? NdsWoodCapacityCalculator)?.let { wood ->
+                 { demand -> wood.pointInteractionCheck(demand, config.designMethodology) }
+-            },
+-            // NDS LRFD lambda follows each combination's loads.
+-            factorsProvider = (calculator as? NdsWoodCapacityCalculator)?.let { wood ->
+-                { demand -> wood.designFactorsFor(demand, config.designMethodology) }
+             }
+         ) { demand -> calculator.evaluate(demand) }
+             .map { cap ->
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index fdecf9e..2637928 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -2632,6 +2632,7 @@ private val ndsVariableDescriptions: Map<String, String> = mapOf(
+     "P" to "Axial compression demand on the member at this station, from the governing load combination.",
+     "M" to "Bending moment about the axis being checked at this station.",
+     "RB" to "Slenderness ratio for bending members, sqrt(le x d / b^2) (NDS 3.3.3.6). Must not exceed 50 (NDS 3.3.3.7).",
++    "KF\u03c6\u03bb" to "LRFD only. The product of the format conversion factor KF (NDS Table 2.3.5), the resistance factor \u03c6 (Table 2.3.6) and the time effect factor \u03bb (Appendix N, set per load combination) that multiplies the reference design value in place of CD. It is applied before the stability factors are computed, so CL and CP see it.",
+     "lu" to "Unbraced length of the compression edge — the distance between points of lateral support for the axis being checked. Strong-axis and weak-axis bending, and the two column-buckling planes, can each have a different one.",
+     "lu/d" to "Unbraced length divided by the member's depth in the plane of bending. It selects the row of NDS Table 3.3.3 used for the effective length (below 7, 7 to 14.3, or above 14.3).",
+     "le" to "Effective length of the compression edge, accounting for how the load and bracing affect lateral buckling (NDS Table 3.3.3). With the load pattern not specified, the table's footnote 1 expressions are used: 2.06 lu (lu/d < 7), 1.63 lu + 3d (7 to 14.3), or 1.84 lu (> 14.3) — never less than any specific row of the table.",

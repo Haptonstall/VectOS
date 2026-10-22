@@ -261,7 +261,8 @@ class BeamViewModel @Inject constructor(
                 section, mat,
                 adjustmentFactors = ndsAdjustmentFactors,
                 edition = activeNdsEdition ?: NdsEdition.NDS_2018,
-                memberIsStrongAxis = isStrongAxis
+                memberIsStrongAxis = isStrongAxis,
+                defaultMethodology = methodology
             )
             else                   -> null
         }

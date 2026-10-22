@@ -88,13 +88,17 @@ data class WetServiceFactors(
 )
 
 /**
- * Temperature factors (Ct) per NDS Table 2.3.3.
+ * Temperature factors (Ct) per NDS Table 2.3.3 (NDS 2018 text).
  * Applied when sustained temperatures exceed 100°F.
+ *
+ * Table 2.3.3 groups the properties as: Ft, E, Emin (the same for wet or dry
+ * service) and Fb, Fv, Fc, Fc⊥ (lower, and lower again when wet).
  */
 @Serializable
 data class TemperatureFactors(
-    val ctBending: Double,          // Ct for Fb, Ft, Fv, Fc
-    val ctCompPerp: Double,         // Ct for Fc⊥
+    val ctTension: Double,          // Ct for Ft
+    val ctBending: Double,          // Ct for Fb, Fv, Fc
+    val ctCompPerp: Double,         // Ct for Fc⊥ (same column as Fb, Fv, Fc)
     val ctModulus: Double           // Ct for E, Emin
 )
 
@@ -120,8 +124,8 @@ data class NdsSpecificationConstants(
     // NDS Supplement Table 4A footnote — applied to Fb only
     val cfuFlatUse: Boolean = true,
 
-    // Format conversion factor (KF) for LRFD — NDS Appendix N
-    // Introduced formally in NDS 2015; values consistent across editions
+    // Format conversion factor (KF) for LRFD — NDS 2018 Table 2.3.5 (checked against the
+    // AWC-published NDS 2018 text; not checked for 2015 / 2024)
     val kfBending: Double      = 2.54,  // KF for Fb
     val kfTension: Double      = 2.70,  // KF for Ft
     val kfShear: Double        = 2.88,  // KF for Fv
@@ -129,7 +133,7 @@ data class NdsSpecificationConstants(
     val kfCompPerp: Double     = 1.67,  // KF for Fc⊥
     val kfModulusMin: Double   = 1.76,  // KF for Emin
 
-    // Resistance factors (phi) for LRFD — NDS Appendix N Table N1
+    // Resistance factors (phi) for LRFD — NDS 2018 Table 2.3.6 (phiStability is the Emin factor)
     val phiBending: Double      = 0.85,
     val phiTension: Double      = 0.80,
     val phiShear: Double        = 0.75,
@@ -148,31 +152,24 @@ object NdsVersionRegistry {
     /**
      * Resolves edition-specific specification constants.
      *
-     * NDS 2015 — introduced LRFD format conversion factors (Appendix N)
-     *            and updated beam stability provisions.
-     * NDS 2018 — clarified cross-laminated timber (CLT) provisions,
-     *            updated connection provisions in Chapter 10-12.
-     * NDS 2024 — updated species-specific reference design values in
-     *            the NDS Supplement; expanded mass timber provisions.
+     * The KF and phi values are checked against NDS 2018 only. The per-edition
+     * history that used to be written here was not sourced and has been
+     * removed; whether 2015 / 2024 differ is unverified (see NdsCodeData in
+     * the solver, which reports it).
      */
     fun getConstantsFor(edition: NdsEdition): NdsSpecificationConstants {
         return when (edition) {
             NdsEdition.NDS_2015 -> NdsSpecificationConstants(
                 edition = NdsEdition.NDS_2015
-                // LRFD format conversion factors (KF) formally introduced this edition.
-                // All KF and phi values above reflect NDS 2015 Appendix N Table N1.
+                // Not checked against the NDS 2015 text (2018 values assumed).
             )
             NdsEdition.NDS_2018 -> NdsSpecificationConstants(
                 edition = NdsEdition.NDS_2018
-                // Connection provisions updated in Chapters 10-12.
-                // KF and phi values unchanged from NDS 2015.
-                // CLT provisions expanded — mass timber chapter added.
+                // KF / phi checked against the NDS 2018 text (Tables 2.3.5, 2.3.6).
             )
             NdsEdition.NDS_2024 -> NdsSpecificationConstants(
                 edition = NdsEdition.NDS_2024
-                // NDS Supplement reference design values updated for several species.
-                // Mass timber provisions further expanded.
-                // KF and phi values unchanged from prior editions.
+                // Not checked against the NDS 2024 text (2018 values assumed).
             )
         }
     }
@@ -209,28 +206,27 @@ object NdsVersionRegistry {
     }
 
     /**
-     * Resolves temperature factors (Ct) per NDS Table 2.3.3.
-     * Consistent across all supported editions.
+     * Resolves temperature factors (Ct) per NDS 2018 Table 2.3.3 (checked
+     * against the AWC-published text; not checked for 2015 / 2024):
+     *
+     *                          T <= 100F   100 < T <= 125F   125 < T <= 150F
+     *  Ft, E, Emin (wet/dry)     1.0          0.9               0.9
+     *  Fb, Fv, Fc, Fc-perp  dry  1.0          0.8               0.7
+     *                       wet  1.0          0.7               0.5
      */
-    fun getTemperatureFactors(temperatureRange: TemperatureRange): TemperatureFactors {
+    fun getTemperatureFactors(temperatureRange: TemperatureRange, wetService: Boolean = false): TemperatureFactors {
         return when (temperatureRange) {
             TemperatureRange.T_100_OR_LESS -> TemperatureFactors(
-                ctBending  = 1.00,
-                ctCompPerp = 1.00,
-                ctModulus  = 1.00
+                ctTension = 1.00, ctBending = 1.00, ctCompPerp = 1.00, ctModulus = 1.00
             )
-            TemperatureRange.T_101_TO_125 -> TemperatureFactors(
-                // NDS Table 2.3.3 — wet service conditions reduce Ct further,
-                // but these values apply to dry service at elevated temperature
-                ctBending  = 0.80,
-                ctCompPerp = 0.67,
-                ctModulus  = 0.90
-            )
-            TemperatureRange.T_126_TO_150 -> TemperatureFactors(
-                ctBending  = 0.70,
-                ctCompPerp = 0.50,
-                ctModulus  = 0.80
-            )
+            TemperatureRange.T_101_TO_125 -> {
+                val strength = if (wetService) 0.70 else 0.80
+                TemperatureFactors(ctTension = 0.90, ctBending = strength, ctCompPerp = strength, ctModulus = 0.90)
+            }
+            TemperatureRange.T_126_TO_150 -> {
+                val strength = if (wetService) 0.50 else 0.70
+                TemperatureFactors(ctTension = 0.90, ctBending = strength, ctCompPerp = strength, ctModulus = 0.90)
+            }
         }
     }
 

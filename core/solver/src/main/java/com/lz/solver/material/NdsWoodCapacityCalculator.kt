@@ -3,6 +3,7 @@ package com.lz.solver.material
 import com.lz.model.regulatory.aisc.DesignFactor
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
 import com.lz.model.regulatory.nds.NdsEdition
+import com.lz.model.regulatory.nds.NdsVersionRegistry
 import com.lz.model.structural.CodeCheck
 import com.lz.model.structural.CodeDataNotice
 import com.lz.model.structural.CodeDataStatus
@@ -60,7 +61,7 @@ import kotlin.math.sqrt
  * phi/omega factors are NOT applied here for the [evaluate] path —
  * [CapacityEngine] owns that step. [evaluateDetailed] applies NDS
  * ASD factors directly for report output (NDS is inherently ASD;
- * LRFD format factor lambda is applied when methodology is LRFD).
+ * LRFD KF x phi x lambda are applied inside the adjusted design values when the methodology is LRFD).
  *
  * Member type is inferred from [WoodSpecies.isGlulam]:
  *   isGlulam = true  → glulam provisions (CV, NDS Chapter 5)
@@ -102,7 +103,13 @@ class NdsWoodCapacityCalculator(
      * one load combination being evaluated. Set only on the per-combination
      * copy this class makes of itself (see [forDemand]); leave null otherwise.
      */
-    private val loadDuration: ResolvedLoadDuration? = null
+    private val loadDuration: ResolvedLoadDuration? = null,
+    /**
+     * The design methodology for demands that don't say (a demand tied to a
+     * load combination carries its own). LRFD needs it because it changes the
+     * capacity itself, not just a factor applied afterwards.
+     */
+    private val defaultMethodology: DesignMethodology = DesignMethodology.ASD
 ) : CapacityCalculator {
 
     private val isGlulam: Boolean = material.species.isGlulam
@@ -290,6 +297,14 @@ class NdsWoodCapacityCalculator(
      * / [StationDemand.luWeakAxis] null) the larger of lbTop and lbBottom is
      * used — the conservative envelope, and the only information available.
      */
+    /**
+     * What multiplies the reference design values in place of CD in the
+     * traces: "CD" for ASD, "KF\u03c6\u03bb" for LRFD (format conversion x
+     * resistance x time effect factor — NDS 2.3.5 - 2.3.7).
+     */
+    private val durSym: String
+        get() = if (loadDuration?.symbol == "\u03bb") "KF\u03c6\u03bb" else "CD"
+
     private data class Unbraced(
         val strongBend: Double,
         val weakBend: Double,
@@ -322,22 +337,50 @@ class NdsWoodCapacityCalculator(
      * shortest-duration load acting sets it — so it can't be one number for
      * the whole member. ASD: CD multiplies Fb, Ft, Fv, Fc (never E, Emin or
      * Fc-perp) through the usual adjustment chain. LRFD: CD does not apply;
-     * the time effect factor lambda does instead, applied with phi
-     * ([designFactorsFor]) — so the nominal capacities carry no duration factor.
+     * the design values are instead multiplied by KF x phi x lambda (Emin by
+     * KF x phi-s) before any stability factor is computed, with lambda taken
+     * from the combination (NDS 2.3.5 - 2.3.7, Appendix N).
      */
     private fun forDemand(demand: StationDemand, methodology: DesignMethodology): NdsWoodCapacityCalculator? {
-        if (loadDuration != null || !adjustmentFactors.usesAutoLoadDuration) return null
-        val rd = NdsLoadDuration.resolve(demand.combinationLoadCategories, methodology, edition) ?: return null
-        val cd = if (methodology == DesignMethodology.LRFD) 1.0 else rd.factor
+        if (loadDuration != null) return null    // already the per-combination copy
+
+        if (methodology == DesignMethodology.LRFD) {
+            // LRFD always needs its own copy: KF, phi and lambda go into the
+            // design values (CD does not apply). lambda comes from the load
+            // combination when it is known and automatic mode is on, else 0.8.
+            val auto = adjustmentFactors.usesAutoLoadDuration
+            val rd = (if (auto) NdsLoadDuration.resolve(demand.combinationLoadFactors, methodology, edition) else null)
+                ?: ResolvedLoadDuration(
+                    factor = LAMBDA_DEFAULT, symbol = "\u03bb", governingCategory = null, durationLabel = "Time effect",
+                    explanation = "\u03bb = ${"%.2f".format(LAMBDA_DEFAULT)}: default \u2014 " +
+                        if (auto) "load combination not known" else "automatic load duration is off"
+                )
+            val c = NdsVersionRegistry.getConstantsFor(edition)
+            return NdsWoodCapacityCalculator(
+                profile, material,
+                adjustmentFactors.copy(
+                    cd = 1.0, loadDurationFromCombination = false,
+                    formatBending = c.kfBending * c.phiBending * rd.factor,
+                    formatTension = c.kfTension * c.phiTension * rd.factor,
+                    formatShear = c.kfShear * c.phiShear * rd.factor,
+                    formatCompression = c.kfCompParallel * c.phiCompression * rd.factor,
+                    formatEmin = c.kfModulusMin * c.phiStability          // lambda does not apply to Emin
+                ),
+                edition, memberIsStrongAxis, rd, methodology
+            )
+        }
+
+        if (!adjustmentFactors.usesAutoLoadDuration) return null
+        val rd = NdsLoadDuration.resolve(demand.combinationLoadFactors, methodology, edition) ?: return null
         return NdsWoodCapacityCalculator(
             profile, material,
-            adjustmentFactors.copy(cd = cd, loadDurationFromCombination = false),
-            edition, memberIsStrongAxis, rd
+            adjustmentFactors.copy(cd = rd.factor, loadDurationFromCombination = false),
+            edition, memberIsStrongAxis, rd, methodology
         )
     }
 
     override fun evaluate(demand: StationDemand): RawCapacityResult {
-        forDemand(demand, demand.combinationMethodology ?: DesignMethodology.ASD)?.let { return it.evaluate(demand) }
+        forDemand(demand, demand.combinationMethodology ?: defaultMethodology)?.let { return it.evaluate(demand) }
         val u = unbraced(demand)
         val lb = u.strongBend
 
@@ -389,27 +432,17 @@ class NdsWoodCapacityCalculator(
         else
             calculateCompression(u.colStrong, u.colWeak)
 
-        // NDS is inherently ASD. For LRFD, apply the time effect factor
-        // lambda per NDS Appendix N, Table N3 — 0.6 dead load only, 0.8
-        // occupancy live / roof live / snow / rain, 1.0 with wind or
-        // earthquake — resolved for THIS combination. When the combination
-        // isn't known (or CD was set by hand) the old default of 0.8 stands.
+        // The nominal capacities above ARE the design capacities, for both
+        // methodologies. ASD: adjusted design values (CD per combination).
+        // LRFD: the reference design values were multiplied by KF x phi x lambda
+        // (Emin by KF x phi-s) inside the adjustment chain, BEFORE CL and CP were
+        // computed — they are nonlinear in F*b / F*c and E'min, so scaling the
+        // finished capacity by phi afterwards (what this used to do, and without
+        // KF) is not the same thing. See [forDemand] and NDS 2.3.5 - 2.3.7, App. N.
         val lambda = if (methodology == DesignMethodology.LRFD) (loadDuration?.factor ?: LAMBDA_DEFAULT) else 1.0
-
-        // ASD: design value = adjusted F' * S (already in nominals)
-        // LRFD: design value = lambda * phi * F'n * S
-        val phiBending     = 0.85
-        val phiShear       = 0.75
-        val phiCompression = 0.90
-        val phiTension     = 0.80
-
-        val designMn = if (methodology == DesignMethodology.LRFD)
-            lambda * phiBending * nomMn else nomMn
-        val designVn = if (methodology == DesignMethodology.LRFD)
-            lambda * phiShear * nomVn else nomVn
-        val designPn = if (methodology == DesignMethodology.LRFD)
-            lambda * (if (isAxialTension) phiTension else phiCompression) * nomPn
-        else nomPn
+        val designMn = nomMn
+        val designVn = nomVn
+        val designPn = nomPn
 
         // Utilization is always demand vs. capacity as magnitudes — the
         // signed value only matters upstream (e.g. isAxialTension, or
@@ -424,16 +457,16 @@ class NdsWoodCapacityCalculator(
         val ratioVn = utilizationRatio(abs(demand.shear.pounds), designVn)
         val ratioPn = utilizationRatio(abs(demand.axial.pounds), designPn)
 
-        val kBend = if (methodology == DesignMethodology.LRFD) lambda * phiBending else 1.0
-        val kTens = if (methodology == DesignMethodology.LRFD) lambda * phiTension else 1.0
-        val kComp = if (methodology == DesignMethodology.LRFD) lambda * phiCompression else 1.0
+        // Combined checks use the adjusted values as they stand (already factored for LRFD).
+        val kBend = 1.0
+        val kTens = 1.0
+        val kComp = 1.0
 
         // Moment about the other principal axis (StationDemand.momentY), when present.
         val secondaryDemand = abs(demand.momentY.lbIn)
         val secondaryCheck = if (secondaryDemand > 0.0) {
             val sec = calculateBendingAbout(!memberIsStrongAxis, u)
-            val designMnSec = if (methodology == DesignMethodology.LRFD)
-                lambda * phiBending * sec.nominal else sec.nominal
+            val designMnSec = sec.nominal
             StrengthCheckResult(
                 demand               = Moment(secondaryDemand),
                 capacity             = Moment(designMnSec),
@@ -514,60 +547,29 @@ class NdsWoodCapacityCalculator(
     }
 
     /**
-     * NDS is inherently ASD: [evaluate]'s nominal values already ARE the
-     * fully code-adjusted allowable capacity (F' * S, with CD/CM/Ct/CL/CF/
-     * etc. baked in). So for ASD, `value = 1.0` here — CapacityEngine will
-     * divide by 1.0, i.e. use the nominal as-is. Dividing by anything else
-     * would double-count NDS's own adjustment factors.
-     *
-     * For LRFD, reproduces exactly the same lambda*phi logic already used in
-     * [evaluateDetailed] (NDS Appendix N format conversion). Folding lambda
-     * into the returned factor's `value` lets [DesignFactorSet.apply] use
-     * the same `nominal * value` shape as the AISC LRFD case.
+     * [evaluate]'s nominal values already ARE the fully adjusted design
+     * capacity for BOTH methodologies, so every factor here is 1.0 —
+     * CapacityEngine uses the nominal as-is. ASD: F' x S with CD / CM / Ct /
+     * CL / CF ... baked in. LRFD: the same chain with KF x phi x lambda
+     * (NDS 2.3.5 - 2.3.7) multiplied into the design values up front, and
+     * KF x phi-s into Emin, so that CL and CP see them (see [forDemand]).
+     * Applying phi here instead would scale a finished capacity, which is not
+     * equivalent once a stability factor is involved, and would double-count.
      */
     override fun designFactors(methodology: DesignMethodology): DesignFactorSet {
-        if (methodology == DesignMethodology.ASD) {
-            val one = DesignFactor(1.0, "NDS ASD — nominal is already the adjusted allowable capacity")
-            return DesignFactorSet(
-                methodology       = methodology,
-                flexure           = one,
-                shear             = one,
-                axialTension      = one,
-                axialCompression  = one,
-                torsion           = one
-            )
-        }
-
-        return lrfdFactors(LAMBDA_DEFAULT)
-    }
-
-    /**
-     * The factors for the combination that produced [demand]. Same as
-     * [designFactors] except LRFD uses that combination's own time effect
-     * factor lambda (Table N3) instead of the 0.8 default — so a dead-load-only
-     * combination gets 0.6 and a wind combination 1.0.
-     */
-    fun designFactorsFor(demand: StationDemand, methodology: DesignMethodology): DesignFactorSet {
-        if (methodology != DesignMethodology.LRFD || !adjustmentFactors.usesAutoLoadDuration) {
-            return designFactors(methodology)
-        }
-        val rd = NdsLoadDuration.resolve(demand.combinationLoadCategories, methodology, edition)
-        return lrfdFactors(rd?.factor ?: LAMBDA_DEFAULT)
-    }
-
-    private fun lrfdFactors(lambda: Double): DesignFactorSet {
-        val methodology = DesignMethodology.LRFD
-        val phiBending     = 0.85
-        val phiShear       = 0.75
-        val phiCompression = 0.90
-        val phiTension     = 0.80
-
+        val one = DesignFactor(
+            1.0,
+            if (methodology == DesignMethodology.LRFD)
+                "NDS LRFD \u2014 nominal already includes KF x phi x lambda"
+            else
+                "NDS ASD \u2014 nominal is already the adjusted allowable capacity"
+        )
         return DesignFactorSet(
             methodology       = methodology,
-            flexure           = DesignFactor(lambda * phiBending,     "NDS Appendix N — lambda x phi (bending); KF not applied"),
-            shear             = DesignFactor(lambda * phiShear,       "NDS Appendix N — lambda x phi (shear); KF not applied"),
-            axialTension      = DesignFactor(lambda * phiTension,     "NDS Appendix N — lambda x phi (tension); KF not applied"),
-            axialCompression  = DesignFactor(lambda * phiCompression, "NDS Appendix N — lambda x phi (compression); KF not applied"),
+            flexure           = one,
+            shear             = one,
+            axialTension      = one,
+            axialCompression  = one,
             torsion           = DesignFactor(1.0, "Torsion not codified for wood")
         )
     }
@@ -663,14 +665,14 @@ class NdsWoodCapacityCalculator(
             variables = mapOf("E'min" to stab.eMinAdj, "RB" to stab.rb)
         )
         traces += DesignEquationTrace(
-            symbolicEquation = "F*b = Fb x CD x CM x Ct x CF x Ci x Cr   (all factors except Cfu, CV, CL)",
-            substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+            symbolicEquation = "F*b = Fb x ${durSym} x CM x Ct x CF x Ci x Cr   (all factors except Cfu, CV, CL)",
+            substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
                 "${fmt(cfStab, 3)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
             result = fmt(stab.fStarB, 0),
             units = "psi",
             codeReference = "NDS 3.3.3.8",
             variables = mapOf(
-                "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
+                "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
                 "CF" to cfStab, "Ci" to f.ci, "Cr" to f.cr
             )
         )
@@ -715,81 +717,81 @@ class NdsWoodCapacityCalculator(
             val cv = computeCV(lb)
             // NDS 5.3.6: use lesser of CV and CL
             val stabilityFactor = min(cl, cv)
-            fbAdj = fb * f.cd * f.cm * f.ct * stabilityFactor * f.cfu * f.ci
-            fStar = fb * f.cd * f.cm * f.ct * cv * f.cfu * f.ci
-            fStarStar = fb * f.cd * f.cm * f.ct * cl * f.cfu * f.ci
+            fbAdj = fb * f.cdBending * f.cm * f.ct * stabilityFactor * f.cfu * f.ci
+            fStar = fb * f.cdBending * f.cm * f.ct * cv * f.cfu * f.ci
+            fStarStar = fb * f.cdBending * f.cm * f.ct * cl * f.cfu * f.ci
             limitState = if (cv <= cl)
                 "Bending — Volume Factor CV (NDS 5.3.6)"
             else
                 "Bending — Beam Stability CL (NDS 3.3.3)"
             adjTrace = DesignEquationTrace(
-                symbolicEquation = "F'b = Fb x CD x CM x Ct x min(CL, CV) x Cfu x Ci",
-                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x " +
+                symbolicEquation = "F'b = Fb x ${durSym} x CM x Ct x min(CL, CV) x Cfu x Ci",
+                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x " +
                     "${fmt(f.ct)} x min(${fmt(cl, 3)}, ${fmt(cv, 3)}) x ${fmt(f.cfu)} x ${fmt(f.ci)}",
                 result = fmt(fbAdj, 0),
                 units = "psi",
                 codeReference = "NDS 5.3.2, 5.3.6",
                 variables = mapOf(
-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
+                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
                     "CL" to cl, "CV" to cv, "Cfu" to f.cfu, "Ci" to f.ci
                 )
             )
             fStarTrace = DesignEquationTrace(
-                symbolicEquation = "F*b = Fb x CD x CM x Ct x CV x Cfu x Ci   (all factors except CL)",
-                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                symbolicEquation = "F*b = Fb x ${durSym} x CM x Ct x CV x Cfu x Ci   (all factors except CL)",
+                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
                     "${fmt(cv, 3)} x ${fmt(f.cfu)} x ${fmt(f.ci)}",
                 result = fmt(fStar, 0),
                 units = "psi",
                 codeReference = "NDS 3.9.1",
                 variables = mapOf(
-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
+                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
                     "CV" to cv, "Cfu" to f.cfu, "Ci" to f.ci
                 )
             )
             fStarStarTrace = DesignEquationTrace(
-                symbolicEquation = "F**b = Fb x CD x CM x Ct x CL x Cfu x Ci   (all factors except CV)",
-                substitutedEquation = "F**b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                symbolicEquation = "F**b = Fb x ${durSym} x CM x Ct x CL x Cfu x Ci   (all factors except CV)",
+                substitutedEquation = "F**b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
                     "${fmt(cl, 3)} x ${fmt(f.cfu)} x ${fmt(f.ci)}",
                 result = fmt(fStarStar, 0),
                 units = "psi",
                 codeReference = "NDS 3.9.1",
                 variables = mapOf(
-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
+                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
                     "CL" to cl, "Cfu" to f.cfu, "Ci" to f.ci
                 )
             )
         } else {
             // Sawn lumber / SCL: CF from adjustmentFactors (caller must set it)
             val cfEffective = computeSawnCF(NdsCfProperty.BENDING)
-            fbAdj = fb * f.cd * f.cm * f.ct * cl * cfEffective * f.cfu * f.ci * f.cr
-            fStar = fb * f.cd * f.cm * f.ct * cfEffective * f.cfu * f.ci * f.cr
+            fbAdj = fb * f.cdBending * f.cm * f.ct * cl * cfEffective * f.cfu * f.ci * f.cr
+            fStar = fb * f.cdBending * f.cm * f.ct * cfEffective * f.cfu * f.ci * f.cr
             fStarStar = fbAdj
             limitState = if (cl < 1.0)
                 "Bending — Beam Stability CL (NDS 3.3.3)"
             else
                 "Bending — Size Factor CF (NDS Table 4A)"
             adjTrace = DesignEquationTrace(
-                symbolicEquation = "F'b = Fb x CD x CM x Ct x CL x CF x Cfu x Ci x Cr",
-                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x " +
+                symbolicEquation = "F'b = Fb x ${durSym} x CM x Ct x CL x CF x Cfu x Ci x Cr",
+                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x " +
                     "${fmt(f.ct)} x ${fmt(cl, 3)} x ${fmt(cfEffective, 3)} x ${fmt(f.cfu)} x " +
                     "${fmt(f.ci)} x ${fmt(f.cr)}",
                 result = fmt(fbAdj, 0),
                 units = "psi",
                 codeReference = "NDS 3.3.2, 3.3.3, Table 4A",
                 variables = mapOf(
-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "CL" to cl,
+                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct, "CL" to cl,
                     "CF" to cfEffective, "Cfu" to f.cfu, "Ci" to f.ci, "Cr" to f.cr
                 )
             )
             fStarTrace = DesignEquationTrace(
-                symbolicEquation = "F*b = Fb x CD x CM x Ct x CF x Cfu x Ci x Cr   (all factors except CL)",
-                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                symbolicEquation = "F*b = Fb x ${durSym} x CM x Ct x CF x Cfu x Ci x Cr   (all factors except CL)",
+                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
                     "${fmt(cfEffective, 3)} x ${fmt(f.cfu)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
                 result = fmt(fStar, 0),
                 units = "psi",
                 codeReference = "NDS 3.9.1",
                 variables = mapOf(
-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
+                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
                     "CF" to cfEffective, "Cfu" to f.cfu, "Ci" to f.ci, "Cr" to f.cr
                 )
             )
@@ -866,34 +868,34 @@ class NdsWoodCapacityCalculator(
                     unavailableReason = reason
                 )
             }
-            fStarNoCl = fby * f.cd * f.cm * f.ct * cfu * f.ci
+            fStarNoCl = fby * f.cdBending * f.cm * f.ct * cfu * f.ci
             fbAdj = fStarNoCl * cl
             adjTrace = DesignEquationTrace(
-                symbolicEquation = "F'by = Fby x CD x CM x Ct x CL x Cfu x Ci",
-                substitutedEquation = "F'by = ${fmt(fby, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                symbolicEquation = "F'by = Fby x ${durSym} x CM x Ct x CL x Cfu x Ci",
+                substitutedEquation = "F'by = ${fmt(fby, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
                     "$clLabel x ${fmt(cfu, 3)} x ${fmt(f.ci)}",
                 result = fmt(fbAdj, 0),
                 units = "psi",
                 codeReference = "NDS 3.3.3.1, Table 5A (Fby, Cfu)",
                 variables = mapOf(
-                    "Fby" to fby, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct,
+                    "Fby" to fby, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
                     "CL" to cl, "Cfu" to cfu, "Ci" to f.ci
                 )
             )
         } else {
             val fb = designMaterial.referenceBending.inPsi
             val cf = computeSawnCF(NdsCfProperty.BENDING)
-            fStarNoCl = fb * f.cd * f.cm * f.ct * cf * cfu * f.ci * f.cr
+            fStarNoCl = fb * f.cdBending * f.cm * f.ct * cf * cfu * f.ci * f.cr
             fbAdj = fStarNoCl * cl
             adjTrace = DesignEquationTrace(
-                symbolicEquation = "F'b = Fb x CD x CM x Ct x CL x CF x Cfu x Ci x Cr",
-                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                symbolicEquation = "F'b = Fb x ${durSym} x CM x Ct x CL x CF x Cfu x Ci x Cr",
+                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
                     "$clLabel x ${fmt(cf, 3)} x ${fmt(cfu, 3)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
                 result = fmt(fbAdj, 0),
                 units = "psi",
                 codeReference = "NDS 3.3.3.1, 4.3.7, Table 4A (CF, Cfu)",
                 variables = mapOf(
-                    "Fb" to fb, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "CL" to cl,
+                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct, "CL" to cl,
                     "CF" to cf, "Cfu" to cfu, "Ci" to f.ci, "Cr" to f.cr
                 )
             )
@@ -1091,13 +1093,13 @@ class NdsWoodCapacityCalculator(
         val area  = profile.area.inIn2
 
         val fvTrace = DesignEquationTrace(
-            symbolicEquation = "F'v = Fv x CD x CM x Ct x Ci",
-            substitutedEquation = "F'v = ${fmt(fv, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x " +
+            symbolicEquation = "F'v = Fv x ${durSym} x CM x Ct x Ci",
+            substitutedEquation = "F'v = ${fmt(fv, 0)} x ${fmt(f.cdShear)} x ${fmt(f.cm)} x " +
                 "${fmt(f.ct)} x ${fmt(f.ci)}",
             result = fmt(fvAdj, 0),
             units = "psi",
             codeReference = "NDS 3.4.1",
-            variables = mapOf("Fv" to fv, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "Ci" to f.ci)
+            variables = mapOf("Fv" to fv, durSym to f.cdShear, "CM" to f.cm, "Ct" to f.ct, "Ci" to f.ci)
         )
 
         val vn = (2.0 / 3.0) * fvAdj * area
@@ -1134,7 +1136,7 @@ class NdsWoodCapacityCalculator(
         val f = adjustmentFactors
 
         val cpResult = computeCPTraced(luStrong, luWeak)
-        val fStarC = fc * f.cd * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
+        val fStarC = fc * f.cdCompression * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
         val fcAdj = fStarC * cpResult.cp
 
         val fcAdjTrace = DesignEquationTrace(
@@ -1224,7 +1226,7 @@ class NdsWoodCapacityCalculator(
         // F*c = Fc with all adjustments except CP
         val f = adjustmentFactors
         val fcStar    = designMaterial.referenceCompressionParallel.inPsi *
-                f.cd * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
+                f.cdCompression * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
 
         if (fcStar <= 0.0) return CpResult(1.0, listOf(planeTrace, fceTrace))
 
@@ -1266,14 +1268,14 @@ class NdsWoodCapacityCalculator(
         val area = profile.area.inIn2
 
         val ftTrace = DesignEquationTrace(
-            symbolicEquation = "F't = Ft x CD x CM x Ct x CF x Ci",
-            substitutedEquation = "F't = ${fmt(ft, 0)} x ${fmt(f.cd)} x ${fmt(f.cm)} x " +
+            symbolicEquation = "F't = Ft x ${durSym} x CM x Ct x CF x Ci",
+            substitutedEquation = "F't = ${fmt(ft, 0)} x ${fmt(f.cdTension)} x ${fmt(f.cm)} x " +
                 "${fmt(f.ct)} x ${fmt(cf, 3)} x ${fmt(f.ci)}",
             result = fmt(ftAdj, 0),
             units = "psi",
             codeReference = "NDS 3.8.1, Table 4A",
             variables = mapOf(
-                "Ft" to ft, "CD" to f.cd, "CM" to f.cm, "Ct" to f.ct, "CF" to cf, "Ci" to f.ci
+                "Ft" to ft, durSym to f.cdTension, "CM" to f.cm, "Ct" to f.ct, "CF" to cf, "Ci" to f.ci
             )
         )
         val pn = ftAdj * area
@@ -1299,10 +1301,10 @@ class NdsWoodCapacityCalculator(
         else if (demandAbs > 0.0) Double.POSITIVE_INFINITY
         else 0.0
 
-    /** F't = Ft x CD x CM x Ct x CF x Ci (psi) — shared by the tension capacity and NDS 3.9.1. */
+    /** F't = Ft x ${durSym} x CM x Ct x CF x Ci (psi) — shared by the tension capacity and NDS 3.9.1. */
     private fun adjustedTensionStress(): Double {
         val f = adjustmentFactors
-        return designMaterial.referenceTensionParallel.inPsi * f.cd * f.cm * f.ct *
+        return designMaterial.referenceTensionParallel.inPsi * f.cdTension * f.cm * f.ct *
             computeSawnCF(NdsCfProperty.TENSION) * f.ci
     }
 
@@ -1349,9 +1351,9 @@ class NdsWoodCapacityCalculator(
 
         val notes = mutableListOf<String>()
         if (isLrfd) {
-            notes += "LRFD: adjusted design values are scaled by lambda x phi exactly as in the " +
-                "individual member checks (lambda = 0.8; phi = 0.85 bending, 0.80 tension, " +
-                "0.90 compression). The NDS Appendix N format conversion factor KF is not applied."
+            notes += "LRFD: every adjusted design value already includes KF x phi x lambda " +
+                "(Fb, Ft, Fv, Fc) and Emin includes KF x phi-s (NDS 2.3.5 - 2.3.7, Appendix N), " +
+                "so the interaction equations use them as they stand."
         }
 
         return when {
