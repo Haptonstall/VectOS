@@ -235,7 +235,9 @@ internal fun computeNdsBeamStability(
             adjustmentFactors.cdBending * adjustmentFactors.cm *
             adjustmentFactors.ct *
             resolveSawnCf(adjustmentFactors, designMaterial, profile, NdsCfProperty.BENDING) *
-            adjustmentFactors.ci * adjustmentFactors.cr
+            adjustmentFactors.ci *
+            // The repetitive member factor is a sawn-lumber factor; it does not apply to glulam.
+            (if (isGlulam) 1.0 else adjustmentFactors.cr)
 
     if (fStarB <= 0.0) return null
 

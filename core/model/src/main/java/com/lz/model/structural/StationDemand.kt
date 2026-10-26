@@ -61,6 +61,13 @@ data class StationDemand(
     val luStrongAxis: Length? = null,
     val luWeakAxis: Length? = null,
 
+    // Length of the member between the points of zero moment that bracket this
+    // station (NDS 5.3.6, glulam volume factor CV). Where the moment diagram
+    // doesn't have a zero on both sides (a cantilever, a fixed end) it is the
+    // whole member length - larger L only lowers CV, so that is conservative.
+    // Null = not supplied by the solver.
+    val momentSpanLength: Length? = null,
+
     // --- Which load combination produced this demand ---
     // Some adjustment factors depend on WHICH loads are acting, not just how
     // big they are: the NDS load duration factor CD (ASD) and time effect

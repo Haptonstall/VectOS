@@ -242,7 +242,7 @@ class NdsLoadDurationAndEditionTest {
             val n = notices(e).first { it.status == CodeDataStatus.NOT_SOURCED }
             assertTrue(n.dataset.contains("Reference design values"))
             assertTrue(n.message.contains("NDS ${e.year}"))
-            assertTrue(n.message.contains("NDS 2018"))
+            assertTrue(n.message.contains("blocked"))
         }
         assertEquals("NDS 2024", calc(edition = NdsEdition.NDS_2024).evaluateDetailed(demand(dOnly), asd).standardLabel)
         assertEquals("NDS 2015", calc(edition = NdsEdition.NDS_2015).evaluateDetailed(demand(dOnly), asd)
@@ -250,19 +250,30 @@ class NdsLoadDurationAndEditionTest {
     }
 
     @Test
-    fun `Chapter 2 factors are checked for NDS 2018 only`() {
+    fun `Chapter 2 factors are checked for NDS 2018 and 2015 but not 2024`() {
         fun asd(e: NdsEdition) = NdsCodeData.noticesFor(e, DesignMethodology.ASD, isGlulam = false)
         fun lrfd(e: NdsEdition) = NdsCodeData.noticesFor(e, DesignMethodology.LRFD, isGlulam = false)
         assertTrue(asd(NdsEdition.NDS_2018).none { it.dataset.startsWith("Load duration factor CD") })
         assertTrue(asd(NdsEdition.NDS_2024).any { it.dataset.startsWith("Load duration factor CD") })
         assertTrue(lrfd(NdsEdition.NDS_2018).none { it.dataset.startsWith("Format conversion") })
-        assertTrue(lrfd(NdsEdition.NDS_2015).any { it.dataset.startsWith("Format conversion") })
+        assertTrue(asd(NdsEdition.NDS_2015).none { it.dataset.startsWith("Load duration factor CD") })
+        assertTrue(lrfd(NdsEdition.NDS_2015).none { it.dataset.startsWith("Format conversion") })
+        assertTrue(lrfd(NdsEdition.NDS_2024).any { it.dataset.startsWith("Format conversion") })
         // Lambda (Appendix N) is unchecked for every edition; the duration mapping assumptions are always disclosed.
         for (e in NdsEdition.values()) {
             assertTrue(lrfd(e).any { it.dataset.contains("\u03bb") && it.status == CodeDataStatus.UNVERIFIED })
             assertTrue(asd(e).any { it.dataset.startsWith("Load type to duration") })
             assertTrue((asd(e) + lrfd(e)).none { it.status == CodeDataStatus.NOT_IMPLEMENTED })
         }
+    }
+
+    @Test
+    fun `Chapter 3 stability provisions are checked for NDS 2015 only`() {
+        fun has(e: NdsEdition) = NdsCodeData.noticesFor(e, DesignMethodology.ASD, isGlulam = false)
+            .any { it.dataset.startsWith("Stability and combined-stress") }
+        assertTrue(!has(NdsEdition.NDS_2015))
+        assertTrue(has(NdsEdition.NDS_2018))
+        assertTrue(has(NdsEdition.NDS_2024))
     }
 
     @Test

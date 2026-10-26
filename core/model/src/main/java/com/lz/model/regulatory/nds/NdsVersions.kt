@@ -88,7 +88,7 @@ data class WetServiceFactors(
 )
 
 /**
- * Temperature factors (Ct) per NDS Table 2.3.3 (NDS 2018 text).
+ * Temperature factors (Ct) per NDS Table 2.3.3 (NDS 2018 text; identical in the NDS 2015 text).
  * Applied when sustained temperatures exceed 100°F.
  *
  * Table 2.3.3 groups the properties as: Ft, E, Emin (the same for wet or dry
@@ -125,7 +125,7 @@ data class NdsSpecificationConstants(
     val cfuFlatUse: Boolean = true,
 
     // Format conversion factor (KF) for LRFD — NDS 2018 Table 2.3.5 (checked against the
-    // AWC-published NDS 2018 text; not checked for 2015 / 2024)
+    // AWC-published NDS 2018 text and the NDS 2015 pages; not checked for 2024)
     val kfBending: Double      = 2.54,  // KF for Fb
     val kfTension: Double      = 2.70,  // KF for Ft
     val kfShear: Double        = 2.88,  // KF for Fv
@@ -152,16 +152,16 @@ object NdsVersionRegistry {
     /**
      * Resolves edition-specific specification constants.
      *
-     * The KF and phi values are checked against NDS 2018 only. The per-edition
+     * The KF and phi values are checked against NDS 2018 and NDS 2015 (identical). The per-edition
      * history that used to be written here was not sourced and has been
-     * removed; whether 2015 / 2024 differ is unverified (see NdsCodeData in
+     * removed; whether 2024 differs is unverified (see NdsCodeData in
      * the solver, which reports it).
      */
     fun getConstantsFor(edition: NdsEdition): NdsSpecificationConstants {
         return when (edition) {
             NdsEdition.NDS_2015 -> NdsSpecificationConstants(
                 edition = NdsEdition.NDS_2015
-                // Not checked against the NDS 2015 text (2018 values assumed).
+                // KF / phi checked against the NDS 2015 text (Tables 2.3.5, 2.3.6): same values as 2018.
             )
             NdsEdition.NDS_2018 -> NdsSpecificationConstants(
                 edition = NdsEdition.NDS_2018
@@ -207,7 +207,7 @@ object NdsVersionRegistry {
 
     /**
      * Resolves temperature factors (Ct) per NDS 2018 Table 2.3.3 (checked
-     * against the AWC-published text; not checked for 2015 / 2024):
+     * against the AWC-published text and the NDS 2015 pages; not checked for 2024):
      *
      *                          T <= 100F   100 < T <= 125F   125 < T <= 150F
      *  Ft, E, Emin (wet/dry)     1.0          0.9               0.9

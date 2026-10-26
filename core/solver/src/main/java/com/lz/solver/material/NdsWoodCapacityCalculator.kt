@@ -243,7 +243,7 @@ class NdsWoodCapacityCalculator(
             factorRows += row("CF (compression)", "Size factor, Fc", fmt(computeSawnCF(NdsCfProperty.COMPRESSION), 3))
         }
         factorRows += row("Cfu", "Flat use factor (flatwise bending only)", fmt(resolveFlatUseCfu(f, m, profile), 3))
-        if (isGlulam) factorRows += row("CV", "Volume factor (strong axis)", fmt(computeCV(u.strongBend), 3))
+        if (isGlulam) factorRows += row("CV", "Volume factor (strong axis)", fmt(computeCV(u.cvSpan), 3))
         factorRows += row("CL (strong axis)", "Beam stability, bending about x-x", fmt(strongAx.cl, 3))
         factorRows += row("CL (weak axis)", "Beam stability, bending about y-y", fmt(weakAx.cl, 3))
         factorRows += row("CP", "Column stability", fmt(cpParts.cp, 3))
@@ -311,7 +311,9 @@ class NdsWoodCapacityCalculator(
         val colStrong: Double,
         val colWeak: Double,
         val weakIsDefault: Boolean,
-        val strongIsDefault: Boolean
+        val strongIsDefault: Boolean,
+        /** Length for the glulam volume factor CV (NDS 5.3.6): between points of zero moment. */
+        val cvSpan: Double
     )
 
     private fun unbraced(demand: StationDemand): Unbraced {
@@ -323,7 +325,12 @@ class NdsWoodCapacityCalculator(
         return Unbraced(
             strongBend = flangeLb, weakBend = weakPlane,
             colStrong = strongPlane, colWeak = weakPlane,
-            weakIsDefault = demand.luWeakAxis == null, strongIsDefault = demand.luStrongAxis == null
+            weakIsDefault = demand.luWeakAxis == null, strongIsDefault = demand.luStrongAxis == null,
+            // CV uses the length between points of zero moment (5.3.6), NOT the
+            // unbraced length; the solver supplies it (the whole member where
+            // the moment diagram doesn't bracket the station). Only a demand
+            // that didn't come from the solver falls back to the unbraced length.
+            cvSpan = demand.momentSpanLength?.inInches ?: flangeLb
         )
     }
 
@@ -349,7 +356,10 @@ class NdsWoodCapacityCalculator(
             // design values (CD does not apply). lambda comes from the load
             // combination when it is known and automatic mode is on, else 0.8.
             val auto = adjustmentFactors.usesAutoLoadDuration
-            val rd = (if (auto) NdsLoadDuration.resolve(demand.combinationLoadFactors, methodology, edition) else null)
+            val rd = (if (auto) NdsLoadDuration.resolve(
+                demand.combinationLoadFactors, methodology, edition,
+                adjustmentFactors.loadDurationAssumptions, adjustmentFactors.treatedMember
+            ) else null)
                 ?: ResolvedLoadDuration(
                     factor = LAMBDA_DEFAULT, symbol = "\u03bb", governingCategory = null, durationLabel = "Time effect",
                     explanation = "\u03bb = ${"%.2f".format(LAMBDA_DEFAULT)}: default \u2014 " +
@@ -371,7 +381,10 @@ class NdsWoodCapacityCalculator(
         }
 
         if (!adjustmentFactors.usesAutoLoadDuration) return null
-        val rd = NdsLoadDuration.resolve(demand.combinationLoadFactors, methodology, edition) ?: return null
+        val rd = NdsLoadDuration.resolve(
+                demand.combinationLoadFactors, methodology, edition,
+                adjustmentFactors.loadDurationAssumptions, adjustmentFactors.treatedMember
+            ) ?: return null
         return NdsWoodCapacityCalculator(
             profile, material,
             adjustmentFactors.copy(cd = rd.factor, loadDurationFromCombination = false),
@@ -484,7 +497,7 @@ class NdsWoodCapacityCalculator(
         )
 
         val cl = computeCL(lb)
-        val cv = if (isGlulam) computeCV(lb) else 1.0
+        val cv = if (isGlulam) computeCV(u.cvSpan) else 1.0
 
         return StrengthDesignResult(
             momentCheck = StrengthCheckResult(
@@ -612,7 +625,7 @@ class NdsWoodCapacityCalculator(
     }
 
     private fun bendingAxis(strong: Boolean, u: Unbraced): BendingAxis =
-        if (strong) strongBendingAxis(u.strongBend) else weakBendingAxis(u.weakBend)
+        if (strong) strongBendingAxis(u.strongBend, u.cvSpan) else weakBendingAxis(u.weakBend)
 
     /**
      * The NDS 3.3.3 development for one axis, as traces: the effective-length
@@ -695,7 +708,7 @@ class NdsWoodCapacityCalculator(
      * Glulam:      F'b = Fb * CD * CM * Ct * min(CV, CL) * Cfu * Ci
      *              NDS 5.3.6: CV and CL are not applied simultaneously.
      */
-    private fun strongBendingAxis(lb: Double): BendingAxis {
+    private fun strongBendingAxis(lb: Double, cvSpan: Double = lb): BendingAxis {
         val fb = designMaterial.referenceBending.inPsi
         val sx = profile.propertiesStrongAxis.s.inIn3
         val f = adjustmentFactors
@@ -714,7 +727,7 @@ class NdsWoodCapacityCalculator(
         val fStarStarTrace: DesignEquationTrace
 
         if (isGlulam) {
-            val cv = computeCV(lb)
+            val cv = computeCV(cvSpan)
             // NDS 5.3.6: use lesser of CV and CL
             val stabilityFactor = min(cl, cv)
             fbAdj = fb * f.cdBending * f.cm * f.ct * stabilityFactor * f.cfu * f.ci
@@ -955,6 +968,8 @@ class NdsWoodCapacityCalculator(
      * NDS 5.3.6 Volume Factor CV for glulam.
      * CV = (21/L)^(1/x) * (12/d)^(1/x) * (5.125/b)^(1/x) <= 1.0
      * x = 10 for western species, 20 for southern pine glulam.
+     * L is the length of the member between points of zero moment (ft) -
+     * not the unbraced length (a shorter L would raise CV unconservatively).
      */
     private fun computeCV(spanLength: Double): Double {
         if (!isGlulam || spanLength <= 0.0) return 1.0

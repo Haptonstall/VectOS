@@ -19,23 +19,54 @@ import com.lz.model.structural.DesignMethodology
  *
  * Statuses today (honest as of this writing):
  *  - Reference design values and size / flat-use factors: sourced from the
- *    NDS 2018 Supplement only.
+ *    NDS 2018 Supplement only. Other editions are HARD-BLOCKED ([blockReason]).
  *  - Glulam tables: mixed provenance (see the notice text), 2018-era.
- *  - CD (Table 2.3.2, §2.3.2), KF (Table 2.3.5) and phi (Table 2.3.6):
- *    checked against the NDS 2018 text published by the AWC; not checked for
- *    2015 or 2024.
- *  - Lambda (Appendix N, Table N3): implemented from published summaries of
- *    the table; Appendix N has not been checked against any edition's text.
- *  - Stability / combined-stress provisions and Table 3.3.3: implemented from
- *    page images of an unspecified edition — not checked per edition.
+ *  - CD (Table 2.3.2, §2.3.2), Ct (Table 2.3.3), KF (Table 2.3.5) and phi
+ *    (Table 2.3.6): checked against the NDS 2018 text published by the AWC and
+ *    against the NDS 2015 page images supplied by the project owner (the
+ *    values are identical in the two); not checked for 2024.
+ *  - KF / phi / lambda (Appendix N, Tables N1 - N3): checked against the NDS
+ *    2015 page images. Lambda is not checked for 2018 or 2024.
+ *  - Stability / combined-stress provisions (3.3.3, Table 3.3.3, 3.7.1, 3.9):
+ *    checked line by line against the NDS 2015 page images supplied by the
+ *    project owner. No 2018 or 2024 text of Chapter 3 has been seen, so those
+ *    editions are not checked.
  */
+/** Thrown when wood design is requested for an edition whose design values have not been incorporated. */
+class CodeDataBlockedException(message: String) : IllegalStateException(message)
+
 object NdsCodeData {
+
+    /**
+     * Why wood design is blocked for [edition], or null when it may run. An
+     * edition whose Supplement design values and size / flat-use factors have
+     * not been sourced is blocked outright - no other edition's numbers are
+     * substituted (project decision, Oct 2026).
+     */
+    fun blockReason(edition: NdsEdition): String? =
+        if (edition in designValueEditions) null
+        else "Wood design is blocked for ${standardLabel(edition)}: its Supplement design values " +
+            "(Tables 4A / 4B / 4D / 4E / 5A / 5C) and the size and flat-use factors have not been " +
+            "incorporated, and values from another edition are not substituted. Use a building code " +
+            "that maps to a sourced edition (${designValueEditions.joinToString { standardLabel(it) }}) " +
+            "or add the ${standardLabel(edition)} Supplement data."
+
+    /** @throws CodeDataBlockedException when [blockReason] is non-null. */
+    fun requireUsable(edition: NdsEdition) {
+        blockReason(edition)?.let { throw CodeDataBlockedException(it) }
+    }
 
     /** Editions the Supplement design values and factors have actually been sourced for. */
     private val designValueEditions = setOf(NdsEdition.NDS_2018)
 
-    /** Editions whose Chapter 2 (CD, KF, phi) has been checked against the published text. */
-    private val chapter2Editions = setOf(NdsEdition.NDS_2018)
+    /** Editions whose Chapter 2 (CD, Ct, KF, phi) has been checked against the published text. */
+    private val chapter2Editions = setOf(NdsEdition.NDS_2018, NdsEdition.NDS_2015)
+
+    /** Editions whose Chapter 3 stability / combined-stress provisions have been checked against the text. */
+    private val chapter3Editions = setOf(NdsEdition.NDS_2015)
+
+    /** Editions whose Appendix N Table N3 (lambda) has been checked against the text. */
+    private val lambdaEditions = setOf(NdsEdition.NDS_2015)
 
     fun standardLabel(edition: NdsEdition) = "NDS ${edition.year}"
 
@@ -52,8 +83,8 @@ object NdsCodeData {
                 dataset = if (isGlulam) "Reference design values \u2014 glulam (Supplement Tables 5A / 5C)"
                 else "Reference design values and size factors (Supplement Tables 4A / 4B)",
                 status = CodeDataStatus.NOT_SOURCED,
-                message = "The $label Supplement values have not been incorporated; the NDS 2018 Supplement " +
-                    "values are standing in and may differ. Results are provisional until $label data is added."
+                message = "The $label Supplement values have not been incorporated, so wood design is blocked " +
+                    "for this edition; no other edition's values are substituted."
             )
         } else if (isGlulam) {
             out += CodeDataNotice(
@@ -65,11 +96,14 @@ object NdsCodeData {
             )
         }
 
-        out += CodeDataNotice(
-            dataset = "Stability and combined-stress provisions (NDS 3.3.3, 3.7, 3.9, Table 3.3.3)",
-            status = CodeDataStatus.UNVERIFIED,
-            message = "Implemented from page images of an unspecified edition; not yet checked against the $label text."
-        )
+        if (edition !in chapter3Editions) {
+            out += CodeDataNotice(
+                dataset = "Stability and combined-stress provisions (NDS 3.3.3, 3.7, 3.9, Table 3.3.3)",
+                status = CodeDataStatus.UNVERIFIED,
+                message = "Checked against the NDS 2015 text and found to match it; the $label text has not been " +
+                    "seen, so any change in $label is not reflected."
+            )
+        }
 
         val ch2Checked = edition in chapter2Editions
         if (methodology == DesignMethodology.LRFD) {
@@ -78,23 +112,29 @@ object NdsCodeData {
                     dataset = "Format conversion KF and resistance factor phi (NDS 2.3.5, 2.3.6)",
                     status = CodeDataStatus.UNVERIFIED,
                     message = "The values (KF 2.54 / 2.70 / 2.88 / 2.40 / 1.67 / 1.76; phi 0.85 / 0.80 / 0.75 / 0.90 / 0.85) " +
-                        "were checked against the NDS 2018 text; they have not been checked against the $label text."
+                        "were checked against the NDS 2018 and 2015 text; they have not been checked against the $label text."
+                )
+            }
+            if (edition !in lambdaEditions) {
+                out += CodeDataNotice(
+                    dataset = "Time effect factor \u03bb (NDS Appendix N, Table N3)",
+                    status = CodeDataStatus.UNVERIFIED,
+                    message = "\u03bb follows Table N3 as checked against the NDS 2015 page image; the $label " +
+                        "Appendix N text has not been seen."
                 )
             }
             out += CodeDataNotice(
-                dataset = "Time effect factor \u03bb (NDS Appendix N, Table N3)",
+                dataset = "Live load type for \u03bb",
                 status = CodeDataStatus.UNVERIFIED,
-                message = "\u03bb is derived per load combination from Table N3 as published in design references " +
-                    "(0.6 dead only, 0.8 gravity loads, 1.0 wind or earthquake at a strength-level factor); " +
-                    "Appendix N has not been checked against the $label text. Occupancy live load is assumed " +
-                    "(storage 0.7 and impact 1.25 are not distinguished)."
+                message = "Occupancy, storage (0.7) or impact (1.25) live load is chosen in the load duration " +
+                    "assumptions; the default is occupancy (0.8)."
             )
         } else {
             if (!ch2Checked) {
                 out += CodeDataNotice(
                     dataset = "Load duration factor CD (NDS 2.3.2, Table 2.3.2)",
                     status = CodeDataStatus.UNVERIFIED,
-                    message = "The CD values and the shortest-duration-load rule were checked against the NDS 2018 text; " +
+                    message = "The CD values and the shortest-duration-load rule were checked against the NDS 2018 and 2015 text; " +
                         "they have not been checked against the $label text."
                 )
             }
@@ -102,9 +142,9 @@ object NdsCodeData {
                 dataset = "Load type to duration (CD) assignment",
                 status = CodeDataStatus.UNVERIFIED,
                 message = "Table 2.3.2 lists dead, occupancy live, snow, construction, wind / earthquake and impact loads. " +
-                    "Roof live load is treated here as seven-day (construction) duration, rain load has no tabulated duration " +
-                    "(CD = 1.0 assumed), and snow is taken at two months. CD above 1.0 is not restricted for members treated " +
-                    "with water-borne preservatives or fire retardant (CD must not exceed 1.6 there; Table 2.3.2 note 2)."
+                    "Unless changed in the load duration assumptions, roof live load is taken as seven-day (CD 1.25), " +
+                    "snow as two months (1.15), occupancy live as ten years (1.0) and rain (no tabulated duration) as 1.0. " +
+                    "CD is limited to 1.6 only when the member is marked pressure-treated / fire-retardant-treated."
             )
         }
         return out

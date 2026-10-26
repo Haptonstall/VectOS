@@ -1,0 +1,1238 @@
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
+index eb8d8d1..e50440c 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
+@@ -2,6 +2,39 @@ package com.lz.model.regulatory.nds
+ 
+ import kotlinx.serialization.Serializable
+ 
++/**
++ * What kind of live load L is, for the LRFD time effect factor (NDS Appendix
++ * N, Table N3, row 1.2D + 1.6L + 0.5(Lr or S or R)): lambda = 0.7 for storage,
++ * 0.8 for occupancy, 1.25 for impact.
++ */
++@Serializable
++enum class LiveLoadKind(val lambda: Double, val label: String) {
++    OCCUPANCY(0.8, "Occupancy"),
++    STORAGE(0.7, "Storage"),
++    IMPACT(1.25, "Impact")
++}
++
++/**
++ * The project's assumptions about load duration — the places where NDS Table
++ * 2.3.2 does not assign a duration to a load type, or where the designer may
++ * know better. Defaults are the assumptions the calculator started with:
++ * occupancy live 1.0 (ten years), roof live 1.25 (seven days), snow 1.15
++ * (two months), rain 1.0 (the table has no rain entry). Dead (0.9) and wind /
++ * earthquake (1.6) are fixed by Table 2.3.2 and are not editable here.
++ * ASD uses the CD values; LRFD uses [liveKind].
++ */
++@Serializable
++data class NdsLoadDurationAssumptions(
++    val liveCd: Double = 1.0,
++    val roofLiveCd: Double = 1.25,
++    val snowCd: Double = 1.15,
++    val rainCd: Double = 1.0,
++    val liveKind: LiveLoadKind = LiveLoadKind.OCCUPANCY
++) {
++    val isValid: Boolean
++        get() = listOf(liveCd, roofLiveCd, snowCd, rainCd).all { it.isFinite() && it > 0.0 && it <= 2.0 }
++}
++
+ /**
+  * NDS Table 4.3.1 adjustment factors applied to reference design values.
+  * F' = F * CD * CM * Ct * CL * CF * Cfu * Ci * Cr
+@@ -26,6 +59,14 @@ data class NdsAdjustmentFactors(
+      * single number is only right for a single combination.
+      */
+     val loadDurationFromCombination: Boolean = true,
++    /** Duration assumptions behind the automatic CD / lambda (see [NdsLoadDurationAssumptions]). */
++    val loadDurationAssumptions: NdsLoadDurationAssumptions = NdsLoadDurationAssumptions(),
++    /**
++     * Member pressure-treated with water-borne preservatives or fire-retardant
++     * chemicals: CD above 1.6 and lambda above 1.0 do not apply (NDS Table
++     * 2.3.2 note 2, 2.3.4, Table N3 note 1).
++     */
++    val treatedMember: Boolean = false,
+     // --- LRFD only: set by the wood calculator, not by the user -------------
+     // For LRFD the reference design values are multiplied by KF x phi x lambda
+     // (Fb, Ft, Fv, Fc) and KF x phi-s (Emin) BEFORE the stability factors are
+@@ -38,10 +79,12 @@ data class NdsAdjustmentFactors(
+     val formatEmin: Double = 1.0
+ ) {
+     /** The duration factor (ASD: CD) or its LRFD replacement (KF x phi x lambda), per property. */
+-    val cdBending: Double get() = cd * formatBending
+-    val cdTension: Double get() = cd * formatTension
+-    val cdShear: Double get() = cd * formatShear
+-    val cdCompression: Double get() = cd * formatCompression
++    /** [cd] after the treated-member limit (CD <= 1.6, Table 2.3.2 note 2). */
++    val effectiveCd: Double get() = if (treatedMember) minOf(cd, TREATED_MAX_CD) else cd
++    val cdBending: Double get() = effectiveCd * formatBending
++    val cdTension: Double get() = effectiveCd * formatTension
++    val cdShear: Double get() = effectiveCd * formatShear
++    val cdCompression: Double get() = effectiveCd * formatCompression
+ 
+     /**
+      * Automatic CD / lambda is in force only while [cd] is still the untouched
+@@ -73,4 +116,8 @@ data class NdsAdjustmentFactors(
+     fun adjustedTension(ft: Double)              = ft * cdTension * cm * ct * cf * ci
+     /** Adjusted modulus of elasticity E' */
+     fun adjustedModulus(e: Double)               = e * cm * ct * ci
+-}
+\ No newline at end of file
++
++    companion object {
++        const val TREATED_MAX_CD = 1.6
++    }
++}
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsVersions.kt b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsVersions.kt
+index e594287..e79cb45 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsVersions.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsVersions.kt
+@@ -88,7 +88,7 @@ data class WetServiceFactors(
+ )
+ 
+ /**
+- * Temperature factors (Ct) per NDS Table 2.3.3 (NDS 2018 text).
++ * Temperature factors (Ct) per NDS Table 2.3.3 (NDS 2018 text; identical in the NDS 2015 text).
+  * Applied when sustained temperatures exceed 100°F.
+  *
+  * Table 2.3.3 groups the properties as: Ft, E, Emin (the same for wet or dry
+@@ -125,7 +125,7 @@ data class NdsSpecificationConstants(
+     val cfuFlatUse: Boolean = true,
+ 
+     // Format conversion factor (KF) for LRFD — NDS 2018 Table 2.3.5 (checked against the
+-    // AWC-published NDS 2018 text; not checked for 2015 / 2024)
++    // AWC-published NDS 2018 text and the NDS 2015 pages; not checked for 2024)
+     val kfBending: Double      = 2.54,  // KF for Fb
+     val kfTension: Double      = 2.70,  // KF for Ft
+     val kfShear: Double        = 2.88,  // KF for Fv
+@@ -152,16 +152,16 @@ object NdsVersionRegistry {
+     /**
+      * Resolves edition-specific specification constants.
+      *
+-     * The KF and phi values are checked against NDS 2018 only. The per-edition
++     * The KF and phi values are checked against NDS 2018 and NDS 2015 (identical). The per-edition
+      * history that used to be written here was not sourced and has been
+-     * removed; whether 2015 / 2024 differ is unverified (see NdsCodeData in
++     * removed; whether 2024 differs is unverified (see NdsCodeData in
+      * the solver, which reports it).
+      */
+     fun getConstantsFor(edition: NdsEdition): NdsSpecificationConstants {
+         return when (edition) {
+             NdsEdition.NDS_2015 -> NdsSpecificationConstants(
+                 edition = NdsEdition.NDS_2015
+-                // Not checked against the NDS 2015 text (2018 values assumed).
++                // KF / phi checked against the NDS 2015 text (Tables 2.3.5, 2.3.6): same values as 2018.
+             )
+             NdsEdition.NDS_2018 -> NdsSpecificationConstants(
+                 edition = NdsEdition.NDS_2018
+@@ -207,7 +207,7 @@ object NdsVersionRegistry {
+ 
+     /**
+      * Resolves temperature factors (Ct) per NDS 2018 Table 2.3.3 (checked
+-     * against the AWC-published text; not checked for 2015 / 2024):
++     * against the AWC-published text and the NDS 2015 pages; not checked for 2024):
+      *
+      *                          T <= 100F   100 < T <= 125F   125 < T <= 150F
+      *  Ft, E, Emin (wet/dry)     1.0          0.9               0.9
+diff --git a/core/model/src/main/java/com/lz/model/structural/StationDemand.kt b/core/model/src/main/java/com/lz/model/structural/StationDemand.kt
+index e6a2d4f..1c03d63 100644
+--- a/core/model/src/main/java/com/lz/model/structural/StationDemand.kt
++++ b/core/model/src/main/java/com/lz/model/structural/StationDemand.kt
+@@ -61,6 +61,13 @@ data class StationDemand(
+     val luStrongAxis: Length? = null,
+     val luWeakAxis: Length? = null,
+ 
++    // Length of the member between the points of zero moment that bracket this
++    // station (NDS 5.3.6, glulam volume factor CV). Where the moment diagram
++    // doesn't have a zero on both sides (a cantilever, a fixed end) it is the
++    // whole member length - larger L only lowers CV, so that is conservative.
++    // Null = not supplied by the solver.
++    val momentSpanLength: Length? = null,
++
+     // --- Which load combination produced this demand ---
+     // Some adjustment factors depend on WHICH loads are acting, not just how
+     // big they are: the NDS load duration factor CD (ASD) and time effect
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+index 979cfdf..680fcea 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+@@ -203,9 +203,11 @@ object MemberAnalysisSolver {
+         // silently-frozen result on screen (see calculationError) rather
+         // than the correct all-zero demand/utilization a loadless member
+         // should show.
++        val appliedCategories = config.allLoads.map { it.category }.toSet()
++        val combinations = expandCombinations(config.combinations, appliedCategories)
+         val activeCategories = (
+             config.allLoads.map { it.category } +
+-                config.combinations.flatMap { it.factors.keys }
++                combinations.flatMap { it.factors.keys }
+             ).distinct()
+ 
+         // 3. Solve for each category independently (Unfactored/Service Pass)
+@@ -221,11 +223,11 @@ object MemberAnalysisSolver {
+         }
+ 
+         // 5. Build Individual Combination Results
+-        val combinationResults = config.combinations.associate { combo ->
++        val combinationResults = combinations.associate { combo ->
+             // Factor each category's station demands by this combo's load factors
+             val comboDemands = buildFactoredDemands(
+                 resultsByCategory, combo, demandsByCategory,
+-                appliedCategories = config.allLoads.map { it.category }.toSet()
++                appliedCategories = appliedCategories
+             )
+ 
+             // Apply factors to reactions
+@@ -252,7 +254,7 @@ object MemberAnalysisSolver {
+         // which is exactly what combinationResults[governingComboName] already
+         // is (built by buildFactoredDemands, a straight linear combination of
+         // the same two categories at every single station, hence smooth).
+-        val envelopeResult = DemandEnvelopeResolver.resolveMemberEnvelopes(demandsByCategory, config.combinations)
++        val envelopeResult = DemandEnvelopeResolver.resolveMemberEnvelopes(demandsByCategory, combinations)
+         val governingComboName =
+             envelopeResult.governingMaxMoment?.governingCombination?.name
+                 ?: envelopeResult.governingMaxShear?.governingCombination?.name
+@@ -361,6 +363,88 @@ object MemberAnalysisSolver {
+         }
+     }
+ 
++    /**
++     * For each station, the length between the zero-moment points on either
++     * side of it - or the whole length of the stations given when the diagram
++     * has no zero on one side (cantilever / fixed end, conservative for CV).
++     * Stations sitting at a zero of the moment, or a diagram that is zero
++     * throughout, get null.
++     */
++    internal fun zeroMomentSpans(xs: List<Double>, ms: List<Double>): List<Double?> {
++        val n = xs.size
++        if (n == 0) return emptyList()
++        val order = (0 until n).sortedBy { xs[it] }
++        val x = order.map { xs[it] }
++        val m = order.map { ms[it] }
++        val peak = m.maxOf { abs(it) }
++        val eps = 1e-6 * peak
++        val total = x.last() - x.first()
++        val sign = m.map { if (abs(it) <= eps) 0 else if (it > 0) 1 else -1 }
++        val sorted = List(n) { i ->
++            if (peak == 0.0 || sign[i] == 0) null else {
++                var left: Double? = null
++                for (k in i - 1 downTo 0) {
++                    if (sign[k] == 0) { left = x[k]; break }
++                    if (sign[k] != sign[i]) {
++                        left = x[k] + (x[k + 1] - x[k]) * abs(m[k]) / (abs(m[k]) + abs(m[k + 1])); break
++                    }
++                }
++                var right: Double? = null
++                for (k in i + 1 until n) {
++                    if (sign[k] == 0) { right = x[k]; break }
++                    if (sign[k] != sign[i]) {
++                        right = x[k - 1] + (x[k] - x[k - 1]) * abs(m[k - 1]) / (abs(m[k - 1]) + abs(m[k])); break
++                    }
++                }
++                if (left != null && right != null && right > left) right - left else total
++            }
++        }
++        val out = arrayOfNulls<Double>(n)
++        order.forEachIndexed { pos, original -> out[original] = sorted[pos] }
++        return out.toList()
++    }
++
++    /**
++     * The combinations actually evaluated:
++     *  - Wind and earthquake can act in either direction, so every combination
++     *    carrying an applied W or E also gets a reversed twin (W / E factor
++     *    negated). Without it 0.9D + 1.0W only ever saw the entered direction
++     *    and missed the uplift / suction case. (The envelope resolver's own
++     *    isLateralReversible expansion is not used, so nothing is doubled.)
++     *  - Combinations that only differ by loads that are not applied to the
++     *    member produce identical demands; only the first is kept so the
++     *    governing-combination list is not cluttered with duplicates.
++     */
++    internal fun expandCombinations(
++        combos: List<com.lz.model.regulatory.LoadCombination>,
++        applied: Set<com.lz.model.regulatory.LoadCategory>
++    ): List<com.lz.model.regulatory.LoadCombination> {
++        val lateral = setOf(com.lz.model.regulatory.LoadCategory.WIND, com.lz.model.regulatory.LoadCategory.SEISMIC)
++        val expanded = mutableListOf<com.lz.model.regulatory.LoadCombination>()
++        for (c in combos) {
++            expanded += c
++            val acting = c.factors.filter { (k, f) -> f != 0.0 && k in applied && k in lateral }.keys
++            if (acting.isNotEmpty()) {
++                val label = acting.joinToString("/") { it.shortLabel }
++                expanded += c.copy(
++                    id = c.id + "#rev",
++                    name = c.name + " (" + label + " reversed)",
++                    equationText = c.equationText + "  [" + label + " reversed]",
++                    factors = c.factors.mapValues { (k, f) -> if (k in lateral) -f else f },
++                    isLateralReversible = false
++                )
++            }
++        }
++        val seen = HashSet<List<Any>>()
++        return expanded.filter { c ->
++            val key = listOf<Any>(
++                c.type, c.methodology,
++                loadFactorsActing(c, applied).entries.sortedBy { it.key.name }.map { it.key.name + "=" + it.value }
++            )
++            seen.add(key)
++        }
++    }
++
+     private fun buildFactoredDemands(
+         resultsByCategory: Map<com.lz.model.regulatory.LoadCategory, AnalysisResult>,
+         combo: com.lz.model.regulatory.LoadCombination,
+@@ -369,6 +453,12 @@ object MemberAnalysisSolver {
+     ): List<StationDemand> {
+         val actingLoads = loadFactorsActing(combo, appliedCategories)
+         val stationCount = demandsByCategory.values.firstOrNull()?.size ?: return emptyList()
++        // Moment at every station for this combination, to find the zero-moment spans (NDS 5.3.6).
++        val xs = (0 until stationCount).map { i -> demandsByCategory.values.first()[i].x.inches }
++        val ms = (0 until stationCount).map { i ->
++            combo.factors.entries.sumOf { (cat, f) -> f * (demandsByCategory[cat]?.get(i)?.moment?.lbIn ?: 0.0) }
++        }
++        val zeroSpans = zeroMomentSpans(xs, ms)
+         return (0 until stationCount).map { index ->
+             var mX = 0.0; var vY = 0.0; var pZ = 0.0
+             var mY = 0.0; var vX = 0.0; var tZ = 0.0; var delta = 0.0
+@@ -388,6 +478,7 @@ object MemberAnalysisSolver {
+                 moment = Moment(mX), shear = Force(vY), axial = Force(pZ),
+                 momentY = Moment(mY), shearY = Force(vX), torque = Moment(tZ),
+                 deflection = Length(delta),
++                momentSpanLength = zeroSpans[index]?.let { Length(it) },
+                 combinationName = combo.name,
+                 combinationLoadFactors = actingLoads,
+                 combinationMethodology = combo.methodology
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+index b97ed6a..254a938 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+@@ -235,7 +235,9 @@ internal fun computeNdsBeamStability(
+             adjustmentFactors.cdBending * adjustmentFactors.cm *
+             adjustmentFactors.ct *
+             resolveSawnCf(adjustmentFactors, designMaterial, profile, NdsCfProperty.BENDING) *
+-            adjustmentFactors.ci * adjustmentFactors.cr
++            adjustmentFactors.ci *
++            // The repetitive member factor is a sawn-lumber factor; it does not apply to glulam.
++            (if (isGlulam) 1.0 else adjustmentFactors.cr)
+ 
+     if (fStarB <= 0.0) return null
+ 
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+index 0772e86..160ab65 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+@@ -19,23 +19,54 @@ import com.lz.model.structural.DesignMethodology
+  *
+  * Statuses today (honest as of this writing):
+  *  - Reference design values and size / flat-use factors: sourced from the
+- *    NDS 2018 Supplement only.
++ *    NDS 2018 Supplement only. Other editions are HARD-BLOCKED ([blockReason]).
+  *  - Glulam tables: mixed provenance (see the notice text), 2018-era.
+- *  - CD (Table 2.3.2, §2.3.2), KF (Table 2.3.5) and phi (Table 2.3.6):
+- *    checked against the NDS 2018 text published by the AWC; not checked for
+- *    2015 or 2024.
+- *  - Lambda (Appendix N, Table N3): implemented from published summaries of
+- *    the table; Appendix N has not been checked against any edition's text.
+- *  - Stability / combined-stress provisions and Table 3.3.3: implemented from
+- *    page images of an unspecified edition — not checked per edition.
++ *  - CD (Table 2.3.2, §2.3.2), Ct (Table 2.3.3), KF (Table 2.3.5) and phi
++ *    (Table 2.3.6): checked against the NDS 2018 text published by the AWC and
++ *    against the NDS 2015 page images supplied by the project owner (the
++ *    values are identical in the two); not checked for 2024.
++ *  - KF / phi / lambda (Appendix N, Tables N1 - N3): checked against the NDS
++ *    2015 page images. Lambda is not checked for 2018 or 2024.
++ *  - Stability / combined-stress provisions (3.3.3, Table 3.3.3, 3.7.1, 3.9):
++ *    checked line by line against the NDS 2015 page images supplied by the
++ *    project owner. No 2018 or 2024 text of Chapter 3 has been seen, so those
++ *    editions are not checked.
+  */
++/** Thrown when wood design is requested for an edition whose design values have not been incorporated. */
++class CodeDataBlockedException(message: String) : IllegalStateException(message)
++
+ object NdsCodeData {
+ 
++    /**
++     * Why wood design is blocked for [edition], or null when it may run. An
++     * edition whose Supplement design values and size / flat-use factors have
++     * not been sourced is blocked outright - no other edition's numbers are
++     * substituted (project decision, Oct 2026).
++     */
++    fun blockReason(edition: NdsEdition): String? =
++        if (edition in designValueEditions) null
++        else "Wood design is blocked for ${standardLabel(edition)}: its Supplement design values " +
++            "(Tables 4A / 4B / 4D / 4E / 5A / 5C) and the size and flat-use factors have not been " +
++            "incorporated, and values from another edition are not substituted. Use a building code " +
++            "that maps to a sourced edition (${designValueEditions.joinToString { standardLabel(it) }}) " +
++            "or add the ${standardLabel(edition)} Supplement data."
++
++    /** @throws CodeDataBlockedException when [blockReason] is non-null. */
++    fun requireUsable(edition: NdsEdition) {
++        blockReason(edition)?.let { throw CodeDataBlockedException(it) }
++    }
++
+     /** Editions the Supplement design values and factors have actually been sourced for. */
+     private val designValueEditions = setOf(NdsEdition.NDS_2018)
+ 
+-    /** Editions whose Chapter 2 (CD, KF, phi) has been checked against the published text. */
+-    private val chapter2Editions = setOf(NdsEdition.NDS_2018)
++    /** Editions whose Chapter 2 (CD, Ct, KF, phi) has been checked against the published text. */
++    private val chapter2Editions = setOf(NdsEdition.NDS_2018, NdsEdition.NDS_2015)
++
++    /** Editions whose Chapter 3 stability / combined-stress provisions have been checked against the text. */
++    private val chapter3Editions = setOf(NdsEdition.NDS_2015)
++
++    /** Editions whose Appendix N Table N3 (lambda) has been checked against the text. */
++    private val lambdaEditions = setOf(NdsEdition.NDS_2015)
+ 
+     fun standardLabel(edition: NdsEdition) = "NDS ${edition.year}"
+ 
+@@ -52,8 +83,8 @@ object NdsCodeData {
+                 dataset = if (isGlulam) "Reference design values \u2014 glulam (Supplement Tables 5A / 5C)"
+                 else "Reference design values and size factors (Supplement Tables 4A / 4B)",
+                 status = CodeDataStatus.NOT_SOURCED,
+-                message = "The $label Supplement values have not been incorporated; the NDS 2018 Supplement " +
+-                    "values are standing in and may differ. Results are provisional until $label data is added."
++                message = "The $label Supplement values have not been incorporated, so wood design is blocked " +
++                    "for this edition; no other edition's values are substituted."
+             )
+         } else if (isGlulam) {
+             out += CodeDataNotice(
+@@ -65,11 +96,14 @@ object NdsCodeData {
+             )
+         }
+ 
+-        out += CodeDataNotice(
+-            dataset = "Stability and combined-stress provisions (NDS 3.3.3, 3.7, 3.9, Table 3.3.3)",
+-            status = CodeDataStatus.UNVERIFIED,
+-            message = "Implemented from page images of an unspecified edition; not yet checked against the $label text."
+-        )
++        if (edition !in chapter3Editions) {
++            out += CodeDataNotice(
++                dataset = "Stability and combined-stress provisions (NDS 3.3.3, 3.7, 3.9, Table 3.3.3)",
++                status = CodeDataStatus.UNVERIFIED,
++                message = "Checked against the NDS 2015 text and found to match it; the $label text has not been " +
++                    "seen, so any change in $label is not reflected."
++            )
++        }
+ 
+         val ch2Checked = edition in chapter2Editions
+         if (methodology == DesignMethodology.LRFD) {
+@@ -78,23 +112,29 @@ object NdsCodeData {
+                     dataset = "Format conversion KF and resistance factor phi (NDS 2.3.5, 2.3.6)",
+                     status = CodeDataStatus.UNVERIFIED,
+                     message = "The values (KF 2.54 / 2.70 / 2.88 / 2.40 / 1.67 / 1.76; phi 0.85 / 0.80 / 0.75 / 0.90 / 0.85) " +
+-                        "were checked against the NDS 2018 text; they have not been checked against the $label text."
++                        "were checked against the NDS 2018 and 2015 text; they have not been checked against the $label text."
++                )
++            }
++            if (edition !in lambdaEditions) {
++                out += CodeDataNotice(
++                    dataset = "Time effect factor \u03bb (NDS Appendix N, Table N3)",
++                    status = CodeDataStatus.UNVERIFIED,
++                    message = "\u03bb follows Table N3 as checked against the NDS 2015 page image; the $label " +
++                        "Appendix N text has not been seen."
+                 )
+             }
+             out += CodeDataNotice(
+-                dataset = "Time effect factor \u03bb (NDS Appendix N, Table N3)",
++                dataset = "Live load type for \u03bb",
+                 status = CodeDataStatus.UNVERIFIED,
+-                message = "\u03bb is derived per load combination from Table N3 as published in design references " +
+-                    "(0.6 dead only, 0.8 gravity loads, 1.0 wind or earthquake at a strength-level factor); " +
+-                    "Appendix N has not been checked against the $label text. Occupancy live load is assumed " +
+-                    "(storage 0.7 and impact 1.25 are not distinguished)."
++                message = "Occupancy, storage (0.7) or impact (1.25) live load is chosen in the load duration " +
++                    "assumptions; the default is occupancy (0.8)."
+             )
+         } else {
+             if (!ch2Checked) {
+                 out += CodeDataNotice(
+                     dataset = "Load duration factor CD (NDS 2.3.2, Table 2.3.2)",
+                     status = CodeDataStatus.UNVERIFIED,
+-                    message = "The CD values and the shortest-duration-load rule were checked against the NDS 2018 text; " +
++                    message = "The CD values and the shortest-duration-load rule were checked against the NDS 2018 and 2015 text; " +
+                         "they have not been checked against the $label text."
+                 )
+             }
+@@ -102,9 +142,9 @@ object NdsCodeData {
+                 dataset = "Load type to duration (CD) assignment",
+                 status = CodeDataStatus.UNVERIFIED,
+                 message = "Table 2.3.2 lists dead, occupancy live, snow, construction, wind / earthquake and impact loads. " +
+-                    "Roof live load is treated here as seven-day (construction) duration, rain load has no tabulated duration " +
+-                    "(CD = 1.0 assumed), and snow is taken at two months. CD above 1.0 is not restricted for members treated " +
+-                    "with water-borne preservatives or fire retardant (CD must not exceed 1.6 there; Table 2.3.2 note 2)."
++                    "Unless changed in the load duration assumptions, roof live load is taken as seven-day (CD 1.25), " +
++                    "snow as two months (1.15), occupancy live as ten years (1.0) and rain (no tabulated duration) as 1.0. " +
++                    "CD is limited to 1.6 only when the member is marked pressure-treated / fire-retardant-treated."
+             )
+         }
+         return out
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsLoadDuration.kt b/core/solver/src/main/java/com/lz/solver/material/NdsLoadDuration.kt
+index 5ba8099..8366ba2 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsLoadDuration.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsLoadDuration.kt
+@@ -2,9 +2,12 @@ package com.lz.solver.material
+ 
+ import com.lz.model.regulatory.LoadCategory
+ import com.lz.model.regulatory.nds.LoadDurationClass
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.regulatory.nds.NdsEdition
++import com.lz.model.regulatory.nds.NdsLoadDurationAssumptions
+ import com.lz.model.regulatory.nds.NdsVersionRegistry
+ import com.lz.model.structural.DesignMethodology
++import kotlin.math.abs
+ 
+ /**
+  * A duration-dependent factor resolved for one load combination, with enough
+@@ -34,9 +37,10 @@ data class ResolvedLoadDuration(
+  * combination rather than once per member.
+  *
+  * STATUS: the duration classes come from the model's [LoadDurationClass]
+- * table (NDS Table 2.3.2) and the λ rules from Table N3 as commonly
+- * published; neither has yet been checked against page images of the
+- * edition being designed to — [NdsCodeData] reports that as UNVERIFIED.
++ * table (NDS Table 2.3.2, checked for 2015 and 2018) and the λ rules from
++ * Table N3, checked against the NDS 2015 page image; [NdsCodeData] reports
++ * the other editions as UNVERIFIED. Roof live, snow, rain and occupancy live
++ * durations are project assumptions ([NdsLoadDurationAssumptions]).
+  */
+ object NdsLoadDuration {
+ 
+@@ -63,27 +67,54 @@ object NdsLoadDuration {
+     fun resolve(
+         loads: Map<LoadCategory, Double>,
+         methodology: DesignMethodology,
+-        @Suppress("UNUSED_PARAMETER") edition: NdsEdition
++        @Suppress("UNUSED_PARAMETER") edition: NdsEdition,
++        assumptions: NdsLoadDurationAssumptions = NdsLoadDurationAssumptions(),
++        treatedMember: Boolean = false
+     ): ResolvedLoadDuration? {
+         if (loads.isEmpty()) return null
+-        return if (methodology == DesignMethodology.LRFD) lrfdLambda(loads) else asdCd(loads.keys)
++        return if (methodology == DesignMethodology.LRFD) lrfdLambda(loads, assumptions, treatedMember)
++        else asdCd(loads.keys, assumptions, treatedMember)
+     }
+ 
+-    private fun asdCd(categories: Set<LoadCategory>): ResolvedLoadDuration {
+-        val classed = categories.map { it to durationClassFor(it) }
+-        // NDS 2.3.2: the shortest-duration load in the combination sets CD.
+-        val cd = NdsVersionRegistry.getGoverningLoadDurationFactor(classed.map { it.second.first })
+-        val governing = classed.filter { it.second.first.cd == cd }
+-        val gov = governing.first()
++    /** CD for one load category: fixed by Table 2.3.2, or the project's assumption. */
++    private fun cdFor(category: LoadCategory, a: NdsLoadDurationAssumptions): Double = when (category) {
++        LoadCategory.LIVE      -> a.liveCd
++        LoadCategory.ROOF_LIVE -> a.roofLiveCd
++        LoadCategory.SNOW      -> a.snowCd
++        LoadCategory.RAIN      -> a.rainCd
++        else                   -> durationClassFor(category).first.cd
++    }
++
++    private fun asdCd(
++        categories: Set<LoadCategory>,
++        a: NdsLoadDurationAssumptions,
++        treatedMember: Boolean
++    ): ResolvedLoadDuration {
++        // NDS 2.3.2: the shortest-duration load in the combination sets CD. CD
++        // rises as duration shortens (0.9 / 1.0 / 1.15 / 1.25 / 1.6), so that
++        // is the largest CD among the loads acting - which stays right when the
++        // project has changed a load's assumed CD.
++        val cds = categories.associateWith { cdFor(it, a) }
++        val gov = cds.maxByOrNull { it.value }!!
++        val cdTable = gov.value
++        val cd = if (treatedMember) minOf(cdTable, NdsAdjustmentFactors.TREATED_MAX_CD) else cdTable
+         val names = categories.joinToString(" + ") { it.shortLabel }
+-        val assumption = gov.second.second?.let { "; $it" } ?: ""
++        val (cls, defaultNote) = durationClassFor(gov.key)
++        val userSet = gov.key in setOf(LoadCategory.LIVE, LoadCategory.ROOF_LIVE, LoadCategory.SNOW, LoadCategory.RAIN) &&
++            gov.value != cls.cd
++        val assumption = when {
++            userSet -> "; CD for ${gov.key.label.lowercase()} set in the project's load duration assumptions"
++            defaultNote != null -> "; $defaultNote"
++            else -> ""
++        }
++        val cap = if (treatedMember && cdTable > cd) "; limited to 1.6 for a treated member (Table 2.3.2 note 2)" else ""
+         return ResolvedLoadDuration(
+             factor = cd,
+             symbol = "CD",
+-            governingCategory = gov.first,
+-            durationLabel = gov.second.first.description,
+-            explanation = "CD = ${"%.2f".format(cd)}: shortest-duration load acting is " +
+-                "${gov.first.label.lowercase()} (${gov.second.first.description.lowercase()}), loads acting: $names$assumption"
++            governingCategory = gov.key,
++            durationLabel = cls.description,
++            explanation = "CD = ${"%.2f".format(cd)}: governing load is " +
++                "${gov.key.label.lowercase()} (${cls.description.lowercase()}), loads acting: $names$assumption$cap"
+         )
+     }
+ 
+@@ -99,26 +130,38 @@ object NdsLoadDuration {
+      * So wind / earthquake at a strength-level factor (>= 1.0) gives 1.0;
+      * otherwise any gravity load besides dead gives 0.8; dead alone gives 0.6.
+      */
+-    private fun lrfdLambda(loads: Map<LoadCategory, Double>): ResolvedLoadDuration {
++    private fun lrfdLambda(
++        loads: Map<LoadCategory, Double>,
++        a: NdsLoadDurationAssumptions,
++        treatedMember: Boolean
++    ): ResolvedLoadDuration {
+         val names = loads.entries.joinToString(" + ") { (c, f) ->
+             (if (f == 1.0) "" else f.toString().removeSuffix(".0")) + c.shortLabel
+         }
+-        fun strongLateral(c: LoadCategory) = (loads[c] ?: 0.0) >= 1.0
+-        val (lambda, why) = when {
++        // Wind / earthquake can act in either direction (the combination may
++        // carry a negative factor), so the size of the factor is what counts.
++        fun strongLateral(c: LoadCategory) = abs(loads[c] ?: 0.0) >= 1.0
++        val liveLeads = (loads[LoadCategory.LIVE] ?: 0.0) >= 1.5   // 1.2D + 1.6L + 0.5(Lr or S or R)
++        val (raw, why) = when {
+             strongLateral(LoadCategory.WIND) || strongLateral(LoadCategory.SEISMIC) ->
+                 1.0 to "wind or earthquake at a strength-level factor (Table N3: 1.2D + 1.0W + ..., 1.2D + 1.0E + ..., 0.9D + 1.0W/E)"
++            liveLeads ->
++                a.liveKind.lambda to "Table N3, 1.2D + 1.6L + 0.5(Lr or S or R) with L from " +
++                    "${a.liveKind.label.lowercase()} loading"
+             loads.keys.any { it != LoadCategory.DEAD } ->
+-                0.8 to "gravity loads besides dead (Table N3: 1.2D + 1.6L + ..., 1.2D + 1.6(Lr or S or R) + (L or 0.5W)); " +
+-                    "storage live load (0.7) and impact (1.25) are not distinguished"
++                0.8 to "gravity loads besides dead (Table N3: 1.2D + 1.6(Lr or S or R) + (L or 0.5W))"
+             else ->
+                 0.6 to "dead load only (Table N3: 1.4D)"
+         }
++        // Table N3 note 1: lambda above 1.0 does not apply to treated members.
++        val lambda = if (treatedMember) minOf(raw, 1.0) else raw
++        val cap = if (lambda < raw) "; limited to 1.0 for a treated member (Table N3 note 1)" else ""
+         return ResolvedLoadDuration(
+             factor = lambda,
+             symbol = "\u03bb",
+             governingCategory = null,
+             durationLabel = "Time effect",
+-            explanation = "\u03bb = ${"%.2f".format(lambda)}: $why; loads acting: $names"
++            explanation = "\u03bb = ${"%.2f".format(lambda)}: $why; loads acting: $names$cap"
+         )
+     }
+ }
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index b1b0da4..1cc41e0 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -243,7 +243,7 @@ class NdsWoodCapacityCalculator(
+             factorRows += row("CF (compression)", "Size factor, Fc", fmt(computeSawnCF(NdsCfProperty.COMPRESSION), 3))
+         }
+         factorRows += row("Cfu", "Flat use factor (flatwise bending only)", fmt(resolveFlatUseCfu(f, m, profile), 3))
+-        if (isGlulam) factorRows += row("CV", "Volume factor (strong axis)", fmt(computeCV(u.strongBend), 3))
++        if (isGlulam) factorRows += row("CV", "Volume factor (strong axis)", fmt(computeCV(u.cvSpan), 3))
+         factorRows += row("CL (strong axis)", "Beam stability, bending about x-x", fmt(strongAx.cl, 3))
+         factorRows += row("CL (weak axis)", "Beam stability, bending about y-y", fmt(weakAx.cl, 3))
+         factorRows += row("CP", "Column stability", fmt(cpParts.cp, 3))
+@@ -311,7 +311,9 @@ class NdsWoodCapacityCalculator(
+         val colStrong: Double,
+         val colWeak: Double,
+         val weakIsDefault: Boolean,
+-        val strongIsDefault: Boolean
++        val strongIsDefault: Boolean,
++        /** Length for the glulam volume factor CV (NDS 5.3.6): between points of zero moment. */
++        val cvSpan: Double
+     )
+ 
+     private fun unbraced(demand: StationDemand): Unbraced {
+@@ -323,7 +325,12 @@ class NdsWoodCapacityCalculator(
+         return Unbraced(
+             strongBend = flangeLb, weakBend = weakPlane,
+             colStrong = strongPlane, colWeak = weakPlane,
+-            weakIsDefault = demand.luWeakAxis == null, strongIsDefault = demand.luStrongAxis == null
++            weakIsDefault = demand.luWeakAxis == null, strongIsDefault = demand.luStrongAxis == null,
++            // CV uses the length between points of zero moment (5.3.6), NOT the
++            // unbraced length; the solver supplies it (the whole member where
++            // the moment diagram doesn't bracket the station). Only a demand
++            // that didn't come from the solver falls back to the unbraced length.
++            cvSpan = demand.momentSpanLength?.inInches ?: flangeLb
+         )
+     }
+ 
+@@ -349,7 +356,10 @@ class NdsWoodCapacityCalculator(
+             // design values (CD does not apply). lambda comes from the load
+             // combination when it is known and automatic mode is on, else 0.8.
+             val auto = adjustmentFactors.usesAutoLoadDuration
+-            val rd = (if (auto) NdsLoadDuration.resolve(demand.combinationLoadFactors, methodology, edition) else null)
++            val rd = (if (auto) NdsLoadDuration.resolve(
++                demand.combinationLoadFactors, methodology, edition,
++                adjustmentFactors.loadDurationAssumptions, adjustmentFactors.treatedMember
++            ) else null)
+                 ?: ResolvedLoadDuration(
+                     factor = LAMBDA_DEFAULT, symbol = "\u03bb", governingCategory = null, durationLabel = "Time effect",
+                     explanation = "\u03bb = ${"%.2f".format(LAMBDA_DEFAULT)}: default \u2014 " +
+@@ -371,7 +381,10 @@ class NdsWoodCapacityCalculator(
+         }
+ 
+         if (!adjustmentFactors.usesAutoLoadDuration) return null
+-        val rd = NdsLoadDuration.resolve(demand.combinationLoadFactors, methodology, edition) ?: return null
++        val rd = NdsLoadDuration.resolve(
++                demand.combinationLoadFactors, methodology, edition,
++                adjustmentFactors.loadDurationAssumptions, adjustmentFactors.treatedMember
++            ) ?: return null
+         return NdsWoodCapacityCalculator(
+             profile, material,
+             adjustmentFactors.copy(cd = rd.factor, loadDurationFromCombination = false),
+@@ -484,7 +497,7 @@ class NdsWoodCapacityCalculator(
+         )
+ 
+         val cl = computeCL(lb)
+-        val cv = if (isGlulam) computeCV(lb) else 1.0
++        val cv = if (isGlulam) computeCV(u.cvSpan) else 1.0
+ 
+         return StrengthDesignResult(
+             momentCheck = StrengthCheckResult(
+@@ -612,7 +625,7 @@ class NdsWoodCapacityCalculator(
+     }
+ 
+     private fun bendingAxis(strong: Boolean, u: Unbraced): BendingAxis =
+-        if (strong) strongBendingAxis(u.strongBend) else weakBendingAxis(u.weakBend)
++        if (strong) strongBendingAxis(u.strongBend, u.cvSpan) else weakBendingAxis(u.weakBend)
+ 
+     /**
+      * The NDS 3.3.3 development for one axis, as traces: the effective-length
+@@ -695,7 +708,7 @@ class NdsWoodCapacityCalculator(
+      * Glulam:      F'b = Fb * CD * CM * Ct * min(CV, CL) * Cfu * Ci
+      *              NDS 5.3.6: CV and CL are not applied simultaneously.
+      */
+-    private fun strongBendingAxis(lb: Double): BendingAxis {
++    private fun strongBendingAxis(lb: Double, cvSpan: Double = lb): BendingAxis {
+         val fb = designMaterial.referenceBending.inPsi
+         val sx = profile.propertiesStrongAxis.s.inIn3
+         val f = adjustmentFactors
+@@ -714,7 +727,7 @@ class NdsWoodCapacityCalculator(
+         val fStarStarTrace: DesignEquationTrace
+ 
+         if (isGlulam) {
+-            val cv = computeCV(lb)
++            val cv = computeCV(cvSpan)
+             // NDS 5.3.6: use lesser of CV and CL
+             val stabilityFactor = min(cl, cv)
+             fbAdj = fb * f.cdBending * f.cm * f.ct * stabilityFactor * f.cfu * f.ci
+@@ -955,6 +968,8 @@ class NdsWoodCapacityCalculator(
+      * NDS 5.3.6 Volume Factor CV for glulam.
+      * CV = (21/L)^(1/x) * (12/d)^(1/x) * (5.125/b)^(1/x) <= 1.0
+      * x = 10 for western species, 20 for southern pine glulam.
++     * L is the length of the member between points of zero moment (ft) -
++     * not the unbraced length (a shorter L would raise CV unconservatively).
+      */
+     private fun computeCV(spanLength: Double): Double {
+         if (!isGlulam || spanLength <= 0.0) return 1.0
+diff --git a/core/solver/src/test/java/com/lz/solver/material/NdsAssumptionsBlockAndSpanTest.kt b/core/solver/src/test/java/com/lz/solver/material/NdsAssumptionsBlockAndSpanTest.kt
+new file mode 100644
+index 0000000..f1c57c2
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/material/NdsAssumptionsBlockAndSpanTest.kt
+@@ -0,0 +1,254 @@
++package com.lz.solver.material
++
++import com.lz.model.regulatory.LoadCategory
++import com.lz.model.regulatory.LoadCombination
++import com.lz.model.regulatory.loads.CombinationType
++import com.lz.model.regulatory.nds.LiveLoadKind
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++import com.lz.model.regulatory.nds.NdsEdition
++import com.lz.model.regulatory.nds.NdsLoadDurationAssumptions
++import com.lz.model.structural.*
++import com.lz.model.units.*
++import com.lz.solver.analysis.MemberAnalysisSolver
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.util.UUID
++
++/**
++ * Expected values come from the NDS tables themselves (Table 2.3.2 CD,
++ * Table N3 lambda, 5.3.6 CV) and from hand arithmetic done separately, not
++ * from the code under test.
++ */
++class NdsAssumptionsBlockAndSpanTest {
++
++    private val D = LoadCategory.DEAD
++    private val L = LoadCategory.LIVE
++    private val S = LoadCategory.SNOW
++    private val LR = LoadCategory.ROOF_LIVE
++    private val R = LoadCategory.RAIN
++    private val W = LoadCategory.WIND
++
++    private fun asd(
++        loads: Set<LoadCategory>,
++        a: NdsLoadDurationAssumptions = NdsLoadDurationAssumptions(),
++        treated: Boolean = false
++    ) = NdsLoadDuration.resolve(loads.associateWith { 1.0 }, DesignMethodology.ASD, NdsEdition.NDS_2015, a, treated)!!.factor
++
++    private fun lrfd(
++        loads: Map<LoadCategory, Double>,
++        a: NdsLoadDurationAssumptions = NdsLoadDurationAssumptions(),
++        treated: Boolean = false
++    ) = NdsLoadDuration.resolve(loads, DesignMethodology.LRFD, NdsEdition.NDS_2015, a, treated)!!.factor
++
++    // ---------------- CD assumptions (ASD) ----------------
++
++    @Test
++    fun `default assumptions give the Table 2_3_2 values`() {
++        assertEquals(0.9, asd(setOf(D)), 0.0)
++        assertEquals(1.0, asd(setOf(D, L)), 0.0)
++        assertEquals(1.15, asd(setOf(D, S)), 0.0)
++        assertEquals(1.25, asd(setOf(D, LR)), 0.0)
++        assertEquals(1.0, asd(setOf(D, R)), 0.0)
++        assertEquals(1.6, asd(setOf(D, W)), 0.0)
++        assertEquals(1.25, asd(setOf(D, S, LR)), 0.0)
++    }
++
++    @Test
++    fun `the user can change the snow roof live rain and live CD`() {
++        val a = NdsLoadDurationAssumptions(liveCd = 0.9, roofLiveCd = 1.15, snowCd = 1.0, rainCd = 1.25)
++        assertEquals(1.0, asd(setOf(D, S), a), 0.0)       // longer snow duration
++        assertEquals(1.15, asd(setOf(D, LR), a), 0.0)
++        assertEquals(1.25, asd(setOf(D, R), a), 0.0)
++        assertEquals(0.9, asd(setOf(D, L), a), 0.0)
++        assertEquals(1.15, asd(setOf(D, S, LR), a), 0.0)   // largest CD of the loads acting governs
++        assertEquals(1.6, asd(setOf(D, W, S), a), 0.0)      // wind stays fixed at 1.6
++    }
++
++    @Test
++    fun `a treated member is limited to CD 1_6 in resolve and in the factors`() {
++        val a = NdsLoadDurationAssumptions(roofLiveCd = 2.0)
++        assertEquals(2.0, asd(setOf(D, LR), a, treated = false), 0.0)
++        assertEquals(1.6, asd(setOf(D, LR), a, treated = true), 0.0)
++        assertEquals(1.6, NdsAdjustmentFactors(cd = 2.0, treatedMember = true).effectiveCd, 0.0)
++        assertEquals(2.0, NdsAdjustmentFactors(cd = 2.0).effectiveCd, 0.0)
++        assertEquals(1.25, NdsAdjustmentFactors(cd = 1.25, treatedMember = true).effectiveCd, 0.0)
++    }
++
++    @Test
++    fun `assumption values outside 0 to 2 are reported invalid`() {
++        assertTrue(NdsLoadDurationAssumptions().isValid)
++        assertTrue(!NdsLoadDurationAssumptions(snowCd = 0.0).isValid)
++        assertTrue(!NdsLoadDurationAssumptions(rainCd = 2.5).isValid)
++        assertTrue(!NdsLoadDurationAssumptions(liveCd = Double.NaN).isValid)
++    }
++
++    // ---------------- lambda (Table N3, 2015) ----------------
++
++    @Test
++    fun `lambda follows Table N3 for every row`() {
++        assertEquals(0.6, lrfd(mapOf(D to 1.4)), 0.0)
++        assertEquals(0.8, lrfd(mapOf(D to 1.2, L to 1.6, S to 0.5)), 0.0)          // occupancy
++        assertEquals(0.8, lrfd(mapOf(D to 1.2, S to 1.6, L to 1.0)), 0.0)          // 1.2D + 1.6S + L
++        assertEquals(0.8, lrfd(mapOf(D to 1.2, LR to 1.6, W to 0.5)), 0.0)         // 1.2D + 1.6Lr + 0.5W
++        assertEquals(1.0, lrfd(mapOf(D to 1.2, W to 1.0, L to 1.0, S to 0.5)), 0.0)
++        assertEquals(1.0, lrfd(mapOf(D to 1.2, LoadCategory.SEISMIC to 1.0, L to 1.0, S to 0.2)), 0.0)
++        assertEquals(1.0, lrfd(mapOf(D to 0.9, W to 1.0)), 0.0)
++        assertEquals(1.0, lrfd(mapOf(D to 0.9, LoadCategory.SEISMIC to 1.0)), 0.0)
++    }
++
++    @Test
++    fun `lambda uses the live load type and reversed wind keeps lambda 1_0`() {
++        val loads = mapOf(D to 1.2, L to 1.6, S to 0.5)
++        assertEquals(0.7, lrfd(loads, NdsLoadDurationAssumptions(liveKind = LiveLoadKind.STORAGE)), 0.0)
++        assertEquals(0.8, lrfd(loads, NdsLoadDurationAssumptions(liveKind = LiveLoadKind.OCCUPANCY)), 0.0)
++        assertEquals(1.25, lrfd(loads, NdsLoadDurationAssumptions(liveKind = LiveLoadKind.IMPACT)), 0.0)
++        // Table N3 note 1: above 1.0 does not apply to treated members
++        assertEquals(1.0, lrfd(loads, NdsLoadDurationAssumptions(liveKind = LiveLoadKind.IMPACT), treated = true), 0.0)
++        // the live type only matters in the 1.6L row
++        assertEquals(0.8, lrfd(mapOf(D to 1.2, S to 1.6, L to 1.0), NdsLoadDurationAssumptions(liveKind = LiveLoadKind.STORAGE)), 0.0)
++        // reversed wind (negative factor) is still a strength-level wind combination
++        assertEquals(1.0, lrfd(mapOf(D to 0.9, W to -1.0)), 0.0)
++    }
++
++    // ---------------- hard block ----------------
++
++    @Test
++    fun `wood design is blocked for editions without sourced design values`() {
++        assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2018))
++        assertNotNull(NdsCodeData.blockReason(NdsEdition.NDS_2015))
++        assertNotNull(NdsCodeData.blockReason(NdsEdition.NDS_2024))
++        NdsCodeData.requireUsable(NdsEdition.NDS_2018)
++        var thrown = false
++        try { NdsCodeData.requireUsable(NdsEdition.NDS_2015) } catch (e: CodeDataBlockedException) { thrown = true }
++        assertTrue(thrown)
++    }
++
++    // ---------------- zero-moment span (NDS 5.3.6) ----------------
++
++    private val xs = (0..12).map { it * 10.0 }
++
++    @Test
++    fun `simple span stations see the support to support length`() {
++        val l = 120.0
++        val spans = MemberAnalysisSolver.zeroMomentSpans(xs, xs.map { it * (l - it) / 2 })
++        assertNull(spans.first()); assertNull(spans.last())          // moment is zero there
++        (1..11).forEach { assertEquals(120.0, spans[it]!!, 1e-9) }
++    }
++
++    @Test
++    fun `an overhang station sees the whole length where only one zero brackets it`() {
++        // M = 0 at x = 0 and x = 80 (inflection); negative beyond. Stations at 10-unit steps.
++        val ms = xs.map { if (it <= 80.0) it * (80.0 - it) else -(it - 80.0) * 10.0 }
++        val spans = MemberAnalysisSolver.zeroMomentSpans(xs, ms)
++        assertEquals(80.0, spans[4]!!, 1e-9)       // x = 40 between the zeros at 0 and 80
++        assertEquals(120.0, spans[10]!!, 1e-9)     // x = 100: zero on the left only -> full length
++    }
++
++    @Test
++    fun `an interpolated zero is used between stations`() {
++        // M(x) = x - 25 at stations 0,10,20,30,40: zero at x = 25, only one zero -> full length 40
++        val spans = MemberAnalysisSolver.zeroMomentSpans(listOf(0.0, 10.0, 20.0, 30.0, 40.0),
++            listOf(-25.0, -15.0, -5.0, 5.0, 15.0))
++        assertEquals(40.0, spans[1]!!, 1e-9)
++        // two zeros: M = 0, 10, 20 (x = 0,10,20 -> zero at x=0), then -10 at 30, -20 at 40: crossing at 20 exactly
++        val s2 = MemberAnalysisSolver.zeroMomentSpans(listOf(0.0, 10.0, 20.0, 30.0), listOf(0.0, 10.0, 0.0, -10.0))
++        assertEquals(20.0, s2[1]!!, 1e-9)
++        // sign change between stations: 10 at x=10, -30 at x=20 -> zero at 12.5
++        val s3 = MemberAnalysisSolver.zeroMomentSpans(listOf(0.0, 10.0, 20.0), listOf(0.0, 10.0, -30.0))
++        assertEquals(12.5, s3[1]!!, 1e-9)
++    }
++
++    @Test
++    fun `a zero moment diagram gives no span`() {
++        assertTrue(MemberAnalysisSolver.zeroMomentSpans(xs, xs.map { 0.0 }).all { it == null })
++    }
++
++    // ---------------- CV uses that span, not the unbraced length ----------------
++
++    private val spanId: UUID = UUID.randomUUID()
++    private val glProfile = WoodProfile(
++        id = "gl", designation = "5.125x12",
++        nominalWidth = 5.125.inches, nominalDepth = 12.0.inches,
++        dressedWidth = 5.125.inches, dressedDepth = 12.0.inches
++    )
++    private val glulam = MaterialGrade.Wood(
++        id = "gl", name = "Glulam 16F-V3",
++        species = WoodSpecies.GLULAM_DF_DF, grade = WoodGrade.G_16F_V3,
++        referenceBending = 1600.0.psi, referenceShear = 265.0.psi,
++        referenceCompressionParallel = 1500.0.psi, referenceCompressionPerp = 560.0.psi,
++        referenceTensionParallel = 975.0.psi,
++        modulusOfElasticity = 1600000.0.psi, shearModulus = 100000.0.psi, densityPcf = 31.2
++    )
++
++    private fun strongCapacity(spanFt: Double?): Double {
++        val d = StationDemand(
++            spanId = spanId, x = 180.0.inches, moment = Moment(1000.0), shear = Force(0.0),
++            lbTop = 0.0.inches, lbBottom = 0.0.inches, compressionFlange = Flange.TOP,
++            momentSpanLength = spanFt?.let { (it * 12.0).inches }
++        )
++        return NdsWoodCapacityCalculator(glProfile, glulam).evaluateDetailed(d, DesignMethodology.ASD)
++            .momentCheck.capacity.lbIn
++    }
++
++    @Test
++    fun `glulam CV takes L between zero-moment points`() {
++        // CV = (21/30)^(1/10) (12/12)^(1/10) (5.125/5.125)^(1/10) = 0.964961; Sx = 5.125 x 12^2 / 6 = 123.0
++        assertEquals(1600.0 * 0.9649610951198176 * 123.0, strongCapacity(30.0), 1e-3)
++        // L = 15 ft: CV would exceed 1, limited to 1.0
++        assertEquals(1600.0 * 123.0, strongCapacity(15.0), 1e-3)
++    }
++
++    @Test
++    fun `Cr does not enter glulam F-star-b for CL`() {
++        val withCr = computeNdsBeamStability(120.0, glProfile, glulam, NdsAdjustmentFactors(cr = 1.15), true)!!
++        val noCr = computeNdsBeamStability(120.0, glProfile, glulam, NdsAdjustmentFactors(), true)!!
++        assertEquals(noCr.fStarB, withCr.fStarB, 1e-9)
++        assertEquals(noCr.cl, withCr.cl, 1e-12)
++    }
++
++    // ---------------- reversal and duplicates ----------------
++
++    private fun combo(name: String, f: Map<LoadCategory, Double>) = LoadCombination(
++        id = name, name = name, methodology = DesignMethodology.LRFD, type = CombinationType.STRENGTH,
++        equationText = name, factors = f, codeReference = ""
++    )
++
++    @Test
++    fun `wind combinations get a reversed twin`() {
++        val out = MemberAnalysisSolver.expandCombinations(
++            listOf(combo("0.9D+W", mapOf(D to 0.9, W to 1.0)), combo("1.4D", mapOf(D to 1.4))),
++            setOf(D, W)
++        )
++        assertEquals(3, out.size)
++        val rev = out.first { it.name.contains("reversed") }
++        assertEquals(-1.0, rev.factors[W]!!, 0.0)
++        assertEquals(0.9, rev.factors[D]!!, 0.0)
++        assertTrue(out.none { it.name == "1.4D" && it.factors.containsKey(W) })
++    }
++
++    @Test
++    fun `no reversal when wind is not applied`() {
++        val out = MemberAnalysisSolver.expandCombinations(listOf(combo("0.9D+W", mapOf(D to 0.9, W to 1.0))), setOf(D))
++        assertEquals(1, out.size)
++    }
++
++    @Test
++    fun `combinations differing only by unapplied loads are not duplicated`() {
++        val out = MemberAnalysisSolver.expandCombinations(
++            listOf(
++                combo("1.2D+1.6L+0.5Lr", mapOf(D to 1.2, L to 1.6, LR to 0.5)),
++                combo("1.2D+1.6L+0.5S", mapOf(D to 1.2, L to 1.6, S to 0.5)),
++                combo("1.2D+1.6L+0.5R", mapOf(D to 1.2, L to 1.6, R to 0.5)),
++                combo("1.2D+1.6S+L", mapOf(D to 1.2, S to 1.6, L to 1.0))
++            ),
++            setOf(D, L)
++        )
++        assertEquals(listOf("1.2D+1.6L+0.5Lr", "1.2D+1.6S+L"), out.map { it.name }.let { names ->
++            // the second kept combination differs (L at 1.0 rather than 1.6)
++            names
++        })
++    }
++}
+diff --git a/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt b/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
+index 3ccd9ab..d027941 100644
+--- a/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
++++ b/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
+@@ -242,7 +242,7 @@ class NdsLoadDurationAndEditionTest {
+             val n = notices(e).first { it.status == CodeDataStatus.NOT_SOURCED }
+             assertTrue(n.dataset.contains("Reference design values"))
+             assertTrue(n.message.contains("NDS ${e.year}"))
+-            assertTrue(n.message.contains("NDS 2018"))
++            assertTrue(n.message.contains("blocked"))
+         }
+         assertEquals("NDS 2024", calc(edition = NdsEdition.NDS_2024).evaluateDetailed(demand(dOnly), asd).standardLabel)
+         assertEquals("NDS 2015", calc(edition = NdsEdition.NDS_2015).evaluateDetailed(demand(dOnly), asd)
+@@ -250,13 +250,15 @@ class NdsLoadDurationAndEditionTest {
+     }
+ 
+     @Test
+-    fun `Chapter 2 factors are checked for NDS 2018 only`() {
++    fun `Chapter 2 factors are checked for NDS 2018 and 2015 but not 2024`() {
+         fun asd(e: NdsEdition) = NdsCodeData.noticesFor(e, DesignMethodology.ASD, isGlulam = false)
+         fun lrfd(e: NdsEdition) = NdsCodeData.noticesFor(e, DesignMethodology.LRFD, isGlulam = false)
+         assertTrue(asd(NdsEdition.NDS_2018).none { it.dataset.startsWith("Load duration factor CD") })
+         assertTrue(asd(NdsEdition.NDS_2024).any { it.dataset.startsWith("Load duration factor CD") })
+         assertTrue(lrfd(NdsEdition.NDS_2018).none { it.dataset.startsWith("Format conversion") })
+-        assertTrue(lrfd(NdsEdition.NDS_2015).any { it.dataset.startsWith("Format conversion") })
++        assertTrue(asd(NdsEdition.NDS_2015).none { it.dataset.startsWith("Load duration factor CD") })
++        assertTrue(lrfd(NdsEdition.NDS_2015).none { it.dataset.startsWith("Format conversion") })
++        assertTrue(lrfd(NdsEdition.NDS_2024).any { it.dataset.startsWith("Format conversion") })
+         // Lambda (Appendix N) is unchecked for every edition; the duration mapping assumptions are always disclosed.
+         for (e in NdsEdition.values()) {
+             assertTrue(lrfd(e).any { it.dataset.contains("\u03bb") && it.status == CodeDataStatus.UNVERIFIED })
+@@ -265,6 +267,15 @@ class NdsLoadDurationAndEditionTest {
+         }
+     }
+ 
++    @Test
++    fun `Chapter 3 stability provisions are checked for NDS 2015 only`() {
++        fun has(e: NdsEdition) = NdsCodeData.noticesFor(e, DesignMethodology.ASD, isGlulam = false)
++            .any { it.dataset.startsWith("Stability and combined-stress") }
++        assertTrue(!has(NdsEdition.NDS_2015))
++        assertTrue(has(NdsEdition.NDS_2018))
++        assertTrue(has(NdsEdition.NDS_2024))
++    }
++
+     @Test
+     fun `glulam is flagged as mixed provenance even for 2018`() {
+         val n = NdsCodeData.noticesFor(NdsEdition.NDS_2018, DesignMethodology.ASD, isGlulam = true)
+diff --git a/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt b/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt
+index d98402e..44e1972 100644
+--- a/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt
++++ b/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt
+@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
+ import androidx.compose.foundation.verticalScroll
+ import androidx.compose.material3.AlertDialog
+ import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.FilterChip
+ import androidx.compose.material3.HorizontalDivider
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.OutlinedTextField
+@@ -25,7 +26,9 @@ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.input.KeyboardType
+ import androidx.compose.ui.unit.dp
++import com.lz.model.regulatory.nds.LiveLoadKind
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++import com.lz.model.regulatory.nds.NdsLoadDurationAssumptions
+ 
+ /**
+  * One editable NDS adjustment factor. Description text is always visible
+@@ -64,6 +67,15 @@ fun AdjustmentFactorsEditDialog(
+     var cr by remember(currentFactors) { mutableStateOf(currentFactors.cr.toString()) }
+     var cp by remember(currentFactors) { mutableStateOf(currentFactors.cp.toString()) }
+     var cb by remember(currentFactors) { mutableStateOf(currentFactors.cb.toString()) }
++    val da = currentFactors.loadDurationAssumptions
++    var liveCd by remember(currentFactors) { mutableStateOf(da.liveCd.toString()) }
++    var roofLiveCd by remember(currentFactors) { mutableStateOf(da.roofLiveCd.toString()) }
++    var snowCd by remember(currentFactors) { mutableStateOf(da.snowCd.toString()) }
++    var rainCd by remember(currentFactors) { mutableStateOf(da.rainCd.toString()) }
++    var liveKind by remember(currentFactors) { mutableStateOf(da.liveKind) }
++    var treated by remember(currentFactors) { mutableStateOf(currentFactors.treatedMember) }
++    fun validCd(t: String): Boolean = t.toDoubleOrNull()?.let { it > 0.0 && it <= 2.0 } == true
++    val assumptionsValid = validCd(liveCd) && validCd(roofLiveCd) && validCd(snowCd) && validCd(rainCd)
+ 
+     val fields = listOf(
+         FactorField(
+@@ -242,10 +254,71 @@ fun AdjustmentFactorsEditDialog(
+                         HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+                     }
+                 }
++                HorizontalDivider()
++                Text(
++                    "Load duration assumptions",
++                    style = MaterialTheme.typography.labelLarge,
++                    fontWeight = FontWeight.Bold
++                )
++                Text(
++                    "Used when CD is set automatically from each load combination. NDS Table 2.3.2 " +
++                        "gives dead 0.9, wind / earthquake 1.6 (fixed) but no duration for roof live " +
++                        "or rain, and leaves snow and live load duration to the designer. Change " +
++                        "these if your project differs (e.g. snow that stays on the roof for months, " +
++                        "storage loading). Allowed range 0 < CD <= 2.0.",
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant
++                )
++                listOf(
++                    Triple<String, String, (String) -> Unit>("Occupancy live load CD (ten years)", liveCd, { v: String -> liveCd = v }),
++                    Triple<String, String, (String) -> Unit>("Roof live load CD (seven days)", roofLiveCd, { v: String -> roofLiveCd = v }),
++                    Triple<String, String, (String) -> Unit>("Snow load CD (two months)", snowCd, { v: String -> snowCd = v }),
++                    Triple<String, String, (String) -> Unit>("Rain load CD (no tabulated duration)", rainCd, { v: String -> rainCd = v })
++                ).forEach { (label, value, onChange) ->
++                    OutlinedTextField(
++                        value = value,
++                        onValueChange = onChange,
++                        label = { Text(label) },
++                        isError = !validCd(value),
++                        singleLine = true,
++                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
++                            keyboardType = KeyboardType.Decimal
++                        ),
++                        modifier = Modifier.fillMaxWidth()
++                    )
++                }
++                Text(
++                    "LRFD live load type (time effect factor, Table N3 row 1.2D + 1.6L + 0.5(Lr or S or R)): " +
++                        "storage 0.7, occupancy 0.8, impact 1.25.",
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant
++                )
++                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                    LiveLoadKind.values().forEach { kind ->
++                        FilterChip(
++                            selected = liveKind == kind,
++                            onClick = { liveKind = kind },
++                            label = { Text("${kind.label} (${kind.lambda})") }
++                        )
++                    }
++                }
++                Row(
++                    modifier = Modifier.fillMaxWidth(),
++                    verticalAlignment = Alignment.CenterVertically,
++                    horizontalArrangement = Arrangement.SpaceBetween
++                ) {
++                    Text(
++                        "Pressure-treated with water-borne preservatives or fire-retardant chemicals " +
++                            "(limits CD to 1.6 and lambda to 1.0)",
++                        style = MaterialTheme.typography.bodyMedium,
++                        modifier = Modifier.weight(1f)
++                    )
++                    Switch(checked = treated, onCheckedChange = { treated = it })
++                }
+             }
+         },
+         confirmButton = {
+-            TextButton(onClick = {
++            TextButton(enabled = assumptionsValid, onClick = {
+                 onConfirm(
+                     NdsAdjustmentFactors(
+                         cd = if (autoCd) 1.0 else (cd.toDoubleOrNull() ?: 1.0),
+@@ -258,7 +331,15 @@ fun AdjustmentFactorsEditDialog(
+                         ci = ci.toDoubleOrNull() ?: 1.0,
+                         cr = cr.toDoubleOrNull() ?: 1.0,
+                         cp = cp.toDoubleOrNull() ?: 1.0,
+-                        cb = cb.toDoubleOrNull() ?: 1.0
++                        cb = cb.toDoubleOrNull() ?: 1.0,
++                        loadDurationAssumptions = NdsLoadDurationAssumptions(
++                            liveCd = liveCd.toDouble(),
++                            roofLiveCd = roofLiveCd.toDouble(),
++                            snowCd = snowCd.toDouble(),
++                            rainCd = rainCd.toDouble(),
++                            liveKind = liveKind
++                        ),
++                        treatedMember = treated
+                     )
+                 )
+             }) {
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 7f4a6f5..c03361a 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -59,6 +59,8 @@ import com.lz.model.units.inches
+ import com.lz.model.units.lbPerFt
+ import com.lz.model.units.psiModulus
+ import com.lz.solver.material.AiscSteelCapacityCalculator
++import com.lz.solver.material.CodeDataBlockedException
++import com.lz.solver.material.NdsCodeData
+ import com.lz.solver.material.NdsWoodCapacityCalculator
+ import com.lz.solver.material.WoodPropertyService
+ import com.lz.solver.envelope.ServiceabilityEvaluationService
+@@ -257,13 +259,15 @@ class BeamViewModel @Inject constructor(
+     private fun detailCalculator(section: SectionProfile): CapacityCalculator? =
+         when (val mat = activeMaterialGrade) {
+             is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
+-            is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
+-                section, mat,
+-                adjustmentFactors = ndsAdjustmentFactors,
+-                edition = activeNdsEdition ?: NdsEdition.NDS_2018,
+-                memberIsStrongAxis = isStrongAxis,
+-                defaultMethodology = methodology
+-            )
++            is MaterialGrade.Wood  ->
++                if (NdsCodeData.blockReason(activeNdsEdition ?: NdsEdition.NDS_2018) != null) null
++                else NdsWoodCapacityCalculator(
++                    section, mat,
++                    adjustmentFactors = ndsAdjustmentFactors,
++                    edition = activeNdsEdition ?: NdsEdition.NDS_2018,
++                    memberIsStrongAxis = isStrongAxis,
++                    defaultMethodology = methodology
++                )
+             else                   -> null
+         }
+ 
+@@ -489,6 +493,12 @@ class BeamViewModel @Inject constructor(
+                     calculationError = null
+                     hasUnsavedChanges = inputsAtResult != savedInputsSnapshot
+                 }
++            } catch (e: CodeDataBlockedException) {
++                // Hard block: show no result at all rather than a stale one.
++                withContext(Dispatchers.Main) {
++                    calculationResult = null
++                    calculationError = e.message
++                }
+             } catch (e: Exception) {
+                 withContext(Dispatchers.Main) {
+                     calculationError = e.message ?: "An unknown error occurred during calculation."
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+index 57daff1..b25c77d 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+@@ -28,6 +28,7 @@ import com.lz.solver.capacity.CapacityEngine
+ import com.lz.solver.material.AiscCbCalculator
+ import com.lz.solver.material.AiscSteelCapacityCalculator
+ import com.lz.solver.material.NdsClCalculator
++import com.lz.solver.material.NdsCodeData
+ import com.lz.solver.material.NdsWoodCapacityCalculator
+ import kotlin.math.abs
+ 
+@@ -146,13 +147,17 @@ object BeamAnalysisSolver {
+                 edition = resolveAiscEdition(config) ?: AiscEdition.AISC_360_22,
+                 memberIsStrongAxis = config.isStrongAxis
+             )
+-            is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
++            is MaterialGrade.Wood  -> {
++                // Hard block: an edition without sourced design values is not designed at all.
++                NdsCodeData.requireUsable(resolveNdsEdition(config) ?: NdsEdition.NDS_2018)
++                NdsWoodCapacityCalculator(
+                 profile, material,
+                 adjustmentFactors = config.ndsAdjustmentFactors,
+                 edition = resolveNdsEdition(config) ?: NdsEdition.NDS_2018,
+                 memberIsStrongAxis = config.isStrongAxis,
+                 defaultMethodology = config.designMethodology
+-            )
++                )
++            }
+             else                   -> null
+         }
+ 

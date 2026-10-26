@@ -28,6 +28,7 @@ import com.lz.solver.capacity.CapacityEngine
 import com.lz.solver.material.AiscCbCalculator
 import com.lz.solver.material.AiscSteelCapacityCalculator
 import com.lz.solver.material.NdsClCalculator
+import com.lz.solver.material.NdsCodeData
 import com.lz.solver.material.NdsWoodCapacityCalculator
 import kotlin.math.abs
 
@@ -146,13 +147,17 @@ object BeamAnalysisSolver {
                 edition = resolveAiscEdition(config) ?: AiscEdition.AISC_360_22,
                 memberIsStrongAxis = config.isStrongAxis
             )
-            is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
+            is MaterialGrade.Wood  -> {
+                // Hard block: an edition without sourced design values is not designed at all.
+                NdsCodeData.requireUsable(resolveNdsEdition(config) ?: NdsEdition.NDS_2018)
+                NdsWoodCapacityCalculator(
                 profile, material,
                 adjustmentFactors = config.ndsAdjustmentFactors,
                 edition = resolveNdsEdition(config) ?: NdsEdition.NDS_2018,
                 memberIsStrongAxis = config.isStrongAxis,
                 defaultMethodology = config.designMethodology
-            )
+                )
+            }
             else                   -> null
         }
 

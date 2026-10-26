@@ -59,6 +59,8 @@ import com.lz.model.units.inches
 import com.lz.model.units.lbPerFt
 import com.lz.model.units.psiModulus
 import com.lz.solver.material.AiscSteelCapacityCalculator
+import com.lz.solver.material.CodeDataBlockedException
+import com.lz.solver.material.NdsCodeData
 import com.lz.solver.material.NdsWoodCapacityCalculator
 import com.lz.solver.material.WoodPropertyService
 import com.lz.solver.envelope.ServiceabilityEvaluationService
@@ -257,13 +259,15 @@ class BeamViewModel @Inject constructor(
     private fun detailCalculator(section: SectionProfile): CapacityCalculator? =
         when (val mat = activeMaterialGrade) {
             is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
-            is MaterialGrade.Wood  -> NdsWoodCapacityCalculator(
-                section, mat,
-                adjustmentFactors = ndsAdjustmentFactors,
-                edition = activeNdsEdition ?: NdsEdition.NDS_2018,
-                memberIsStrongAxis = isStrongAxis,
-                defaultMethodology = methodology
-            )
+            is MaterialGrade.Wood  ->
+                if (NdsCodeData.blockReason(activeNdsEdition ?: NdsEdition.NDS_2018) != null) null
+                else NdsWoodCapacityCalculator(
+                    section, mat,
+                    adjustmentFactors = ndsAdjustmentFactors,
+                    edition = activeNdsEdition ?: NdsEdition.NDS_2018,
+                    memberIsStrongAxis = isStrongAxis,
+                    defaultMethodology = methodology
+                )
             else                   -> null
         }
 
@@ -488,6 +492,12 @@ class BeamViewModel @Inject constructor(
                     calculationResult = result
                     calculationError = null
                     hasUnsavedChanges = inputsAtResult != savedInputsSnapshot
+                }
+            } catch (e: CodeDataBlockedException) {
+                // Hard block: show no result at all rather than a stale one.
+                withContext(Dispatchers.Main) {
+                    calculationResult = null
+                    calculationError = e.message
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {

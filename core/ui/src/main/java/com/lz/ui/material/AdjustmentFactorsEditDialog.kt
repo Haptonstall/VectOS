@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -25,7 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.lz.model.regulatory.nds.LiveLoadKind
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+import com.lz.model.regulatory.nds.NdsLoadDurationAssumptions
 
 /**
  * One editable NDS adjustment factor. Description text is always visible
@@ -64,6 +67,15 @@ fun AdjustmentFactorsEditDialog(
     var cr by remember(currentFactors) { mutableStateOf(currentFactors.cr.toString()) }
     var cp by remember(currentFactors) { mutableStateOf(currentFactors.cp.toString()) }
     var cb by remember(currentFactors) { mutableStateOf(currentFactors.cb.toString()) }
+    val da = currentFactors.loadDurationAssumptions
+    var liveCd by remember(currentFactors) { mutableStateOf(da.liveCd.toString()) }
+    var roofLiveCd by remember(currentFactors) { mutableStateOf(da.roofLiveCd.toString()) }
+    var snowCd by remember(currentFactors) { mutableStateOf(da.snowCd.toString()) }
+    var rainCd by remember(currentFactors) { mutableStateOf(da.rainCd.toString()) }
+    var liveKind by remember(currentFactors) { mutableStateOf(da.liveKind) }
+    var treated by remember(currentFactors) { mutableStateOf(currentFactors.treatedMember) }
+    fun validCd(t: String): Boolean = t.toDoubleOrNull()?.let { it > 0.0 && it <= 2.0 } == true
+    val assumptionsValid = validCd(liveCd) && validCd(roofLiveCd) && validCd(snowCd) && validCd(rainCd)
 
     val fields = listOf(
         FactorField(
@@ -242,10 +254,71 @@ fun AdjustmentFactorsEditDialog(
                         HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
                     }
                 }
+                HorizontalDivider()
+                Text(
+                    "Load duration assumptions",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Used when CD is set automatically from each load combination. NDS Table 2.3.2 " +
+                        "gives dead 0.9, wind / earthquake 1.6 (fixed) but no duration for roof live " +
+                        "or rain, and leaves snow and live load duration to the designer. Change " +
+                        "these if your project differs (e.g. snow that stays on the roof for months, " +
+                        "storage loading). Allowed range 0 < CD <= 2.0.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                listOf(
+                    Triple<String, String, (String) -> Unit>("Occupancy live load CD (ten years)", liveCd, { v: String -> liveCd = v }),
+                    Triple<String, String, (String) -> Unit>("Roof live load CD (seven days)", roofLiveCd, { v: String -> roofLiveCd = v }),
+                    Triple<String, String, (String) -> Unit>("Snow load CD (two months)", snowCd, { v: String -> snowCd = v }),
+                    Triple<String, String, (String) -> Unit>("Rain load CD (no tabulated duration)", rainCd, { v: String -> rainCd = v })
+                ).forEach { (label, value, onChange) ->
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = onChange,
+                        label = { Text(label) },
+                        isError = !validCd(value),
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Text(
+                    "LRFD live load type (time effect factor, Table N3 row 1.2D + 1.6L + 0.5(Lr or S or R)): " +
+                        "storage 0.7, occupancy 0.8, impact 1.25.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LiveLoadKind.values().forEach { kind ->
+                        FilterChip(
+                            selected = liveKind == kind,
+                            onClick = { liveKind = kind },
+                            label = { Text("${kind.label} (${kind.lambda})") }
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "Pressure-treated with water-borne preservatives or fire-retardant chemicals " +
+                            "(limits CD to 1.6 and lambda to 1.0)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(checked = treated, onCheckedChange = { treated = it })
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = {
+            TextButton(enabled = assumptionsValid, onClick = {
                 onConfirm(
                     NdsAdjustmentFactors(
                         cd = if (autoCd) 1.0 else (cd.toDoubleOrNull() ?: 1.0),
@@ -258,7 +331,15 @@ fun AdjustmentFactorsEditDialog(
                         ci = ci.toDoubleOrNull() ?: 1.0,
                         cr = cr.toDoubleOrNull() ?: 1.0,
                         cp = cp.toDoubleOrNull() ?: 1.0,
-                        cb = cb.toDoubleOrNull() ?: 1.0
+                        cb = cb.toDoubleOrNull() ?: 1.0,
+                        loadDurationAssumptions = NdsLoadDurationAssumptions(
+                            liveCd = liveCd.toDouble(),
+                            roofLiveCd = roofLiveCd.toDouble(),
+                            snowCd = snowCd.toDouble(),
+                            rainCd = rainCd.toDouble(),
+                            liveKind = liveKind
+                        ),
+                        treatedMember = treated
                     )
                 )
             }) {

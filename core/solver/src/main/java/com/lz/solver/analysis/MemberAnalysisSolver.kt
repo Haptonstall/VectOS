@@ -203,9 +203,11 @@ object MemberAnalysisSolver {
         // silently-frozen result on screen (see calculationError) rather
         // than the correct all-zero demand/utilization a loadless member
         // should show.
+        val appliedCategories = config.allLoads.map { it.category }.toSet()
+        val combinations = expandCombinations(config.combinations, appliedCategories)
         val activeCategories = (
             config.allLoads.map { it.category } +
-                config.combinations.flatMap { it.factors.keys }
+                combinations.flatMap { it.factors.keys }
             ).distinct()
 
         // 3. Solve for each category independently (Unfactored/Service Pass)
@@ -221,11 +223,11 @@ object MemberAnalysisSolver {
         }
 
         // 5. Build Individual Combination Results
-        val combinationResults = config.combinations.associate { combo ->
+        val combinationResults = combinations.associate { combo ->
             // Factor each category's station demands by this combo's load factors
             val comboDemands = buildFactoredDemands(
                 resultsByCategory, combo, demandsByCategory,
-                appliedCategories = config.allLoads.map { it.category }.toSet()
+                appliedCategories = appliedCategories
             )
 
             // Apply factors to reactions
@@ -252,7 +254,7 @@ object MemberAnalysisSolver {
         // which is exactly what combinationResults[governingComboName] already
         // is (built by buildFactoredDemands, a straight linear combination of
         // the same two categories at every single station, hence smooth).
-        val envelopeResult = DemandEnvelopeResolver.resolveMemberEnvelopes(demandsByCategory, config.combinations)
+        val envelopeResult = DemandEnvelopeResolver.resolveMemberEnvelopes(demandsByCategory, combinations)
         val governingComboName =
             envelopeResult.governingMaxMoment?.governingCombination?.name
                 ?: envelopeResult.governingMaxShear?.governingCombination?.name
@@ -361,6 +363,88 @@ object MemberAnalysisSolver {
         }
     }
 
+    /**
+     * For each station, the length between the zero-moment points on either
+     * side of it - or the whole length of the stations given when the diagram
+     * has no zero on one side (cantilever / fixed end, conservative for CV).
+     * Stations sitting at a zero of the moment, or a diagram that is zero
+     * throughout, get null.
+     */
+    internal fun zeroMomentSpans(xs: List<Double>, ms: List<Double>): List<Double?> {
+        val n = xs.size
+        if (n == 0) return emptyList()
+        val order = (0 until n).sortedBy { xs[it] }
+        val x = order.map { xs[it] }
+        val m = order.map { ms[it] }
+        val peak = m.maxOf { abs(it) }
+        val eps = 1e-6 * peak
+        val total = x.last() - x.first()
+        val sign = m.map { if (abs(it) <= eps) 0 else if (it > 0) 1 else -1 }
+        val sorted = List(n) { i ->
+            if (peak == 0.0 || sign[i] == 0) null else {
+                var left: Double? = null
+                for (k in i - 1 downTo 0) {
+                    if (sign[k] == 0) { left = x[k]; break }
+                    if (sign[k] != sign[i]) {
+                        left = x[k] + (x[k + 1] - x[k]) * abs(m[k]) / (abs(m[k]) + abs(m[k + 1])); break
+                    }
+                }
+                var right: Double? = null
+                for (k in i + 1 until n) {
+                    if (sign[k] == 0) { right = x[k]; break }
+                    if (sign[k] != sign[i]) {
+                        right = x[k - 1] + (x[k] - x[k - 1]) * abs(m[k - 1]) / (abs(m[k - 1]) + abs(m[k])); break
+                    }
+                }
+                if (left != null && right != null && right > left) right - left else total
+            }
+        }
+        val out = arrayOfNulls<Double>(n)
+        order.forEachIndexed { pos, original -> out[original] = sorted[pos] }
+        return out.toList()
+    }
+
+    /**
+     * The combinations actually evaluated:
+     *  - Wind and earthquake can act in either direction, so every combination
+     *    carrying an applied W or E also gets a reversed twin (W / E factor
+     *    negated). Without it 0.9D + 1.0W only ever saw the entered direction
+     *    and missed the uplift / suction case. (The envelope resolver's own
+     *    isLateralReversible expansion is not used, so nothing is doubled.)
+     *  - Combinations that only differ by loads that are not applied to the
+     *    member produce identical demands; only the first is kept so the
+     *    governing-combination list is not cluttered with duplicates.
+     */
+    internal fun expandCombinations(
+        combos: List<com.lz.model.regulatory.LoadCombination>,
+        applied: Set<com.lz.model.regulatory.LoadCategory>
+    ): List<com.lz.model.regulatory.LoadCombination> {
+        val lateral = setOf(com.lz.model.regulatory.LoadCategory.WIND, com.lz.model.regulatory.LoadCategory.SEISMIC)
+        val expanded = mutableListOf<com.lz.model.regulatory.LoadCombination>()
+        for (c in combos) {
+            expanded += c
+            val acting = c.factors.filter { (k, f) -> f != 0.0 && k in applied && k in lateral }.keys
+            if (acting.isNotEmpty()) {
+                val label = acting.joinToString("/") { it.shortLabel }
+                expanded += c.copy(
+                    id = c.id + "#rev",
+                    name = c.name + " (" + label + " reversed)",
+                    equationText = c.equationText + "  [" + label + " reversed]",
+                    factors = c.factors.mapValues { (k, f) -> if (k in lateral) -f else f },
+                    isLateralReversible = false
+                )
+            }
+        }
+        val seen = HashSet<List<Any>>()
+        return expanded.filter { c ->
+            val key = listOf<Any>(
+                c.type, c.methodology,
+                loadFactorsActing(c, applied).entries.sortedBy { it.key.name }.map { it.key.name + "=" + it.value }
+            )
+            seen.add(key)
+        }
+    }
+
     private fun buildFactoredDemands(
         resultsByCategory: Map<com.lz.model.regulatory.LoadCategory, AnalysisResult>,
         combo: com.lz.model.regulatory.LoadCombination,
@@ -369,6 +453,12 @@ object MemberAnalysisSolver {
     ): List<StationDemand> {
         val actingLoads = loadFactorsActing(combo, appliedCategories)
         val stationCount = demandsByCategory.values.firstOrNull()?.size ?: return emptyList()
+        // Moment at every station for this combination, to find the zero-moment spans (NDS 5.3.6).
+        val xs = (0 until stationCount).map { i -> demandsByCategory.values.first()[i].x.inches }
+        val ms = (0 until stationCount).map { i ->
+            combo.factors.entries.sumOf { (cat, f) -> f * (demandsByCategory[cat]?.get(i)?.moment?.lbIn ?: 0.0) }
+        }
+        val zeroSpans = zeroMomentSpans(xs, ms)
         return (0 until stationCount).map { index ->
             var mX = 0.0; var vY = 0.0; var pZ = 0.0
             var mY = 0.0; var vX = 0.0; var tZ = 0.0; var delta = 0.0
@@ -388,6 +478,7 @@ object MemberAnalysisSolver {
                 moment = Moment(mX), shear = Force(vY), axial = Force(pZ),
                 momentY = Moment(mY), shearY = Force(vX), torque = Moment(tZ),
                 deflection = Length(delta),
+                momentSpanLength = zeroSpans[index]?.let { Length(it) },
                 combinationName = combo.name,
                 combinationLoadFactors = actingLoads,
                 combinationMethodology = combo.methodology

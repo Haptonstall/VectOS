@@ -1,0 +1,166 @@
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsVersions.kt b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsVersions.kt
+index e594287..e79cb45 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsVersions.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsVersions.kt
+@@ -88,7 +88,7 @@ data class WetServiceFactors(
+ )
+ 
+ /**
+- * Temperature factors (Ct) per NDS Table 2.3.3 (NDS 2018 text).
++ * Temperature factors (Ct) per NDS Table 2.3.3 (NDS 2018 text; identical in the NDS 2015 text).
+  * Applied when sustained temperatures exceed 100°F.
+  *
+  * Table 2.3.3 groups the properties as: Ft, E, Emin (the same for wet or dry
+@@ -125,7 +125,7 @@ data class NdsSpecificationConstants(
+     val cfuFlatUse: Boolean = true,
+ 
+     // Format conversion factor (KF) for LRFD — NDS 2018 Table 2.3.5 (checked against the
+-    // AWC-published NDS 2018 text; not checked for 2015 / 2024)
++    // AWC-published NDS 2018 text and the NDS 2015 pages; not checked for 2024)
+     val kfBending: Double      = 2.54,  // KF for Fb
+     val kfTension: Double      = 2.70,  // KF for Ft
+     val kfShear: Double        = 2.88,  // KF for Fv
+@@ -152,16 +152,16 @@ object NdsVersionRegistry {
+     /**
+      * Resolves edition-specific specification constants.
+      *
+-     * The KF and phi values are checked against NDS 2018 only. The per-edition
++     * The KF and phi values are checked against NDS 2018 and NDS 2015 (identical). The per-edition
+      * history that used to be written here was not sourced and has been
+-     * removed; whether 2015 / 2024 differ is unverified (see NdsCodeData in
++     * removed; whether 2024 differs is unverified (see NdsCodeData in
+      * the solver, which reports it).
+      */
+     fun getConstantsFor(edition: NdsEdition): NdsSpecificationConstants {
+         return when (edition) {
+             NdsEdition.NDS_2015 -> NdsSpecificationConstants(
+                 edition = NdsEdition.NDS_2015
+-                // Not checked against the NDS 2015 text (2018 values assumed).
++                // KF / phi checked against the NDS 2015 text (Tables 2.3.5, 2.3.6): same values as 2018.
+             )
+             NdsEdition.NDS_2018 -> NdsSpecificationConstants(
+                 edition = NdsEdition.NDS_2018
+@@ -207,7 +207,7 @@ object NdsVersionRegistry {
+ 
+     /**
+      * Resolves temperature factors (Ct) per NDS 2018 Table 2.3.3 (checked
+-     * against the AWC-published text; not checked for 2015 / 2024):
++     * against the AWC-published text and the NDS 2015 pages; not checked for 2024):
+      *
+      *                          T <= 100F   100 < T <= 125F   125 < T <= 150F
+      *  Ft, E, Emin (wet/dry)     1.0          0.9               0.9
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+index 0772e86..4ec37e9 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+@@ -21,21 +21,27 @@ import com.lz.model.structural.DesignMethodology
+  *  - Reference design values and size / flat-use factors: sourced from the
+  *    NDS 2018 Supplement only.
+  *  - Glulam tables: mixed provenance (see the notice text), 2018-era.
+- *  - CD (Table 2.3.2, §2.3.2), KF (Table 2.3.5) and phi (Table 2.3.6):
+- *    checked against the NDS 2018 text published by the AWC; not checked for
+- *    2015 or 2024.
++ *  - CD (Table 2.3.2, §2.3.2), Ct (Table 2.3.3), KF (Table 2.3.5) and phi
++ *    (Table 2.3.6): checked against the NDS 2018 text published by the AWC and
++ *    against the NDS 2015 page images supplied by the project owner (the
++ *    values are identical in the two); not checked for 2024.
+  *  - Lambda (Appendix N, Table N3): implemented from published summaries of
+  *    the table; Appendix N has not been checked against any edition's text.
+- *  - Stability / combined-stress provisions and Table 3.3.3: implemented from
+- *    page images of an unspecified edition — not checked per edition.
++ *  - Stability / combined-stress provisions (3.3.3, Table 3.3.3, 3.7.1, 3.9):
++ *    checked line by line against the NDS 2015 page images supplied by the
++ *    project owner. No 2018 or 2024 text of Chapter 3 has been seen, so those
++ *    editions are not checked.
+  */
+ object NdsCodeData {
+ 
+     /** Editions the Supplement design values and factors have actually been sourced for. */
+     private val designValueEditions = setOf(NdsEdition.NDS_2018)
+ 
+-    /** Editions whose Chapter 2 (CD, KF, phi) has been checked against the published text. */
+-    private val chapter2Editions = setOf(NdsEdition.NDS_2018)
++    /** Editions whose Chapter 2 (CD, Ct, KF, phi) has been checked against the published text. */
++    private val chapter2Editions = setOf(NdsEdition.NDS_2018, NdsEdition.NDS_2015)
++
++    /** Editions whose Chapter 3 stability / combined-stress provisions have been checked against the text. */
++    private val chapter3Editions = setOf(NdsEdition.NDS_2015)
+ 
+     fun standardLabel(edition: NdsEdition) = "NDS ${edition.year}"
+ 
+@@ -65,11 +71,14 @@ object NdsCodeData {
+             )
+         }
+ 
+-        out += CodeDataNotice(
+-            dataset = "Stability and combined-stress provisions (NDS 3.3.3, 3.7, 3.9, Table 3.3.3)",
+-            status = CodeDataStatus.UNVERIFIED,
+-            message = "Implemented from page images of an unspecified edition; not yet checked against the $label text."
+-        )
++        if (edition !in chapter3Editions) {
++            out += CodeDataNotice(
++                dataset = "Stability and combined-stress provisions (NDS 3.3.3, 3.7, 3.9, Table 3.3.3)",
++                status = CodeDataStatus.UNVERIFIED,
++                message = "Checked against the NDS 2015 text and found to match it; the $label text has not been " +
++                    "seen, so any change in $label is not reflected."
++            )
++        }
+ 
+         val ch2Checked = edition in chapter2Editions
+         if (methodology == DesignMethodology.LRFD) {
+@@ -78,7 +87,7 @@ object NdsCodeData {
+                     dataset = "Format conversion KF and resistance factor phi (NDS 2.3.5, 2.3.6)",
+                     status = CodeDataStatus.UNVERIFIED,
+                     message = "The values (KF 2.54 / 2.70 / 2.88 / 2.40 / 1.67 / 1.76; phi 0.85 / 0.80 / 0.75 / 0.90 / 0.85) " +
+-                        "were checked against the NDS 2018 text; they have not been checked against the $label text."
++                        "were checked against the NDS 2018 and 2015 text; they have not been checked against the $label text."
+                 )
+             }
+             out += CodeDataNotice(
+@@ -94,7 +103,7 @@ object NdsCodeData {
+                 out += CodeDataNotice(
+                     dataset = "Load duration factor CD (NDS 2.3.2, Table 2.3.2)",
+                     status = CodeDataStatus.UNVERIFIED,
+-                    message = "The CD values and the shortest-duration-load rule were checked against the NDS 2018 text; " +
++                    message = "The CD values and the shortest-duration-load rule were checked against the NDS 2018 and 2015 text; " +
+                         "they have not been checked against the $label text."
+                 )
+             }
+diff --git a/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt b/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
+index 3ccd9ab..80f69a6 100644
+--- a/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
++++ b/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
+@@ -250,13 +250,15 @@ class NdsLoadDurationAndEditionTest {
+     }
+ 
+     @Test
+-    fun `Chapter 2 factors are checked for NDS 2018 only`() {
++    fun `Chapter 2 factors are checked for NDS 2018 and 2015 but not 2024`() {
+         fun asd(e: NdsEdition) = NdsCodeData.noticesFor(e, DesignMethodology.ASD, isGlulam = false)
+         fun lrfd(e: NdsEdition) = NdsCodeData.noticesFor(e, DesignMethodology.LRFD, isGlulam = false)
+         assertTrue(asd(NdsEdition.NDS_2018).none { it.dataset.startsWith("Load duration factor CD") })
+         assertTrue(asd(NdsEdition.NDS_2024).any { it.dataset.startsWith("Load duration factor CD") })
+         assertTrue(lrfd(NdsEdition.NDS_2018).none { it.dataset.startsWith("Format conversion") })
+-        assertTrue(lrfd(NdsEdition.NDS_2015).any { it.dataset.startsWith("Format conversion") })
++        assertTrue(asd(NdsEdition.NDS_2015).none { it.dataset.startsWith("Load duration factor CD") })
++        assertTrue(lrfd(NdsEdition.NDS_2015).none { it.dataset.startsWith("Format conversion") })
++        assertTrue(lrfd(NdsEdition.NDS_2024).any { it.dataset.startsWith("Format conversion") })
+         // Lambda (Appendix N) is unchecked for every edition; the duration mapping assumptions are always disclosed.
+         for (e in NdsEdition.values()) {
+             assertTrue(lrfd(e).any { it.dataset.contains("\u03bb") && it.status == CodeDataStatus.UNVERIFIED })
+@@ -265,6 +267,15 @@ class NdsLoadDurationAndEditionTest {
+         }
+     }
+ 
++    @Test
++    fun `Chapter 3 stability provisions are checked for NDS 2015 only`() {
++        fun has(e: NdsEdition) = NdsCodeData.noticesFor(e, DesignMethodology.ASD, isGlulam = false)
++            .any { it.dataset.startsWith("Stability and combined-stress") }
++        assertTrue(!has(NdsEdition.NDS_2015))
++        assertTrue(has(NdsEdition.NDS_2018))
++        assertTrue(has(NdsEdition.NDS_2024))
++    }
++
+     @Test
+     fun `glulam is flagged as mixed provenance even for 2018`() {
+         val n = NdsCodeData.noticesFor(NdsEdition.NDS_2018, DesignMethodology.ASD, isGlulam = true)
