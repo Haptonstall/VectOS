@@ -4,6 +4,8 @@ import com.lz.model.regulatory.nds.NdsEdition
 import com.lz.model.structural.CodeDataNotice
 import com.lz.model.structural.CodeDataStatus
 import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.WoodGrade
+import com.lz.model.structural.WoodSpecies
 
 /**
  * What the wood calculator can and can't stand behind for a given NDS edition.
@@ -19,7 +21,11 @@ import com.lz.model.structural.DesignMethodology
  *
  * Statuses today (honest as of this writing):
  *  - Reference design values and size / flat-use factors: sourced from the
- *    NDS 2018 Supplement only. Other editions are HARD-BLOCKED ([blockReason]).
+ *    NDS 2018 and NDS 2015 Supplements. Other editions are HARD-BLOCKED
+ *    ([blockReason]), and so is any species / grade missing from the edition's tables.
+ *    2015 was read from the published Supplement: DF-L / Hem-Fir / SPF (4A), Southern
+ *    Pine (4B) and hardwood glulam (5C) are identical to 2018; softwood glulam (5A) has
+ *    its own 2015 values (22 combinations).
  *  - Glulam tables: mixed provenance (see the notice text), 2018-era.
  *  - CD (Table 2.3.2, §2.3.2), Ct (Table 2.3.3), KF (Table 2.3.5) and phi
  *    (Table 2.3.6): checked against the NDS 2018 text published by the AWC and
@@ -51,13 +57,32 @@ object NdsCodeData {
             "that maps to a sourced edition (${designValueEditions.joinToString { standardLabel(it) }}) " +
             "or add the ${standardLabel(edition)} Supplement data."
 
+    /**
+     * As [blockReason], and also blocked when the edition's tables do not contain this
+     * species / grade (e.g. a glulam combination that is not in the NDS 2015 Table 5A).
+     */
+    fun blockReason(edition: NdsEdition, species: WoodSpecies, grade: WoodGrade): String? =
+        blockReason(edition)
+            ?: if (WoodPropertyService.isSourced(species, grade, edition)) null
+            else "Wood design is blocked: ${species.name} / ${grade.name} has no tabulated design values in " +
+                "the ${standardLabel(edition)} Supplement as incorporated here, and values from another " +
+                "edition are not substituted. Choose a combination that is in the ${standardLabel(edition)} tables."
+
     /** @throws CodeDataBlockedException when [blockReason] is non-null. */
     fun requireUsable(edition: NdsEdition) {
         blockReason(edition)?.let { throw CodeDataBlockedException(it) }
     }
 
-    /** Editions the Supplement design values and factors have actually been sourced for. */
-    private val designValueEditions = setOf(NdsEdition.NDS_2018)
+    fun requireUsable(edition: NdsEdition, species: WoodSpecies, grade: WoodGrade) {
+        blockReason(edition, species, grade)?.let { throw CodeDataBlockedException(it) }
+    }
+
+    /**
+     * Editions the Supplement design values and factors have actually been sourced for.
+     * NDS 2015: Tables 4A, 4B, 5A and 5C and their adjustment factors, checked against the
+     * 2015 Supplement PDF (individual rows may still be missing - see the per-material block).
+     */
+    private val designValueEditions = setOf(NdsEdition.NDS_2018, NdsEdition.NDS_2015)
 
     /** Editions whose Chapter 2 (CD, Ct, KF, phi) has been checked against the published text. */
     private val chapter2Editions = setOf(NdsEdition.NDS_2018, NdsEdition.NDS_2015)
@@ -86,7 +111,7 @@ object NdsCodeData {
                 message = "The $label Supplement values have not been incorporated, so wood design is blocked " +
                     "for this edition; no other edition's values are substituted."
             )
-        } else if (isGlulam) {
+        } else if (isGlulam && edition == NdsEdition.NDS_2018) {
             out += CodeDataNotice(
                 dataset = "Reference design values \u2014 glulam (Supplement Tables 5A / 5C)",
                 status = CodeDataStatus.UNVERIFIED,

@@ -118,11 +118,11 @@ class NdsAssumptionsBlockAndSpanTest {
     @Test
     fun `wood design is blocked for editions without sourced design values`() {
         assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2018))
-        assertNotNull(NdsCodeData.blockReason(NdsEdition.NDS_2015))
+        assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2015))      // sourced from the 2015 Supplement
         assertNotNull(NdsCodeData.blockReason(NdsEdition.NDS_2024))
         NdsCodeData.requireUsable(NdsEdition.NDS_2018)
         var thrown = false
-        try { NdsCodeData.requireUsable(NdsEdition.NDS_2015) } catch (e: CodeDataBlockedException) { thrown = true }
+        try { NdsCodeData.requireUsable(NdsEdition.NDS_2024) } catch (e: CodeDataBlockedException) { thrown = true }
         assertTrue(thrown)
     }
 

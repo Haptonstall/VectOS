@@ -260,7 +260,7 @@ class BeamViewModel @Inject constructor(
         when (val mat = activeMaterialGrade) {
             is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
             is MaterialGrade.Wood  ->
-                if (NdsCodeData.blockReason(activeNdsEdition ?: NdsEdition.NDS_2018) != null) null
+                if (NdsCodeData.blockReason(activeNdsEdition ?: NdsEdition.NDS_2018, mat.species, mat.grade) != null) null
                 else NdsWoodCapacityCalculator(
                     section, mat,
                     adjustmentFactors = ndsAdjustmentFactors,

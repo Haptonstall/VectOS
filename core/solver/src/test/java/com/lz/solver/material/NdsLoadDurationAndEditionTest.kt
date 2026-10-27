@@ -234,11 +234,12 @@ class NdsLoadDurationAndEditionTest {
     // ------------------------------------------------------------------ edition awareness
 
     @Test
-    fun `a sawn-lumber check against NDS 2018 has no missing-data notice, 2015 and 2024 do`() {
+    fun `a sawn-lumber check against NDS 2018 or 2015 has no missing-data notice, 2024 does`() {
         val asd = DesignMethodology.ASD
         fun notices(e: NdsEdition) = calc(edition = e).evaluateDetailed(demand(dPlusL), asd).codeDataNotices
         assertTrue(notices(NdsEdition.NDS_2018).none { it.status == CodeDataStatus.NOT_SOURCED })
-        for (e in listOf(NdsEdition.NDS_2015, NdsEdition.NDS_2024)) {
+        assertTrue(notices(NdsEdition.NDS_2015).none { it.status == CodeDataStatus.NOT_SOURCED })
+        for (e in listOf(NdsEdition.NDS_2024)) {
             val n = notices(e).first { it.status == CodeDataStatus.NOT_SOURCED }
             assertTrue(n.dataset.contains("Reference design values"))
             assertTrue(n.message.contains("NDS ${e.year}"))

@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.lz.model.regulatory.nds.NdsEdition
 import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.ShapeType
 import com.lz.model.structural.WoodGrade
@@ -60,6 +61,9 @@ fun WoodMaterialPickerDialog(
     // a combination symbol like "24F-V8", and its species pairing comes
     // along with it.
     shapeType: ShapeType? = null,
+    // The NDS edition the project designs to: the picker reads that edition's
+    // Supplement tables, so a combination missing from them is flagged here.
+    edition: NdsEdition = NdsEdition.NDS_2018,
     onDismiss: () -> Unit,
     onConfirm: (MaterialGrade.Wood) -> Unit
 ) {
@@ -96,8 +100,8 @@ fun WoodMaterialPickerDialog(
     // rather than only discovering it when the user taps Confirm. See
     // WoodPropertyService.getReferenceProperties doc comment for exactly
     // which species/grade combinations are verified so far.
-    val props = remember(selectedSpecies, selectedGrade) {
-        WoodPropertyService.getReferenceProperties(selectedSpecies, selectedGrade)
+    val props = remember(selectedSpecies, selectedGrade, edition) {
+        WoodPropertyService.getReferenceProperties(selectedSpecies, selectedGrade, edition)
     }
 
     AlertDialog(

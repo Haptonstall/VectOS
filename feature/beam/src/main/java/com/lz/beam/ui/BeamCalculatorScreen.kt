@@ -104,6 +104,7 @@ import com.lz.model.structural.InteractionStatus
 import com.lz.model.structural.Load
 import com.lz.model.structural.LoadCase
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+import com.lz.model.regulatory.nds.NdsEdition
 import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.MaterialType
 import com.lz.model.structural.NodeBoundaryCondition
@@ -891,6 +892,7 @@ fun GeometryTab(viewModel: BeamViewModel) {
         WoodMaterialPickerDialog(
             currentGrade = viewModel.activeMaterialGrade as? MaterialGrade.Wood,
             shapeType = viewModel.selectedShapeType,
+            edition = viewModel.activeNdsEdition ?: NdsEdition.NDS_2018,
             onDismiss = { isWoodPickerVisible = false },
             onConfirm = {
                 viewModel.onGradeSelected(it)

@@ -1,6 +1,7 @@
 package com.lz.solver.material
 
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+import com.lz.model.regulatory.nds.NdsEdition
 import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.SectionProfile
 import com.lz.model.structural.WoodGrade
@@ -77,8 +78,28 @@ internal fun resolveSawnCf(
  */
 internal fun resolveDesignMaterial(
     material: MaterialGrade.Wood,
-    profile: SectionProfile
+    profile: SectionProfile,
+    edition: NdsEdition = NdsEdition.NDS_2018
 ): MaterialGrade.Wood {
+    // The values a material carries are the NDS 2018 ones (that is what the picker
+    // stores). For any other edition every tabulated value is re-read from that
+    // edition's table, so no 2018 number can leak into a 2015 design.
+    // (An edition with no sourced data at all is blocked before any calculator is built.)
+    if (edition != NdsEdition.NDS_2018 && NdsCodeData.blockReason(edition) == null) {
+        val t = (if (material.species == WoodSpecies.SOUTHERN_PINE && profile is WoodProfile)
+            WoodPropertyService.getSouthernPineDimensionValues(material.grade, profile.nominalDepth.inInches, edition)
+        else WoodPropertyService.getReferenceProperties(material.species, material.grade, edition))
+            ?: throw CodeDataBlockedException(
+                "No ${NdsCodeData.standardLabel(edition)} tabulated design values for " +
+                    "${material.species.name} / ${material.grade.name}."
+            )
+        return material.copy(
+            referenceBending = t.bending, referenceShear = t.shear,
+            referenceCompressionParallel = t.compressionParallel, referenceCompressionPerp = t.compressionPerp,
+            referenceTensionParallel = t.tensionParallel,
+            modulusOfElasticity = t.modulusOfElasticity, shearModulus = t.shearModulus
+        )
+    }
     if (material.species != WoodSpecies.SOUTHERN_PINE || profile !is WoodProfile) return material
     val p = WoodPropertyService.getSouthernPineDimensionValues(
         material.grade, profile.nominalDepth.inInches
@@ -101,8 +122,8 @@ internal fun resolveDesignMaterial(
  * Prefers the table's E over the material's own so a stale saved material
  * can't feed a wrong E into the stability check.
  */
-internal fun woodEmin(material: MaterialGrade.Wood): Double {
-    val table = WoodPropertyService.getReferenceProperties(material.species, material.grade)
+internal fun woodEmin(material: MaterialGrade.Wood, edition: NdsEdition = NdsEdition.NDS_2018): Double {
+    val table = WoodPropertyService.getReferenceProperties(material.species, material.grade, edition)
     if (table != null) {
         return table.eMin?.inPsi ?: (table.modulusOfElasticity.inPsi / 1.76)
     }
@@ -203,11 +224,12 @@ internal fun computeNdsBeamStability(
     material: MaterialGrade.Wood,
     adjustmentFactors: NdsAdjustmentFactors,
     isGlulam: Boolean,
-    aboutStrongAxis: Boolean = true
+    aboutStrongAxis: Boolean = true,
+    edition: NdsEdition = NdsEdition.NDS_2018
 ): NdsBeamStabilityDetail? {
     if (lb <= 0.0) return null
 
-    val designMaterial = resolveDesignMaterial(material, profile)
+    val designMaterial = resolveDesignMaterial(material, profile, edition)
     val depth = profile.depth.inInches
     val width = if (profile is WoodProfile) profile.dressedWidth.inInches
     else profile.propertiesWeakAxis.s.inIn3 / profile.propertiesWeakAxis.i.inIn4 * 2.0
@@ -228,7 +250,7 @@ internal fun computeNdsBeamStability(
     if (rbSquared <= 0.0) return null
 
     // Critical buckling stress FbE (NDS 3.3.3.8), from the *adjusted* Emin.
-    val eMinAdj = woodAdjustedEmin(designMaterial, adjustmentFactors)
+    val eMinAdj = woodAdjustedEmin(designMaterial, adjustmentFactors, edition)
     val fbE = 1.20 * eMinAdj / rbSquared
 
     val fStarB = designMaterial.referenceBending.inPsi *
@@ -280,8 +302,9 @@ internal fun computeNdsCL(
     material: MaterialGrade.Wood,
     adjustmentFactors: NdsAdjustmentFactors,
     isGlulam: Boolean,
-    aboutStrongAxis: Boolean = true
-): Double = computeNdsBeamStability(lb, profile, material, adjustmentFactors, isGlulam, aboutStrongAxis)?.cl ?: 1.0
+    aboutStrongAxis: Boolean = true,
+    edition: NdsEdition = NdsEdition.NDS_2018
+): Double = computeNdsBeamStability(lb, profile, material, adjustmentFactors, isGlulam, aboutStrongAxis, edition)?.cl ?: 1.0
 
 /**
  * E'min = Emin x CM x Ct x Ci (NDS Table 4.3.1) — the adjusted stability
@@ -292,8 +315,9 @@ internal fun computeNdsCL(
  */
 internal fun woodAdjustedEmin(
     material: MaterialGrade.Wood,
-    adjustmentFactors: NdsAdjustmentFactors
-): Double = woodEmin(material) * adjustmentFactors.cm * adjustmentFactors.ct * adjustmentFactors.ci *
+    adjustmentFactors: NdsAdjustmentFactors,
+    edition: NdsEdition = NdsEdition.NDS_2018
+): Double = woodEmin(material, edition) * adjustmentFactors.cm * adjustmentFactors.ct * adjustmentFactors.ci *
     adjustmentFactors.formatEmin   // 1.0 for ASD; KF x phi-s for LRFD (NDS 2.3.5, 2.3.6)
 
 /**

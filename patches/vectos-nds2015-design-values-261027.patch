@@ -1,0 +1,734 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+index 254a938..97717c3 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+@@ -1,6 +1,7 @@
+ package com.lz.solver.material
+ 
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++import com.lz.model.regulatory.nds.NdsEdition
+ import com.lz.model.structural.MaterialGrade
+ import com.lz.model.structural.SectionProfile
+ import com.lz.model.structural.WoodGrade
+@@ -77,8 +78,28 @@ internal fun resolveSawnCf(
+  */
+ internal fun resolveDesignMaterial(
+     material: MaterialGrade.Wood,
+-    profile: SectionProfile
++    profile: SectionProfile,
++    edition: NdsEdition = NdsEdition.NDS_2018
+ ): MaterialGrade.Wood {
++    // The values a material carries are the NDS 2018 ones (that is what the picker
++    // stores). For any other edition every tabulated value is re-read from that
++    // edition's table, so no 2018 number can leak into a 2015 design.
++    // (An edition with no sourced data at all is blocked before any calculator is built.)
++    if (edition != NdsEdition.NDS_2018 && NdsCodeData.blockReason(edition) == null) {
++        val t = (if (material.species == WoodSpecies.SOUTHERN_PINE && profile is WoodProfile)
++            WoodPropertyService.getSouthernPineDimensionValues(material.grade, profile.nominalDepth.inInches, edition)
++        else WoodPropertyService.getReferenceProperties(material.species, material.grade, edition))
++            ?: throw CodeDataBlockedException(
++                "No ${NdsCodeData.standardLabel(edition)} tabulated design values for " +
++                    "${material.species.name} / ${material.grade.name}."
++            )
++        return material.copy(
++            referenceBending = t.bending, referenceShear = t.shear,
++            referenceCompressionParallel = t.compressionParallel, referenceCompressionPerp = t.compressionPerp,
++            referenceTensionParallel = t.tensionParallel,
++            modulusOfElasticity = t.modulusOfElasticity, shearModulus = t.shearModulus
++        )
++    }
+     if (material.species != WoodSpecies.SOUTHERN_PINE || profile !is WoodProfile) return material
+     val p = WoodPropertyService.getSouthernPineDimensionValues(
+         material.grade, profile.nominalDepth.inInches
+@@ -101,8 +122,8 @@ internal fun resolveDesignMaterial(
+  * Prefers the table's E over the material's own so a stale saved material
+  * can't feed a wrong E into the stability check.
+  */
+-internal fun woodEmin(material: MaterialGrade.Wood): Double {
+-    val table = WoodPropertyService.getReferenceProperties(material.species, material.grade)
++internal fun woodEmin(material: MaterialGrade.Wood, edition: NdsEdition = NdsEdition.NDS_2018): Double {
++    val table = WoodPropertyService.getReferenceProperties(material.species, material.grade, edition)
+     if (table != null) {
+         return table.eMin?.inPsi ?: (table.modulusOfElasticity.inPsi / 1.76)
+     }
+@@ -203,11 +224,12 @@ internal fun computeNdsBeamStability(
+     material: MaterialGrade.Wood,
+     adjustmentFactors: NdsAdjustmentFactors,
+     isGlulam: Boolean,
+-    aboutStrongAxis: Boolean = true
++    aboutStrongAxis: Boolean = true,
++    edition: NdsEdition = NdsEdition.NDS_2018
+ ): NdsBeamStabilityDetail? {
+     if (lb <= 0.0) return null
+ 
+-    val designMaterial = resolveDesignMaterial(material, profile)
++    val designMaterial = resolveDesignMaterial(material, profile, edition)
+     val depth = profile.depth.inInches
+     val width = if (profile is WoodProfile) profile.dressedWidth.inInches
+     else profile.propertiesWeakAxis.s.inIn3 / profile.propertiesWeakAxis.i.inIn4 * 2.0
+@@ -228,7 +250,7 @@ internal fun computeNdsBeamStability(
+     if (rbSquared <= 0.0) return null
+ 
+     // Critical buckling stress FbE (NDS 3.3.3.8), from the *adjusted* Emin.
+-    val eMinAdj = woodAdjustedEmin(designMaterial, adjustmentFactors)
++    val eMinAdj = woodAdjustedEmin(designMaterial, adjustmentFactors, edition)
+     val fbE = 1.20 * eMinAdj / rbSquared
+ 
+     val fStarB = designMaterial.referenceBending.inPsi *
+@@ -280,8 +302,9 @@ internal fun computeNdsCL(
+     material: MaterialGrade.Wood,
+     adjustmentFactors: NdsAdjustmentFactors,
+     isGlulam: Boolean,
+-    aboutStrongAxis: Boolean = true
+-): Double = computeNdsBeamStability(lb, profile, material, adjustmentFactors, isGlulam, aboutStrongAxis)?.cl ?: 1.0
++    aboutStrongAxis: Boolean = true,
++    edition: NdsEdition = NdsEdition.NDS_2018
++): Double = computeNdsBeamStability(lb, profile, material, adjustmentFactors, isGlulam, aboutStrongAxis, edition)?.cl ?: 1.0
+ 
+ /**
+  * E'min = Emin x CM x Ct x Ci (NDS Table 4.3.1) — the adjusted stability
+@@ -292,8 +315,9 @@ internal fun computeNdsCL(
+  */
+ internal fun woodAdjustedEmin(
+     material: MaterialGrade.Wood,
+-    adjustmentFactors: NdsAdjustmentFactors
+-): Double = woodEmin(material) * adjustmentFactors.cm * adjustmentFactors.ct * adjustmentFactors.ci *
++    adjustmentFactors: NdsAdjustmentFactors,
++    edition: NdsEdition = NdsEdition.NDS_2018
++): Double = woodEmin(material, edition) * adjustmentFactors.cm * adjustmentFactors.ct * adjustmentFactors.ci *
+     adjustmentFactors.formatEmin   // 1.0 for ASD; KF x phi-s for LRFD (NDS 2.3.5, 2.3.6)
+ 
+ /**
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+index 160ab65..70d94c2 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+@@ -4,6 +4,8 @@ import com.lz.model.regulatory.nds.NdsEdition
+ import com.lz.model.structural.CodeDataNotice
+ import com.lz.model.structural.CodeDataStatus
+ import com.lz.model.structural.DesignMethodology
++import com.lz.model.structural.WoodGrade
++import com.lz.model.structural.WoodSpecies
+ 
+ /**
+  * What the wood calculator can and can't stand behind for a given NDS edition.
+@@ -19,7 +21,11 @@ import com.lz.model.structural.DesignMethodology
+  *
+  * Statuses today (honest as of this writing):
+  *  - Reference design values and size / flat-use factors: sourced from the
+- *    NDS 2018 Supplement only. Other editions are HARD-BLOCKED ([blockReason]).
++ *    NDS 2018 and NDS 2015 Supplements. Other editions are HARD-BLOCKED
++ *    ([blockReason]), and so is any species / grade missing from the edition's tables.
++ *    2015 was read from the published Supplement: DF-L / Hem-Fir / SPF (4A), Southern
++ *    Pine (4B) and hardwood glulam (5C) are identical to 2018; softwood glulam (5A) has
++ *    its own 2015 values (22 combinations).
+  *  - Glulam tables: mixed provenance (see the notice text), 2018-era.
+  *  - CD (Table 2.3.2, §2.3.2), Ct (Table 2.3.3), KF (Table 2.3.5) and phi
+  *    (Table 2.3.6): checked against the NDS 2018 text published by the AWC and
+@@ -51,13 +57,32 @@ object NdsCodeData {
+             "that maps to a sourced edition (${designValueEditions.joinToString { standardLabel(it) }}) " +
+             "or add the ${standardLabel(edition)} Supplement data."
+ 
++    /**
++     * As [blockReason], and also blocked when the edition's tables do not contain this
++     * species / grade (e.g. a glulam combination that is not in the NDS 2015 Table 5A).
++     */
++    fun blockReason(edition: NdsEdition, species: WoodSpecies, grade: WoodGrade): String? =
++        blockReason(edition)
++            ?: if (WoodPropertyService.isSourced(species, grade, edition)) null
++            else "Wood design is blocked: ${species.name} / ${grade.name} has no tabulated design values in " +
++                "the ${standardLabel(edition)} Supplement as incorporated here, and values from another " +
++                "edition are not substituted. Choose a combination that is in the ${standardLabel(edition)} tables."
++
+     /** @throws CodeDataBlockedException when [blockReason] is non-null. */
+     fun requireUsable(edition: NdsEdition) {
+         blockReason(edition)?.let { throw CodeDataBlockedException(it) }
+     }
+ 
+-    /** Editions the Supplement design values and factors have actually been sourced for. */
+-    private val designValueEditions = setOf(NdsEdition.NDS_2018)
++    fun requireUsable(edition: NdsEdition, species: WoodSpecies, grade: WoodGrade) {
++        blockReason(edition, species, grade)?.let { throw CodeDataBlockedException(it) }
++    }
++
++    /**
++     * Editions the Supplement design values and factors have actually been sourced for.
++     * NDS 2015: Tables 4A, 4B, 5A and 5C and their adjustment factors, checked against the
++     * 2015 Supplement PDF (individual rows may still be missing - see the per-material block).
++     */
++    private val designValueEditions = setOf(NdsEdition.NDS_2018, NdsEdition.NDS_2015)
+ 
+     /** Editions whose Chapter 2 (CD, Ct, KF, phi) has been checked against the published text. */
+     private val chapter2Editions = setOf(NdsEdition.NDS_2018, NdsEdition.NDS_2015)
+@@ -86,7 +111,7 @@ object NdsCodeData {
+                 message = "The $label Supplement values have not been incorporated, so wood design is blocked " +
+                     "for this edition; no other edition's values are substituted."
+             )
+-        } else if (isGlulam) {
++        } else if (isGlulam && edition == NdsEdition.NDS_2018) {
+             out += CodeDataNotice(
+                 dataset = "Reference design values \u2014 glulam (Supplement Tables 5A / 5C)",
+                 status = CodeDataStatus.UNVERIFIED,
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index 1cc41e0..c33571a 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -119,7 +119,7 @@ class NdsWoodCapacityCalculator(
+      * NDS Table 4B) resolved for this profile. All capacity math below
+      * reads reference values from here, not from [material] directly.
+      */
+-    private val designMaterial: MaterialGrade.Wood = resolveDesignMaterial(material, profile)
++    private val designMaterial: MaterialGrade.Wood = resolveDesignMaterial(material, profile, edition)
+ 
+     /**
+      * Mirrors [AiscSteelCapacityCalculator]'s own private result wrapper —
+@@ -192,7 +192,7 @@ class NdsWoodCapacityCalculator(
+         ))
+ 
+         val fby = if (isGlulam)
+-            WoodPropertyService.getReferenceProperties(m.species, m.grade)?.bendingWeakAxis?.inPsi
++            WoodPropertyService.getReferenceProperties(m.species, m.grade, edition)?.bendingWeakAxis?.inPsi
+         else null
+         groups += DesignPropertyGroup("Reference design values", listOf(
+             row("Fb", if (isGlulam) "Bending, strong axis (Fbx)" else "Bending", "${fmt(m.referenceBending.inPsi, 0)} psi"),
+@@ -207,7 +207,7 @@ class NdsWoodCapacityCalculator(
+             row("Fc", "Compression parallel to grain", "${fmt(m.referenceCompressionParallel.inPsi, 0)} psi"),
+             row("Fc\u22a5", "Compression perpendicular to grain", "${fmt(m.referenceCompressionPerp.inPsi, 0)} psi"),
+             row("E", "Modulus of elasticity", "${fmt(m.modulusOfElasticity.inPsi, 0)} psi"),
+-            row("Emin", "Modulus for stability calculations", "${fmt(woodEmin(m), 0)} psi")
++            row("Emin", "Modulus for stability calculations", "${fmt(woodEmin(m, edition), 0)} psi")
+         ))
+ 
+         val b = if (profile is WoodProfile) profile.dressedWidth.inInches else sqrt(profile.area.inIn2)
+@@ -249,8 +249,8 @@ class NdsWoodCapacityCalculator(
+         factorRows += row("CP", "Column stability", fmt(cpParts.cp, 3))
+         groups += DesignPropertyGroup("Adjustment factors", factorRows)
+ 
+-        val bendStrong = computeNdsBeamStability(u.strongBend, profile, m, f, isGlulam, aboutStrongAxis = true)
+-        val bendWeak = computeNdsBeamStability(u.weakBend, profile, m, f, isGlulam, aboutStrongAxis = false)
++        val bendStrong = computeNdsBeamStability(u.strongBend, profile, m, f, isGlulam, aboutStrongAxis = true, edition = edition)
++        val bendWeak = computeNdsBeamStability(u.weakBend, profile, m, f, isGlulam, aboutStrongAxis = false, edition = edition)
+         val lenRows = mutableListOf<DesignPropertyRow>()
+         lenRows += row("lu (strong-axis bending)", "Unbraced length, compression edge", "${fmt(u.strongBend, 1)} in")
+         bendStrong?.let {
+@@ -713,7 +713,7 @@ class NdsWoodCapacityCalculator(
+         val sx = profile.propertiesStrongAxis.s.inIn3
+         val f = adjustmentFactors
+ 
+-        val stab = computeNdsBeamStability(lb, profile, designMaterial, f, isGlulam)
++        val stab = computeNdsBeamStability(lb, profile, designMaterial, f, isGlulam, edition = edition)
+         val cl = stab?.cl ?: 1.0
+ 
+         val traces = if (stab != null) stabilityTraces(stab, fb).toMutableList() else mutableListOf<DesignEquationTrace>()
+@@ -849,7 +849,7 @@ class NdsWoodCapacityCalculator(
+         val sy = profile.propertiesWeakAxis.s.inIn3
+         val cfu = resolveFlatUseCfu(f, designMaterial, profile)
+ 
+-        val stab = computeNdsBeamStability(lbWeak, profile, designMaterial, f, isGlulam, aboutStrongAxis = false)
++        val stab = computeNdsBeamStability(lbWeak, profile, designMaterial, f, isGlulam, aboutStrongAxis = false, edition = edition)
+         val cl = stab?.cl ?: 1.0
+         val stabTraces = mutableListOf<DesignEquationTrace>()
+         if (stab != null) {
+@@ -871,7 +871,7 @@ class NdsWoodCapacityCalculator(
+         val adjTrace: DesignEquationTrace
+         if (isGlulam) {
+             val fby = WoodPropertyService
+-                .getReferenceProperties(designMaterial.species, designMaterial.grade)
++                .getReferenceProperties(designMaterial.species, designMaterial.grade, edition)
+                 ?.bendingWeakAxis?.inPsi
+             if (fby == null) {
+                 val reason = "Weak-axis bending — Fby is not sourced for this glulam combination"
+@@ -962,7 +962,7 @@ class NdsWoodCapacityCalculator(
+      * why it's shared with [NdsClCalculator].
+      */
+     private fun computeCL(lb: Double): Double =
+-        computeNdsCL(lb, profile, designMaterial, adjustmentFactors, isGlulam)
++        computeNdsCL(lb, profile, designMaterial, adjustmentFactors, isGlulam, edition = edition)
+ 
+     /**
+      * NDS 5.3.6 Volume Factor CV for glulam.
+@@ -1217,7 +1217,7 @@ class NdsWoodCapacityCalculator(
+         if (slenderness > 50.0) return CpResult(0.0, emptyList())  // Exceeds NDS max — inadequate
+ 
+         // Critical buckling stress FcE (NDS 3.7.1)
+-        val eMin      = woodAdjustedEmin(designMaterial, adjustmentFactors)
++        val eMin      = woodAdjustedEmin(designMaterial, adjustmentFactors, edition)
+         val fce       = 0.822 * eMin / slenderness.pow(2)
+         val fceTrace = DesignEquationTrace(
+             symbolicEquation = "FcE = 0.822 x E'min / (le/d)^2",
+@@ -1526,11 +1526,11 @@ class NdsWoodCapacityCalculator(
+         // unbraced length for that axis).
+         val le1 = u.colStrong
+         val le2 = u.colWeak
+-        val eMinAdj = woodAdjustedEmin(designMaterial, adjustmentFactors)
++        val eMinAdj = woodAdjustedEmin(designMaterial, adjustmentFactors, edition)
+         val fcE1 = if (le1 > 0.0 && d1 > 0.0) 0.822 * eMinAdj / (le1 / d1).pow(2) else inf
+         val fcE2 = if (le2 > 0.0 && d2 > 0.0) 0.822 * eMinAdj / (le2 / d2).pow(2) else inf
+ 
+-        val stab = computeNdsBeamStability(u.strongBend, profile, designMaterial, adjustmentFactors, isGlulam, aboutStrongAxis = true)
++        val stab = computeNdsBeamStability(u.strongBend, profile, designMaterial, adjustmentFactors, isGlulam, aboutStrongAxis = true, edition = edition)
+         val fbE = stab?.fbE ?: inf
+ 
+         val fb1Adj = strongAx.fbAdj * kBend
+diff --git a/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt b/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
+index 41d8e55..b06e2b4 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
+@@ -1,5 +1,6 @@
+ package com.lz.solver.material
+ 
++import com.lz.model.regulatory.nds.NdsEdition
+ import com.lz.model.structural.WoodGrade
+ import com.lz.model.structural.WoodSpecies
+ import com.lz.model.units.Pressure
+@@ -53,7 +54,28 @@ object WoodPropertyService {
+      * which are still open, rather than silently returning null for an
+      * unverified combination with no explanation at the call site.
+      */
+-    fun getReferenceProperties(species: WoodSpecies, grade: WoodGrade): WoodReferenceProperties? {
++    fun getReferenceProperties(
++        species: WoodSpecies,
++        grade: WoodGrade,
++        edition: NdsEdition = NdsEdition.NDS_2018
++    ): WoodReferenceProperties? = when (edition) {
++        NdsEdition.NDS_2018 -> tabulated2018(species, grade)
++        // NDS 2015 Supplement, checked row by row against the published tables: sawn
++        // lumber (Table 4A), Southern Pine (4B) and hardwood glulam (5C) values are
++        // identical to the 2018 ones the app holds. Softwood glulam (Table 5A) differs
++        // (e.g. E is 0.1 million psi lower), so it has its own 2015 table; a
++        // combination that is not in the 2015 Table 5A is not served at all.
++        NdsEdition.NDS_2015 ->
++            if (species.isGlulam && species != WoodSpecies.GLULAM_HARDWOODS) glulamSoftwood2015[species to grade]
++            else tabulated2018(species, grade)
++        else -> null   // no sourced data for this edition
++    }
++
++    /** True when [edition] has tabulated values for [species] / [grade]. */
++    fun isSourced(species: WoodSpecies, grade: WoodGrade, edition: NdsEdition): Boolean =
++        getReferenceProperties(species, grade, edition) != null
++
++    private fun tabulated2018(species: WoodSpecies, grade: WoodGrade): WoodReferenceProperties? {
+         return when (species) {
+             WoodSpecies.DF_L -> when (grade) {
+                 WoodGrade.SELECT_STRUCTURAL -> WoodReferenceProperties(
+@@ -690,6 +712,128 @@ object WoodPropertyService {
+         }
+     }
+ 
++    /**
++     * One row of the NDS 2015 Supplement Table 5A (softwood glulam), read from the
++     * published table. Columns used: Fbx+ (bottom of beam in tension), Fvx, Fc (axially
++     * loaded), Fc-perp-x, Ft, Ex and Ex-min (10^6 psi), Fby, and the fastener specific
++     * gravity G (density = 62.4 G). Table 5A lists Fc-perp-x separately for the tension
++     * and compression face; the lower of the two is kept, which is the conservative
++     * choice (the calculator does not check bearing, the value is shown for reference).
++     */
++    private fun glulam2015(
++        fbx: Int, fvx: Int, fc: Int, fcPerpMin: Int, ft: Int,
++        ex: Double, exMin: Double, fby: Int, fastenerG: Double
++    ) = WoodReferenceProperties(
++        bending = fbx.toDouble().psi,
++        bendingWeakAxis = fby.toDouble().psi,
++        shear = fvx.toDouble().psi,
++        compressionParallel = fc.toDouble().psi,
++        compressionPerp = fcPerpMin.toDouble().psi,
++        tensionParallel = ft.toDouble().psi,
++        modulusOfElasticity = (ex * 1_000_000.0).psi,
++        shearModulus = (ex * 1_000_000.0 / 16.0).psi,
++        eMin = (exMin * 1_000_000.0).psi,
++        densityPcf = Math.round(62.4 * fastenerG * 10.0) / 10.0
++    )
++
++    /**
++     * NDS 2015 Supplement Table 5A values for the softwood combinations the picker
++     * offers that also appear in the 2015 table (22 of them). Combinations offered
++     * for NDS 2018 that are not in the 2015 table (the "G" series, 20F-V4 / V8,
++     * 20F-E/ES1, 22F-V/POC1 / POC2, 24F-1.8E, 16F-V5M1, 20F-E/SPF1) have no 2015
++     * entry and are therefore not available for NDS 2015.
++     */
++    private val glulamSoftwood2015: Map<Pair<WoodSpecies, WoodGrade>, WoodReferenceProperties> = mapOf(
++        WoodSpecies.GLULAM_AC_AC to WoodGrade.G_20F_V12 to glulam2015(
++            fbx = 2000, fvx = 265, fc = 1500, fcPerpMin = 560, ft = 925,
++            ex = 1.5, exMin = 0.79, fby = 1250, fastenerG = 0.46
++        ),  // Fbx- 1400; Fc⊥ faces 560/560
++        WoodSpecies.GLULAM_AC_AC to WoodGrade.G_20F_V13 to glulam2015(
++            fbx = 2000, fvx = 265, fc = 1550, fcPerpMin = 560, ft = 950,
++            ex = 1.5, exMin = 0.79, fby = 1250, fastenerG = 0.46
++        ),  // Fbx- 2000; Fc⊥ faces 560/560
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_V3 to glulam2015(
++            fbx = 1600, fvx = 265, fc = 1500, fcPerpMin = 560, ft = 975,
++            ex = 1.5, exMin = 0.79, fby = 1450, fastenerG = 0.5
++        ),  // Fbx- 1250; Fc⊥ faces 560/560
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_V6 to glulam2015(
++            fbx = 1600, fvx = 265, fc = 1600, fcPerpMin = 560, ft = 1000,
++            ex = 1.6, exMin = 0.85, fby = 1450, fastenerG = 0.5
++        ),  // Fbx- 1600; Fc⊥ faces 560/560
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_E3 to glulam2015(
++            fbx = 1600, fvx = 265, fc = 1600, fcPerpMin = 560, ft = 975,
++            ex = 1.6, exMin = 0.85, fby = 1400, fastenerG = 0.5
++        ),  // Fbx- 1200; Fc⊥ faces 560/560
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_E6 to glulam2015(
++            fbx = 1600, fvx = 265, fc = 1600, fcPerpMin = 560, ft = 1000,
++            ex = 1.6, exMin = 0.85, fby = 1550, fastenerG = 0.5
++        ),  // Fbx- 1600; Fc⊥ faces 560/560
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_V3 to glulam2015(
++            fbx = 2000, fvx = 265, fc = 1550, fcPerpMin = 560, ft = 1000,
++            ex = 1.6, exMin = 0.85, fby = 1450, fastenerG = 0.5
++        ),  // Fbx- 1450; Fc⊥ faces 650/560
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_V7 to glulam2015(
++            fbx = 2000, fvx = 265, fc = 1600, fcPerpMin = 650, ft = 1050,
++            ex = 1.6, exMin = 0.85, fby = 1450, fastenerG = 0.5
++        ),  // Fbx- 2000; Fc⊥ faces 650/650
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_E3 to glulam2015(
++            fbx = 2000, fvx = 265, fc = 1600, fcPerpMin = 560, ft = 1050,
++            ex = 1.7, exMin = 0.9, fby = 1400, fastenerG = 0.5
++        ),  // Fbx- 1200; Fc⊥ faces 560/560
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_E6 to glulam2015(
++            fbx = 2000, fvx = 265, fc = 1650, fcPerpMin = 560, ft = 1150,
++            ex = 1.7, exMin = 0.9, fby = 1550, fastenerG = 0.5
++        ),  // Fbx- 2000; Fc⊥ faces 560/560
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_V4 to glulam2015(
++            fbx = 2400, fvx = 265, fc = 1650, fcPerpMin = 650, ft = 1100,
++            ex = 1.8, exMin = 0.95, fby = 1450, fastenerG = 0.5
++        ),  // Fbx- 1850; Fc⊥ faces 650/650
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_V8 to glulam2015(
++            fbx = 2400, fvx = 265, fc = 1650, fcPerpMin = 650, ft = 1100,
++            ex = 1.8, exMin = 0.95, fby = 1550, fastenerG = 0.5
++        ),  // Fbx- 2400; Fc⊥ faces 650/650
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_E4 to glulam2015(
++            fbx = 2400, fvx = 265, fc = 1700, fcPerpMin = 650, ft = 1100,
++            ex = 1.8, exMin = 0.95, fby = 1400, fastenerG = 0.5
++        ),  // Fbx- 1450; Fc⊥ faces 650/650
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_E13 to glulam2015(
++            fbx = 2400, fvx = 265, fc = 1700, fcPerpMin = 650, ft = 1250,
++            ex = 1.8, exMin = 0.95, fby = 1750, fastenerG = 0.5
++        ),  // Fbx- 2400; Fc⊥ faces 650/650
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_E18 to glulam2015(
++            fbx = 2400, fvx = 265, fc = 1700, fcPerpMin = 650, ft = 975,
++            ex = 1.8, exMin = 0.95, fby = 1550, fastenerG = 0.5
++        ),  // Fbx- 2400; Fc⊥ faces 650/650
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_26F_V1 to glulam2015(
++            fbx = 2600, fvx = 265, fc = 1850, fcPerpMin = 650, ft = 1350,
++            ex = 2.0, exMin = 1.06, fby = 1850, fastenerG = 0.5
++        ),  // Fbx- 1950; Fc⊥ faces 650/650
++        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_26F_V2 to glulam2015(
++            fbx = 2600, fvx = 265, fc = 1850, fcPerpMin = 650, ft = 1350,
++            ex = 2.0, exMin = 1.06, fby = 1850, fastenerG = 0.5
++        ),  // Fbx- 2600; Fc⊥ faces 650/650
++        WoodSpecies.GLULAM_DF_HF to WoodGrade.G_24F_V5 to glulam2015(
++            fbx = 2400, fvx = 215, fc = 1450, fcPerpMin = 650, ft = 1100,
++            ex = 1.7, exMin = 0.9, fby = 1350, fastenerG = 0.5
++        ),  // Fbx- 1600; Fc⊥ faces 650/650
++        WoodSpecies.GLULAM_ES_ES to WoodGrade.G_20F_E8 to glulam2015(
++            fbx = 2000, fvx = 200, fc = 1100, fcPerpMin = 450, ft = 825,
++            ex = 1.5, exMin = 0.79, fby = 1000, fastenerG = 0.41
++        ),  // Fbx- 1300; Fc⊥ faces 450/450
++        WoodSpecies.GLULAM_POC_POC to WoodGrade.G_20F_V14 to glulam2015(
++            fbx = 2000, fvx = 265, fc = 1600, fcPerpMin = 560, ft = 900,
++            ex = 1.5, exMin = 0.79, fby = 1300, fastenerG = 0.46
++        ),  // Fbx- 1450; Fc⊥ faces 560/560
++        WoodSpecies.GLULAM_POC_POC to WoodGrade.G_20F_V15 to glulam2015(
++            fbx = 2000, fvx = 265, fc = 1600, fcPerpMin = 560, ft = 900,
++            ex = 1.5, exMin = 0.79, fby = 1300, fastenerG = 0.46
++        ),  // Fbx- 2000; Fc⊥ faces 560/560
++        WoodSpecies.GLULAM_SP_SP to WoodGrade.G_16F_V2 to glulam2015(
++            fbx = 1600, fvx = 300, fc = 1300, fcPerpMin = 650, ft = 1000,
++            ex = 1.5, exMin = 0.79, fby = 1450, fastenerG = 0.55
++        ),  // Fbx- 1400; Fc⊥ faces 740/650
++    )
++
+     /**
+      * One NDS Table 5C row. Kept as a helper (unlike the softwood entries,
+      * which spell each field out) so all 21 hardwood rows stay one line
+@@ -852,8 +996,11 @@ object WoodPropertyService {
+      */
+     fun getSouthernPineDimensionValues(
+         grade: WoodGrade,
+-        nominalWidthIn: Double
++        nominalWidthIn: Double,
++        edition: NdsEdition = NdsEdition.NDS_2018
+     ): WoodReferenceProperties? {
++        // Table 4B (and its width bands) is identical in the NDS 2015 Supplement.
++        if (edition != NdsEdition.NDS_2018 && edition != NdsEdition.NDS_2015) return null
+         val rows = southernPineTable4B[grade] ?: return null
+         val band = when {
+             nominalWidthIn <= 4.0 -> 0
+@@ -875,9 +1022,11 @@ object WoodPropertyService {
+      * Southern Pine this yields the 2"-4" band; the capacity calculators
+      * apply the real member width on top.
+      */
+-    fun refreshed(material: com.lz.model.structural.MaterialGrade.Wood):
+-        com.lz.model.structural.MaterialGrade.Wood {
+-        val p = getReferenceProperties(material.species, material.grade) ?: return material
++    fun refreshed(
++        material: com.lz.model.structural.MaterialGrade.Wood,
++        edition: NdsEdition = NdsEdition.NDS_2018
++    ): com.lz.model.structural.MaterialGrade.Wood {
++        val p = getReferenceProperties(material.species, material.grade, edition) ?: return material
+         return material.copy(
+             referenceBending = p.bending,
+             referenceShear = p.shear,
+diff --git a/core/solver/src/test/java/com/lz/solver/material/Nds2015SupplementDataTest.kt b/core/solver/src/test/java/com/lz/solver/material/Nds2015SupplementDataTest.kt
+new file mode 100644
+index 0000000..f68570f
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/material/Nds2015SupplementDataTest.kt
+@@ -0,0 +1,142 @@
++package com.lz.solver.material
++
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++import com.lz.model.regulatory.nds.NdsEdition
++import com.lz.model.structural.*
++import com.lz.model.units.*
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.util.UUID
++
++/**
++ * Expected numbers were read from the NDS 2015 Supplement (Tables 4A, 4B, 5A, 5C) -
++ * not from the code. Table 5A columns: Fbx+, Fbx-, Fc-perp-x (tension face / compression
++ * face), Fvx, Ex, Ex-min, Fby, Fc-perp-y, Fvy, Ey, Ey-min, Ft, Fc, G.
++ */
++class Nds2015SupplementDataTest {
++    private val y15 = NdsEdition.NDS_2015
++    private val y18 = NdsEdition.NDS_2018
++    private fun props(sp: WoodSpecies, g: WoodGrade, e: NdsEdition) = WoodPropertyService.getReferenceProperties(sp, g, e)!!
++
++    @Test
++    fun `2015 Table 5A 16F-V3 DF-DF`() {
++        // 16F-V3 DF/DF: 1600 1250 560 560 265 1.5 0.79 1450 560 230 1.5 0.79 975 1500 0.50 0.50
++        val p = props(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3, y15)
++        assertEquals(1600.0, p.bending.inPsi, 0.0); assertEquals(265.0, p.shear.inPsi, 0.0)
++        assertEquals(1500.0, p.compressionParallel.inPsi, 0.0); assertEquals(560.0, p.compressionPerp.inPsi, 0.0)
++        assertEquals(975.0, p.tensionParallel.inPsi, 0.0)
++        assertEquals(1_500_000.0, p.modulusOfElasticity.inPsi, 0.0)   // 2018 table has 1.6 million
++        assertEquals(790_000.0, p.eMin!!.inPsi, 0.0)
++        assertEquals(1450.0, p.bendingWeakAxis!!.inPsi, 0.0)
++        assertEquals(31.2, p.densityPcf, 1e-9)                         // 62.4 x 0.50
++        assertEquals(1_600_000.0, props(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3, y18).modulusOfElasticity.inPsi, 0.0)
++    }
++
++    @Test
++    fun `2015 Table 5A rows that differ from the 2018 values the app held`() {
++        // 20F-V3 DF/DF: 2000 1450 650 560 265 1.6 0.85 1450 560 230 1.5 0.79 1000 1550 0.50 0.50
++        val v3 = props(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_20F_V3, y15)
++        assertEquals(1550.0, v3.compressionParallel.inPsi, 0.0)       // app/2018 data: 1450
++        assertEquals(560.0, v3.compressionPerp.inPsi, 0.0)            // lower of the 650 / 560 faces
++        assertEquals(1_600_000.0, v3.modulusOfElasticity.inPsi, 0.0)
++        // 20F-V7 DF/DF: 2000 2000 650 650 265 1.6 0.85 1450 560 230 1.6 0.85 1050 1600 0.50 0.50
++        val v7 = props(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_20F_V7, y15)
++        assertEquals(1050.0, v7.tensionParallel.inPsi, 0.0)           // app/2018 data: 1000
++        assertEquals(650.0, v7.compressionPerp.inPsi, 0.0)
++        // 20F-V14 POC/POC: 2000 1450 560 560 265 1.5 0.79 1300 470 230 1.4 0.74 900 1600 0.46 0.46
++        val poc = props(WoodSpecies.GLULAM_POC_POC, WoodGrade.G_20F_V14, y15)
++        assertEquals(1600.0, poc.compressionParallel.inPsi, 0.0)      // app/2018 data: 1300
++        assertEquals(1300.0, poc.bendingWeakAxis!!.inPsi, 0.0)
++        // 16F-V2 SP/SP: 1600 1400 740 650 300 1.5 0.79 1450 650 260 1.4 0.74 1000 1300 0.55 0.55
++        val sp = props(WoodSpecies.GLULAM_SP_SP, WoodGrade.G_16F_V2, y15)
++        assertEquals(650.0, sp.compressionPerp.inPsi, 0.0)
++        assertEquals(34.3, sp.densityPcf, 1e-9)                        // 62.4 x 0.55
++    }
++
++    @Test
++    fun `combinations that are not in the 2015 Table 5A are not served for 2015`() {
++        for ((sp, g) in listOf(
++            WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_V4, WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_V8,
++            WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_G3, WoodSpecies.GLULAM_HF_HF to WoodGrade.G_16F_G2,
++            WoodSpecies.GLULAM_SP_SP to WoodGrade.G_24F_1_8E, WoodSpecies.GLULAM_SPF_SPF to WoodGrade.G_20F_E_SPF1,
++            WoodSpecies.GLULAM_ES_ES to WoodGrade.G_20F_E_ES1, WoodSpecies.GLULAM_POC_POC to WoodGrade.G_22F_V_POC1
++        )) {
++            assertNull("$sp $g", WoodPropertyService.getReferenceProperties(sp, g, y15))
++            assertNotNull("2018 still has $sp $g", WoodPropertyService.getReferenceProperties(sp, g, y18))
++            assertNotNull(NdsCodeData.blockReason(y15, sp, g))
++            assertNull(NdsCodeData.blockReason(y18, sp, g))
++        }
++        assertNull(NdsCodeData.blockReason(y15, WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3))
++        assertNull(WoodPropertyService.getReferenceProperties(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3, NdsEdition.NDS_2024))
++    }
++
++    @Test
++    fun `2015 sawn Southern Pine and hardwood glulam values equal the 2018 ones`() {
++        // Table 4A DF-L Select Structural: 1500 1000 180 625 1700 1.9 million 690000
++        val df = props(WoodSpecies.DF_L, WoodGrade.SELECT_STRUCTURAL, y15)
++        assertEquals(1500.0, df.bending.inPsi, 0.0); assertEquals(1000.0, df.tensionParallel.inPsi, 0.0)
++        assertEquals(1700.0, df.compressionParallel.inPsi, 0.0); assertEquals(690_000.0, df.eMin!!.inPsi, 0.0)
++        // Table 4A Hem-Fir No. 1: 975 625 150 405 1350 1.5 million 550000
++        val hf = props(WoodSpecies.HEM_FIR, WoodGrade.NO_1, y15)
++        assertEquals(975.0, hf.bending.inPsi, 0.0); assertEquals(625.0, hf.tensionParallel.inPsi, 0.0)
++        // Table 4B Southern Pine No.2, 12" wide: 750 450 175 565 1250 1.4 million 510000
++        val sp12 = WoodPropertyService.getSouthernPineDimensionValues(WoodGrade.NO_2, 12.0, y15)!!
++        assertEquals(750.0, sp12.bending.inPsi, 0.0); assertEquals(450.0, sp12.tensionParallel.inPsi, 0.0)
++        assertEquals(1250.0, sp12.compressionParallel.inPsi, 0.0)
++        // Table 4B Southern Pine Select Structural, 2"-4" wide: 2350 1650 175 565 1900 1.8 million 660000
++        val sp4 = WoodPropertyService.getSouthernPineDimensionValues(WoodGrade.SELECT_STRUCTURAL, 4.0, y15)!!
++        assertEquals(2350.0, sp4.bending.inPsi, 0.0); assertEquals(660_000.0, sp4.eMin!!.inPsi, 0.0)
++        // Table 5C 24F-E5 RO: 2400 1200 1075 235 1.8 0.95 1700 900 205 1.5 0.79 1100 1450 0.63
++        val hw = props(WoodSpecies.GLULAM_HARDWOODS, WoodGrade.G_24F_E5_RO, y15)
++        assertEquals(2400.0, hw.bending.inPsi, 0.0); assertEquals(235.0, hw.shear.inPsi, 0.0)
++        assertEquals(1075.0, hw.compressionPerp.inPsi, 0.0); assertEquals(1100.0, hw.tensionParallel.inPsi, 0.0)
++        assertEquals(1450.0, hw.compressionParallel.inPsi, 0.0); assertEquals(1_800_000.0, hw.modulusOfElasticity.inPsi, 0.0)
++        assertEquals(950_000.0, hw.eMin!!.inPsi, 0.0); assertEquals(1700.0, hw.bendingWeakAxis!!.inPsi, 0.0)
++    }
++
++    // ---------------- the calculator reads the edition's table ----------------
++
++    private val glProfile = WoodProfile(
++        id = "gl", designation = "5.125x12",
++        nominalWidth = 5.125.inches, nominalDepth = 12.0.inches,
++        dressedWidth = 5.125.inches, dressedDepth = 12.0.inches
++    )
++    // Deliberately wrong numbers carried on the material (as a picker under another edition could leave).
++    private val stale = MaterialGrade.Wood(
++        id = "gl", name = "Glulam 16F-V3", species = WoodSpecies.GLULAM_DF_DF, grade = WoodGrade.G_16F_V3,
++        referenceBending = 9999.0.psi, referenceShear = 265.0.psi, referenceCompressionParallel = 1500.0.psi,
++        referenceCompressionPerp = 560.0.psi, referenceTensionParallel = 975.0.psi,
++        modulusOfElasticity = 9_999_999.0.psi, shearModulus = 100000.0.psi, densityPcf = 31.2
++    )
++
++    @Test
++    fun `under 2015 the calculator takes every value from the 2015 table, not from the material`() {
++        // Sx = 5.125 x 12^2 / 6 = 123.0 in^3; CV = 1.0 for L = 15 ft; so Mn = Fb x Sx = 1600 x 123.
++        val d = StationDemand(
++            spanId = UUID.randomUUID(), x = 180.0.inches, moment = Moment(1000.0), shear = Force(0.0),
++            lbTop = 0.0.inches, lbBottom = 0.0.inches, compressionFlange = Flange.TOP,
++            momentSpanLength = (15.0 * 12.0).inches
++        )
++        val cap = NdsWoodCapacityCalculator(glProfile, stale, edition = y15)
++            .evaluateDetailed(d, DesignMethodology.ASD).momentCheck.capacity.lbIn
++        assertEquals(1600.0 * 123.0, cap, 1e-6)
++    }
++
++    @Test
++    fun `Emin for stability comes from the edition table`() {
++        val m = stale
++        assertEquals(790_000.0, woodEmin(m, y15), 0.0)                  // Table 5A 2015: 0.79 million
++        assertEquals(1_600_000.0 / 1.76, woodEmin(m, y18), 1e-6)        // 2018 entry has no tabulated Emin
++    }
++
++    @Test
++    fun `a combination missing from the 2015 table makes the calculator refuse`() {
++        val m = stale.copy(grade = WoodGrade.G_20F_V4)
++        var blocked = false
++        try { NdsWoodCapacityCalculator(glProfile, m, edition = y15) } catch (e: CodeDataBlockedException) { blocked = true }
++        assertTrue(blocked)
++    }
++}
+diff --git a/core/solver/src/test/java/com/lz/solver/material/NdsAssumptionsBlockAndSpanTest.kt b/core/solver/src/test/java/com/lz/solver/material/NdsAssumptionsBlockAndSpanTest.kt
+index f1c57c2..74a2af0 100644
+--- a/core/solver/src/test/java/com/lz/solver/material/NdsAssumptionsBlockAndSpanTest.kt
++++ b/core/solver/src/test/java/com/lz/solver/material/NdsAssumptionsBlockAndSpanTest.kt
+@@ -118,11 +118,11 @@ class NdsAssumptionsBlockAndSpanTest {
+     @Test
+     fun `wood design is blocked for editions without sourced design values`() {
+         assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2018))
+-        assertNotNull(NdsCodeData.blockReason(NdsEdition.NDS_2015))
++        assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2015))      // sourced from the 2015 Supplement
+         assertNotNull(NdsCodeData.blockReason(NdsEdition.NDS_2024))
+         NdsCodeData.requireUsable(NdsEdition.NDS_2018)
+         var thrown = false
+-        try { NdsCodeData.requireUsable(NdsEdition.NDS_2015) } catch (e: CodeDataBlockedException) { thrown = true }
++        try { NdsCodeData.requireUsable(NdsEdition.NDS_2024) } catch (e: CodeDataBlockedException) { thrown = true }
+         assertTrue(thrown)
+     }
+ 
+diff --git a/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt b/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
+index d027941..7ab39cf 100644
+--- a/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
++++ b/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
+@@ -234,11 +234,12 @@ class NdsLoadDurationAndEditionTest {
+     // ------------------------------------------------------------------ edition awareness
+ 
+     @Test
+-    fun `a sawn-lumber check against NDS 2018 has no missing-data notice, 2015 and 2024 do`() {
++    fun `a sawn-lumber check against NDS 2018 or 2015 has no missing-data notice, 2024 does`() {
+         val asd = DesignMethodology.ASD
+         fun notices(e: NdsEdition) = calc(edition = e).evaluateDetailed(demand(dPlusL), asd).codeDataNotices
+         assertTrue(notices(NdsEdition.NDS_2018).none { it.status == CodeDataStatus.NOT_SOURCED })
+-        for (e in listOf(NdsEdition.NDS_2015, NdsEdition.NDS_2024)) {
++        assertTrue(notices(NdsEdition.NDS_2015).none { it.status == CodeDataStatus.NOT_SOURCED })
++        for (e in listOf(NdsEdition.NDS_2024)) {
+             val n = notices(e).first { it.status == CodeDataStatus.NOT_SOURCED }
+             assertTrue(n.dataset.contains("Reference design values"))
+             assertTrue(n.message.contains("NDS ${e.year}"))
+diff --git a/core/ui/src/main/java/com/lz/ui/material/WoodMaterialPickerDialog.kt b/core/ui/src/main/java/com/lz/ui/material/WoodMaterialPickerDialog.kt
+index 31e9719..54025b3 100644
+--- a/core/ui/src/main/java/com/lz/ui/material/WoodMaterialPickerDialog.kt
++++ b/core/ui/src/main/java/com/lz/ui/material/WoodMaterialPickerDialog.kt
+@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.unit.dp
++import com.lz.model.regulatory.nds.NdsEdition
+ import com.lz.model.structural.MaterialGrade
+ import com.lz.model.structural.ShapeType
+ import com.lz.model.structural.WoodGrade
+@@ -60,6 +61,9 @@ fun WoodMaterialPickerDialog(
+     // a combination symbol like "24F-V8", and its species pairing comes
+     // along with it.
+     shapeType: ShapeType? = null,
++    // The NDS edition the project designs to: the picker reads that edition's
++    // Supplement tables, so a combination missing from them is flagged here.
++    edition: NdsEdition = NdsEdition.NDS_2018,
+     onDismiss: () -> Unit,
+     onConfirm: (MaterialGrade.Wood) -> Unit
+ ) {
+@@ -96,8 +100,8 @@ fun WoodMaterialPickerDialog(
+     // rather than only discovering it when the user taps Confirm. See
+     // WoodPropertyService.getReferenceProperties doc comment for exactly
+     // which species/grade combinations are verified so far.
+-    val props = remember(selectedSpecies, selectedGrade) {
+-        WoodPropertyService.getReferenceProperties(selectedSpecies, selectedGrade)
++    val props = remember(selectedSpecies, selectedGrade, edition) {
++        WoodPropertyService.getReferenceProperties(selectedSpecies, selectedGrade, edition)
+     }
+ 
+     AlertDialog(
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index c03361a..862b1c7 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -260,7 +260,7 @@ class BeamViewModel @Inject constructor(
+         when (val mat = activeMaterialGrade) {
+             is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
+             is MaterialGrade.Wood  ->
+-                if (NdsCodeData.blockReason(activeNdsEdition ?: NdsEdition.NDS_2018) != null) null
++                if (NdsCodeData.blockReason(activeNdsEdition ?: NdsEdition.NDS_2018, mat.species, mat.grade) != null) null
+                 else NdsWoodCapacityCalculator(
+                     section, mat,
+                     adjustmentFactors = ndsAdjustmentFactors,
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+index b25c77d..6df6d5e 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+@@ -149,7 +149,7 @@ object BeamAnalysisSolver {
+             )
+             is MaterialGrade.Wood  -> {
+                 // Hard block: an edition without sourced design values is not designed at all.
+-                NdsCodeData.requireUsable(resolveNdsEdition(config) ?: NdsEdition.NDS_2018)
++                NdsCodeData.requireUsable(resolveNdsEdition(config) ?: NdsEdition.NDS_2018, material.species, material.grade)
+                 NdsWoodCapacityCalculator(
+                 profile, material,
+                 adjustmentFactors = config.ndsAdjustmentFactors,
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 2637928..c8e9be7 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -104,6 +104,7 @@ import com.lz.model.structural.InteractionStatus
+ import com.lz.model.structural.Load
+ import com.lz.model.structural.LoadCase
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++import com.lz.model.regulatory.nds.NdsEdition
+ import com.lz.model.structural.MaterialGrade
+ import com.lz.model.structural.MaterialType
+ import com.lz.model.structural.NodeBoundaryCondition
+@@ -891,6 +892,7 @@ fun GeometryTab(viewModel: BeamViewModel) {
+         WoodMaterialPickerDialog(
+             currentGrade = viewModel.activeMaterialGrade as? MaterialGrade.Wood,
+             shapeType = viewModel.selectedShapeType,
++            edition = viewModel.activeNdsEdition ?: NdsEdition.NDS_2018,
+             onDismiss = { isWoodPickerVisible = false },
+             onConfirm = {
+                 viewModel.onGradeSelected(it)

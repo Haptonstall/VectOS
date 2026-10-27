@@ -119,7 +119,7 @@ class NdsWoodCapacityCalculator(
      * NDS Table 4B) resolved for this profile. All capacity math below
      * reads reference values from here, not from [material] directly.
      */
-    private val designMaterial: MaterialGrade.Wood = resolveDesignMaterial(material, profile)
+    private val designMaterial: MaterialGrade.Wood = resolveDesignMaterial(material, profile, edition)
 
     /**
      * Mirrors [AiscSteelCapacityCalculator]'s own private result wrapper —
@@ -192,7 +192,7 @@ class NdsWoodCapacityCalculator(
         ))
 
         val fby = if (isGlulam)
-            WoodPropertyService.getReferenceProperties(m.species, m.grade)?.bendingWeakAxis?.inPsi
+            WoodPropertyService.getReferenceProperties(m.species, m.grade, edition)?.bendingWeakAxis?.inPsi
         else null
         groups += DesignPropertyGroup("Reference design values", listOf(
             row("Fb", if (isGlulam) "Bending, strong axis (Fbx)" else "Bending", "${fmt(m.referenceBending.inPsi, 0)} psi"),
@@ -207,7 +207,7 @@ class NdsWoodCapacityCalculator(
             row("Fc", "Compression parallel to grain", "${fmt(m.referenceCompressionParallel.inPsi, 0)} psi"),
             row("Fc\u22a5", "Compression perpendicular to grain", "${fmt(m.referenceCompressionPerp.inPsi, 0)} psi"),
             row("E", "Modulus of elasticity", "${fmt(m.modulusOfElasticity.inPsi, 0)} psi"),
-            row("Emin", "Modulus for stability calculations", "${fmt(woodEmin(m), 0)} psi")
+            row("Emin", "Modulus for stability calculations", "${fmt(woodEmin(m, edition), 0)} psi")
         ))
 
         val b = if (profile is WoodProfile) profile.dressedWidth.inInches else sqrt(profile.area.inIn2)
@@ -249,8 +249,8 @@ class NdsWoodCapacityCalculator(
         factorRows += row("CP", "Column stability", fmt(cpParts.cp, 3))
         groups += DesignPropertyGroup("Adjustment factors", factorRows)
 
-        val bendStrong = computeNdsBeamStability(u.strongBend, profile, m, f, isGlulam, aboutStrongAxis = true)
-        val bendWeak = computeNdsBeamStability(u.weakBend, profile, m, f, isGlulam, aboutStrongAxis = false)
+        val bendStrong = computeNdsBeamStability(u.strongBend, profile, m, f, isGlulam, aboutStrongAxis = true, edition = edition)
+        val bendWeak = computeNdsBeamStability(u.weakBend, profile, m, f, isGlulam, aboutStrongAxis = false, edition = edition)
         val lenRows = mutableListOf<DesignPropertyRow>()
         lenRows += row("lu (strong-axis bending)", "Unbraced length, compression edge", "${fmt(u.strongBend, 1)} in")
         bendStrong?.let {
@@ -713,7 +713,7 @@ class NdsWoodCapacityCalculator(
         val sx = profile.propertiesStrongAxis.s.inIn3
         val f = adjustmentFactors
 
-        val stab = computeNdsBeamStability(lb, profile, designMaterial, f, isGlulam)
+        val stab = computeNdsBeamStability(lb, profile, designMaterial, f, isGlulam, edition = edition)
         val cl = stab?.cl ?: 1.0
 
         val traces = if (stab != null) stabilityTraces(stab, fb).toMutableList() else mutableListOf<DesignEquationTrace>()
@@ -849,7 +849,7 @@ class NdsWoodCapacityCalculator(
         val sy = profile.propertiesWeakAxis.s.inIn3
         val cfu = resolveFlatUseCfu(f, designMaterial, profile)
 
-        val stab = computeNdsBeamStability(lbWeak, profile, designMaterial, f, isGlulam, aboutStrongAxis = false)
+        val stab = computeNdsBeamStability(lbWeak, profile, designMaterial, f, isGlulam, aboutStrongAxis = false, edition = edition)
         val cl = stab?.cl ?: 1.0
         val stabTraces = mutableListOf<DesignEquationTrace>()
         if (stab != null) {
@@ -871,7 +871,7 @@ class NdsWoodCapacityCalculator(
         val adjTrace: DesignEquationTrace
         if (isGlulam) {
             val fby = WoodPropertyService
-                .getReferenceProperties(designMaterial.species, designMaterial.grade)
+                .getReferenceProperties(designMaterial.species, designMaterial.grade, edition)
                 ?.bendingWeakAxis?.inPsi
             if (fby == null) {
                 val reason = "Weak-axis bending — Fby is not sourced for this glulam combination"
@@ -962,7 +962,7 @@ class NdsWoodCapacityCalculator(
      * why it's shared with [NdsClCalculator].
      */
     private fun computeCL(lb: Double): Double =
-        computeNdsCL(lb, profile, designMaterial, adjustmentFactors, isGlulam)
+        computeNdsCL(lb, profile, designMaterial, adjustmentFactors, isGlulam, edition = edition)
 
     /**
      * NDS 5.3.6 Volume Factor CV for glulam.
@@ -1217,7 +1217,7 @@ class NdsWoodCapacityCalculator(
         if (slenderness > 50.0) return CpResult(0.0, emptyList())  // Exceeds NDS max — inadequate
 
         // Critical buckling stress FcE (NDS 3.7.1)
-        val eMin      = woodAdjustedEmin(designMaterial, adjustmentFactors)
+        val eMin      = woodAdjustedEmin(designMaterial, adjustmentFactors, edition)
         val fce       = 0.822 * eMin / slenderness.pow(2)
         val fceTrace = DesignEquationTrace(
             symbolicEquation = "FcE = 0.822 x E'min / (le/d)^2",
@@ -1526,11 +1526,11 @@ class NdsWoodCapacityCalculator(
         // unbraced length for that axis).
         val le1 = u.colStrong
         val le2 = u.colWeak
-        val eMinAdj = woodAdjustedEmin(designMaterial, adjustmentFactors)
+        val eMinAdj = woodAdjustedEmin(designMaterial, adjustmentFactors, edition)
         val fcE1 = if (le1 > 0.0 && d1 > 0.0) 0.822 * eMinAdj / (le1 / d1).pow(2) else inf
         val fcE2 = if (le2 > 0.0 && d2 > 0.0) 0.822 * eMinAdj / (le2 / d2).pow(2) else inf
 
-        val stab = computeNdsBeamStability(u.strongBend, profile, designMaterial, adjustmentFactors, isGlulam, aboutStrongAxis = true)
+        val stab = computeNdsBeamStability(u.strongBend, profile, designMaterial, adjustmentFactors, isGlulam, aboutStrongAxis = true, edition = edition)
         val fbE = stab?.fbE ?: inf
 
         val fb1Adj = strongAx.fbAdj * kBend
