@@ -230,6 +230,8 @@ internal fun computeNdsBeamStability(
     if (lb <= 0.0) return null
 
     val designMaterial = resolveDesignMaterial(material, profile, edition)
+    // Per-property CM (idempotent: a calculator has normally resolved these already).
+    val adjustmentFactors = NdsWetService.resolve(adjustmentFactors, designMaterial, profile, isGlulam)
     val depth = profile.depth.inInches
     val width = if (profile is WoodProfile) profile.dressedWidth.inInches
     else profile.propertiesWeakAxis.s.inIn3 / profile.propertiesWeakAxis.i.inIn4 * 2.0
@@ -254,7 +256,7 @@ internal fun computeNdsBeamStability(
     val fbE = 1.20 * eMinAdj / rbSquared
 
     val fStarB = designMaterial.referenceBending.inPsi *
-            adjustmentFactors.cdBending * adjustmentFactors.cm *
+            adjustmentFactors.cdBending * adjustmentFactors.cmFb *
             adjustmentFactors.ct *
             resolveSawnCf(adjustmentFactors, designMaterial, profile, NdsCfProperty.BENDING) *
             adjustmentFactors.ci *
@@ -317,7 +319,7 @@ internal fun woodAdjustedEmin(
     material: MaterialGrade.Wood,
     adjustmentFactors: NdsAdjustmentFactors,
     edition: NdsEdition = NdsEdition.NDS_2018
-): Double = woodEmin(material, edition) * adjustmentFactors.cm * adjustmentFactors.ct * adjustmentFactors.ci *
+): Double = woodEmin(material, edition) * adjustmentFactors.cmE * adjustmentFactors.ct * adjustmentFactors.ci *
     adjustmentFactors.formatEmin   // 1.0 for ASD; KF x phi-s for LRFD (NDS 2.3.5, 2.3.6)
 
 /**

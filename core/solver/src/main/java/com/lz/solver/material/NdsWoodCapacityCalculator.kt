@@ -70,7 +70,7 @@ import kotlin.math.sqrt
 class NdsWoodCapacityCalculator(
     private val profile: SectionProfile,
     private val material: MaterialGrade.Wood,
-    private val adjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors(),
+    adjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors(),
     /**
      * Resolved NDS edition (from the active project's BuildingCode ->
      * Standard -> StandardEdition.Nds chain: IBC 2015 -> NDS 2015, IBC 2018 /
@@ -120,6 +120,13 @@ class NdsWoodCapacityCalculator(
      * reads reference values from here, not from [material] directly.
      */
     private val designMaterial: MaterialGrade.Wood = resolveDesignMaterial(material, profile, edition)
+
+    /**
+     * The adjustment factors with the per-property wet service factors CM resolved for this
+     * member (moisture input, species, size). Everything below reads this, never the raw input.
+     */
+    private val adjustmentFactors: NdsAdjustmentFactors =
+        NdsWetService.resolve(adjustmentFactors, designMaterial, profile, isGlulam)
 
     /**
      * Mirrors [AiscSteelCapacityCalculator]'s own private result wrapper —
@@ -205,7 +212,7 @@ class NdsWoodCapacityCalculator(
             row("Ft", "Tension parallel to grain", "${fmt(m.referenceTensionParallel.inPsi, 0)} psi"),
             row("Fv", "Shear parallel to grain", "${fmt(m.referenceShear.inPsi, 0)} psi"),
             row("Fc", "Compression parallel to grain", "${fmt(m.referenceCompressionParallel.inPsi, 0)} psi"),
-            row("Fc\u22a5", "Compression perpendicular to grain", "${fmt(m.referenceCompressionPerp.inPsi, 0)} psi"),
+            *fcPerpRows(m),
             row("E", "Modulus of elasticity", "${fmt(m.modulusOfElasticity.inPsi, 0)} psi"),
             row("Emin", "Modulus for stability calculations", "${fmt(woodEmin(m, edition), 0)} psi")
         ))
@@ -232,7 +239,10 @@ class NdsWoodCapacityCalculator(
                     fmt(loadDuration?.factor ?: LAMBDA_DEFAULT, 2))
             else
                 row("CD", loadDuration?.explanation ?: "Load duration \u2014 set by hand or combination not known", fmt(f.cd, 2)),
-            row("CM", "Wet service", fmt(f.cm, 2)),
+            row("CM", "Wet service factors by design value",
+                if (!f.isWet) "1.00 (dry service)"
+                else "wet: Fb ${fmt(f.cmFb, 3)}, Ft ${fmt(f.cmFt, 3)}, Fv ${fmt(f.cmFv, 3)}, Fc ${fmt(f.cmFc, 3)}, " +
+                    "Fc\u22a5 ${fmt(f.cmFcPerp, 3)}, E/Emin ${fmt(f.cmE, 3)}"),
             row("Ct", "Temperature", fmt(f.ct, 2)),
             row("Ci", "Incising", fmt(f.ci, 2)),
             row("Cr", "Repetitive member", fmt(f.cr, 2))
@@ -550,7 +560,7 @@ class NdsWoodCapacityCalculator(
                 if (isGlulam) put("CV", String.format(Locale.US, "%.3f", cv))
                 if (methodology != DesignMethodology.LRFD)
                     put("CD",       String.format(Locale.US, "%.2f", adjustmentFactors.cd))
-                put("CM",           String.format(Locale.US, "%.2f", adjustmentFactors.cm))
+                put("CM",           String.format(Locale.US, "%.2f", adjustmentFactors.cmFb))
                 put("Ct",           String.format(Locale.US, "%.2f", adjustmentFactors.ct))
                 put("Cr",           String.format(Locale.US, "%.2f", adjustmentFactors.cr))
                 if (methodology == DesignMethodology.LRFD)
@@ -679,13 +689,13 @@ class NdsWoodCapacityCalculator(
         )
         traces += DesignEquationTrace(
             symbolicEquation = "F*b = Fb x ${durSym} x CM x Ct x CF x Ci x Cr   (all factors except Cfu, CV, CL)",
-            substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+            substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ct)} x " +
                 "${fmt(cfStab, 3)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
             result = fmt(stab.fStarB, 0),
             units = "psi",
             codeReference = "NDS 3.3.3.8",
             variables = mapOf(
-                "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
+                "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct,
                 "CF" to cfStab, "Ci" to f.ci, "Cr" to f.cr
             )
         )
@@ -708,6 +718,19 @@ class NdsWoodCapacityCalculator(
      * Glulam:      F'b = Fb * CD * CM * Ct * min(CV, CL) * Cfu * Ci
      *              NDS 5.3.6: CV and CL are not applied simultaneously.
      */
+    /** Fc-perp row(s): both Table 5A values for glulam (tension face / compression face), else one. */
+    private fun fcPerpRows(m: MaterialGrade.Wood): Array<DesignPropertyRow> {
+        val t = WoodPropertyService.getReferenceProperties(m.species, m.grade, edition)
+        val tf = t?.compressionPerpTensionFace
+        val cf = t?.compressionPerpCompressionFace
+        return if (isGlulam && tf != null && cf != null) arrayOf(
+            DesignPropertyRow("Fc\u22a5 (tension face)", "Compression perpendicular to grain, tension face of the beam", "${fmt(tf.inPsi, 0)} psi"),
+            DesignPropertyRow("Fc\u22a5 (compression face)", "Compression perpendicular to grain, compression face of the beam", "${fmt(cf.inPsi, 0)} psi")
+        ) else arrayOf(
+            DesignPropertyRow("Fc\u22a5", "Compression perpendicular to grain", "${fmt(m.referenceCompressionPerp.inPsi, 0)} psi")
+        )
+    }
+
     private fun strongBendingAxis(lb: Double, cvSpan: Double = lb): BendingAxis {
         val fb = designMaterial.referenceBending.inPsi
         val sx = profile.propertiesStrongAxis.s.inIn3
@@ -730,54 +753,54 @@ class NdsWoodCapacityCalculator(
             val cv = computeCV(cvSpan)
             // NDS 5.3.6: use lesser of CV and CL
             val stabilityFactor = min(cl, cv)
-            fbAdj = fb * f.cdBending * f.cm * f.ct * stabilityFactor * f.cfu * f.ci
-            fStar = fb * f.cdBending * f.cm * f.ct * cv * f.cfu * f.ci
-            fStarStar = fb * f.cdBending * f.cm * f.ct * cl * f.cfu * f.ci
+            fbAdj = fb * f.cdBending * f.cmFb * f.ct * stabilityFactor * f.cfu * f.ci
+            fStar = fb * f.cdBending * f.cmFb * f.ct * cv * f.cfu * f.ci
+            fStarStar = fb * f.cdBending * f.cmFb * f.ct * cl * f.cfu * f.ci
             limitState = if (cv <= cl)
                 "Bending — Volume Factor CV (NDS 5.3.6)"
             else
                 "Bending — Beam Stability CL (NDS 3.3.3)"
             adjTrace = DesignEquationTrace(
                 symbolicEquation = "F'b = Fb x ${durSym} x CM x Ct x min(CL, CV) x Cfu x Ci",
-                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x " +
+                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x " +
                     "${fmt(f.ct)} x min(${fmt(cl, 3)}, ${fmt(cv, 3)}) x ${fmt(f.cfu)} x ${fmt(f.ci)}",
                 result = fmt(fbAdj, 0),
                 units = "psi",
                 codeReference = "NDS 5.3.2, 5.3.6",
                 variables = mapOf(
-                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
+                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct,
                     "CL" to cl, "CV" to cv, "Cfu" to f.cfu, "Ci" to f.ci
                 )
             )
             fStarTrace = DesignEquationTrace(
                 symbolicEquation = "F*b = Fb x ${durSym} x CM x Ct x CV x Cfu x Ci   (all factors except CL)",
-                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ct)} x " +
                     "${fmt(cv, 3)} x ${fmt(f.cfu)} x ${fmt(f.ci)}",
                 result = fmt(fStar, 0),
                 units = "psi",
                 codeReference = "NDS 3.9.1",
                 variables = mapOf(
-                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
+                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct,
                     "CV" to cv, "Cfu" to f.cfu, "Ci" to f.ci
                 )
             )
             fStarStarTrace = DesignEquationTrace(
                 symbolicEquation = "F**b = Fb x ${durSym} x CM x Ct x CL x Cfu x Ci   (all factors except CV)",
-                substitutedEquation = "F**b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                substitutedEquation = "F**b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ct)} x " +
                     "${fmt(cl, 3)} x ${fmt(f.cfu)} x ${fmt(f.ci)}",
                 result = fmt(fStarStar, 0),
                 units = "psi",
                 codeReference = "NDS 3.9.1",
                 variables = mapOf(
-                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
+                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct,
                     "CL" to cl, "Cfu" to f.cfu, "Ci" to f.ci
                 )
             )
         } else {
             // Sawn lumber / SCL: CF from adjustmentFactors (caller must set it)
             val cfEffective = computeSawnCF(NdsCfProperty.BENDING)
-            fbAdj = fb * f.cdBending * f.cm * f.ct * cl * cfEffective * f.cfu * f.ci * f.cr
-            fStar = fb * f.cdBending * f.cm * f.ct * cfEffective * f.cfu * f.ci * f.cr
+            fbAdj = fb * f.cdBending * f.cmFb * f.ct * cl * cfEffective * f.cfu * f.ci * f.cr
+            fStar = fb * f.cdBending * f.cmFb * f.ct * cfEffective * f.cfu * f.ci * f.cr
             fStarStar = fbAdj
             limitState = if (cl < 1.0)
                 "Bending — Beam Stability CL (NDS 3.3.3)"
@@ -785,26 +808,26 @@ class NdsWoodCapacityCalculator(
                 "Bending — Size Factor CF (NDS Table 4A)"
             adjTrace = DesignEquationTrace(
                 symbolicEquation = "F'b = Fb x ${durSym} x CM x Ct x CL x CF x Cfu x Ci x Cr",
-                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x " +
+                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x " +
                     "${fmt(f.ct)} x ${fmt(cl, 3)} x ${fmt(cfEffective, 3)} x ${fmt(f.cfu)} x " +
                     "${fmt(f.ci)} x ${fmt(f.cr)}",
                 result = fmt(fbAdj, 0),
                 units = "psi",
                 codeReference = "NDS 3.3.2, 3.3.3, Table 4A",
                 variables = mapOf(
-                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct, "CL" to cl,
+                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct, "CL" to cl,
                     "CF" to cfEffective, "Cfu" to f.cfu, "Ci" to f.ci, "Cr" to f.cr
                 )
             )
             fStarTrace = DesignEquationTrace(
                 symbolicEquation = "F*b = Fb x ${durSym} x CM x Ct x CF x Cfu x Ci x Cr   (all factors except CL)",
-                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ct)} x " +
                     "${fmt(cfEffective, 3)} x ${fmt(f.cfu)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
                 result = fmt(fStar, 0),
                 units = "psi",
                 codeReference = "NDS 3.9.1",
                 variables = mapOf(
-                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
+                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct,
                     "CF" to cfEffective, "Cfu" to f.cfu, "Ci" to f.ci, "Cr" to f.cr
                 )
             )
@@ -881,34 +904,34 @@ class NdsWoodCapacityCalculator(
                     unavailableReason = reason
                 )
             }
-            fStarNoCl = fby * f.cdBending * f.cm * f.ct * cfu * f.ci
+            fStarNoCl = fby * f.cdBending * f.cmFb * f.ct * cfu * f.ci
             fbAdj = fStarNoCl * cl
             adjTrace = DesignEquationTrace(
                 symbolicEquation = "F'by = Fby x ${durSym} x CM x Ct x CL x Cfu x Ci",
-                substitutedEquation = "F'by = ${fmt(fby, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                substitutedEquation = "F'by = ${fmt(fby, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ct)} x " +
                     "$clLabel x ${fmt(cfu, 3)} x ${fmt(f.ci)}",
                 result = fmt(fbAdj, 0),
                 units = "psi",
                 codeReference = "NDS 3.3.3.1, Table 5A (Fby, Cfu)",
                 variables = mapOf(
-                    "Fby" to fby, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct,
+                    "Fby" to fby, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct,
                     "CL" to cl, "Cfu" to cfu, "Ci" to f.ci
                 )
             )
         } else {
             val fb = designMaterial.referenceBending.inPsi
             val cf = computeSawnCF(NdsCfProperty.BENDING)
-            fStarNoCl = fb * f.cdBending * f.cm * f.ct * cf * cfu * f.ci * f.cr
+            fStarNoCl = fb * f.cdBending * f.cmFb * f.ct * cf * cfu * f.ci * f.cr
             fbAdj = fStarNoCl * cl
             adjTrace = DesignEquationTrace(
                 symbolicEquation = "F'b = Fb x ${durSym} x CM x Ct x CL x CF x Cfu x Ci x Cr",
-                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cm)} x ${fmt(f.ct)} x " +
+                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ct)} x " +
                     "$clLabel x ${fmt(cf, 3)} x ${fmt(cfu, 3)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
                 result = fmt(fbAdj, 0),
                 units = "psi",
                 codeReference = "NDS 3.3.3.1, 4.3.7, Table 4A (CF, Cfu)",
                 variables = mapOf(
-                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cm, "Ct" to f.ct, "CL" to cl,
+                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct, "CL" to cl,
                     "CF" to cf, "Cfu" to cfu, "Ci" to f.ci, "Cr" to f.cr
                 )
             )
@@ -1109,12 +1132,12 @@ class NdsWoodCapacityCalculator(
 
         val fvTrace = DesignEquationTrace(
             symbolicEquation = "F'v = Fv x ${durSym} x CM x Ct x Ci",
-            substitutedEquation = "F'v = ${fmt(fv, 0)} x ${fmt(f.cdShear)} x ${fmt(f.cm)} x " +
+            substitutedEquation = "F'v = ${fmt(fv, 0)} x ${fmt(f.cdShear)} x ${fmt(f.cmFv)} x " +
                 "${fmt(f.ct)} x ${fmt(f.ci)}",
             result = fmt(fvAdj, 0),
             units = "psi",
             codeReference = "NDS 3.4.1",
-            variables = mapOf("Fv" to fv, durSym to f.cdShear, "CM" to f.cm, "Ct" to f.ct, "Ci" to f.ci)
+            variables = mapOf("Fv" to fv, durSym to f.cdShear, "CM" to f.cmFv, "Ct" to f.ct, "Ci" to f.ci)
         )
 
         val vn = (2.0 / 3.0) * fvAdj * area
@@ -1151,7 +1174,7 @@ class NdsWoodCapacityCalculator(
         val f = adjustmentFactors
 
         val cpResult = computeCPTraced(luStrong, luWeak)
-        val fStarC = fc * f.cdCompression * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
+        val fStarC = fc * f.cdCompression * f.cmFc * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
         val fcAdj = fStarC * cpResult.cp
 
         val fcAdjTrace = DesignEquationTrace(
@@ -1241,7 +1264,7 @@ class NdsWoodCapacityCalculator(
         // F*c = Fc with all adjustments except CP
         val f = adjustmentFactors
         val fcStar    = designMaterial.referenceCompressionParallel.inPsi *
-                f.cdCompression * f.cm * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
+                f.cdCompression * f.cmFc * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
 
         if (fcStar <= 0.0) return CpResult(1.0, listOf(planeTrace, fceTrace))
 
@@ -1284,13 +1307,13 @@ class NdsWoodCapacityCalculator(
 
         val ftTrace = DesignEquationTrace(
             symbolicEquation = "F't = Ft x ${durSym} x CM x Ct x CF x Ci",
-            substitutedEquation = "F't = ${fmt(ft, 0)} x ${fmt(f.cdTension)} x ${fmt(f.cm)} x " +
+            substitutedEquation = "F't = ${fmt(ft, 0)} x ${fmt(f.cdTension)} x ${fmt(f.cmFt)} x " +
                 "${fmt(f.ct)} x ${fmt(cf, 3)} x ${fmt(f.ci)}",
             result = fmt(ftAdj, 0),
             units = "psi",
             codeReference = "NDS 3.8.1, Table 4A",
             variables = mapOf(
-                "Ft" to ft, durSym to f.cdTension, "CM" to f.cm, "Ct" to f.ct, "CF" to cf, "Ci" to f.ci
+                "Ft" to ft, durSym to f.cdTension, "CM" to f.cmFt, "Ct" to f.ct, "CF" to cf, "Ci" to f.ci
             )
         )
         val pn = ftAdj * area
@@ -1319,7 +1342,7 @@ class NdsWoodCapacityCalculator(
     /** F't = Ft x ${durSym} x CM x Ct x CF x Ci (psi) — shared by the tension capacity and NDS 3.9.1. */
     private fun adjustedTensionStress(): Double {
         val f = adjustmentFactors
-        return designMaterial.referenceTensionParallel.inPsi * f.cdTension * f.cm * f.ct *
+        return designMaterial.referenceTensionParallel.inPsi * f.cdTension * f.cmFt * f.ct *
             computeSawnCF(NdsCfProperty.TENSION) * f.ci
     }
 

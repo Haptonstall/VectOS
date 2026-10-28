@@ -2,6 +2,13 @@ package com.lz.model.regulatory.nds
 
 import kotlinx.serialization.Serializable
 
+/** In-service moisture condition: decides the wet service factors CM (see [NdsAdjustmentFactors]). */
+@Serializable
+enum class MoistureCondition(val label: String) {
+    DRY("Dry service"),
+    WET("Wet service")
+}
+
 /**
  * What kind of live load L is, for the LRFD time effect factor (NDS Appendix
  * N, Table N3, row 1.2D + 1.6L + 0.5(Lr or S or R)): lambda = 0.7 for storage,
@@ -43,7 +50,21 @@ data class NdsLoadDurationAssumptions(
 @Serializable
 data class NdsAdjustmentFactors(
     val cd: Double = 1.0,   // Load duration factor — NDS Section 2.3.2 (manual value; see usesAutoLoadDuration)
-    val cm: Double = 1.0,   // Wet service factor — NDS Table 4A/4B
+    /** Moisture condition input: WET applies the wet service factors CM per design value. */
+    val moisture: MoistureCondition = MoistureCondition.DRY,
+    /**
+     * LEGACY single wet-service value from before the moisture input existed (it was applied
+     * to every property alike, which is wrong). Any value other than 1.0 is read as WET.
+     */
+    val cm: Double = 1.0,
+    // Wet service factors per design value. Filled in by the calculator from [moisture], the
+    // species and the member size (NDS Supplement CM tables) - not user inputs.
+    val cmFb: Double = 1.0,
+    val cmFt: Double = 1.0,
+    val cmFv: Double = 1.0,
+    val cmFcPerp: Double = 1.0,
+    val cmFc: Double = 1.0,
+    val cmE: Double = 1.0,
     val ct: Double = 1.0,   // Temperature factor — NDS Table 2.3.3
     val cl: Double = 1.0,   // Beam stability factor — NDS Section 3.3.3
     val cf: Double = 1.0,   // Size factor — NDS Table 4A (sawn lumber)
@@ -81,6 +102,9 @@ data class NdsAdjustmentFactors(
     /** The duration factor (ASD: CD) or its LRFD replacement (KF x phi x lambda), per property. */
     /** [cd] after the treated-member limit (CD <= 1.6, Table 2.3.2 note 2). */
     val effectiveCd: Double get() = if (treatedMember) minOf(cd, TREATED_MAX_CD) else cd
+    /** True for wet service (the legacy single CM, when not 1.0, also means wet). */
+    val isWet: Boolean get() = moisture == MoistureCondition.WET || cm != 1.0
+
     val cdBending: Double get() = effectiveCd * formatBending
     val cdTension: Double get() = effectiveCd * formatTension
     val cdShear: Double get() = effectiveCd * formatShear
@@ -105,17 +129,17 @@ data class NdsAdjustmentFactors(
      * should not call these `adjusted*` helpers for any factor that
      * includes `cf` — see that resolver's doc for why.
      */
-    fun adjustedBending(fb: Double)              = fb * cdBending * cm * ct * cl * cf * cfu * ci * cr
+    fun adjustedBending(fb: Double)              = fb * cdBending * cmFb * ct * cl * cf * cfu * ci * cr
     /** Adjusted shear design value F'v */
-    fun adjustedShear(fv: Double)                = fv * cdShear * cm * ct * ci
+    fun adjustedShear(fv: Double)                = fv * cdShear * cmFv * ct * ci
     /** Adjusted compression parallel F'c. CAUTION: raw `cf` — see [adjustedBending]. */
-    fun adjustedCompressionParallel(fc: Double)  = fc * cdCompression * cm * ct * cf * ci * cp
+    fun adjustedCompressionParallel(fc: Double)  = fc * cdCompression * cmFc * ct * cf * ci * cp
     /** Adjusted compression perpendicular F'c⊥ */
-    fun adjustedCompressionPerp(fcPerp: Double)  = fcPerp * cm * ct * ci * cb
+    fun adjustedCompressionPerp(fcPerp: Double)  = fcPerp * cmFcPerp * ct * ci * cb
     /** Adjusted tension parallel F't. CAUTION: raw `cf` — see [adjustedBending]. */
-    fun adjustedTension(ft: Double)              = ft * cdTension * cm * ct * cf * ci
+    fun adjustedTension(ft: Double)              = ft * cdTension * cmFt * ct * cf * ci
     /** Adjusted modulus of elasticity E' */
-    fun adjustedModulus(e: Double)               = e * cm * ct * ci
+    fun adjustedModulus(e: Double)               = e * cmE * ct * ci
 
     companion object {
         const val TREATED_MAX_CD = 1.6

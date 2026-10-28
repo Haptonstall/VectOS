@@ -32,7 +32,50 @@ class Nds2015SupplementDataTest {
         assertEquals(790_000.0, p.eMin!!.inPsi, 0.0)
         assertEquals(1450.0, p.bendingWeakAxis!!.inPsi, 0.0)
         assertEquals(31.2, p.densityPcf, 1e-9)                         // 62.4 x 0.50
-        assertEquals(1_600_000.0, props(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3, y18).modulusOfElasticity.inPsi, 0.0)
+        // 2018 Table 5A, same row: Ex true 1.6, Ex app 1.5, Ex min 0.79. The app has no separate
+        // shear deflection, so it carries the apparent E (1.5), which equals the 2015 value.
+        assertEquals(1_500_000.0, props(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3, y18).modulusOfElasticity.inPsi, 0.0)
+        assertEquals(790_000.0, props(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3, y18).eMin!!.inPsi, 0.0)
+    }
+
+    @Test
+    fun `Table 5A gives both Fc-perp values, tension face and compression face`() {
+        // 2015 20F-V3 DF/DF: 650 tension face / 560 compression face
+        val v3 = props(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_20F_V3, y15)
+        assertEquals(650.0, v3.compressionPerpTensionFace!!.inPsi, 0.0)
+        assertEquals(560.0, v3.compressionPerpCompressionFace!!.inPsi, 0.0)
+        // 2018 16F-V2 SP/SP: 740 / 650
+        val sp = props(WoodSpecies.GLULAM_SP_SP, WoodGrade.G_16F_V2, y18)
+        assertEquals(740.0, sp.compressionPerpTensionFace!!.inPsi, 0.0)
+        assertEquals(650.0, sp.compressionPerpCompressionFace!!.inPsi, 0.0)
+        assertEquals(650.0, sp.compressionPerp.inPsi, 0.0)     // conservative single value
+        // sawn lumber and hardwood have one tabulated value
+        assertNull(props(WoodSpecies.DF_L, WoodGrade.NO_2, y18).compressionPerpTensionFace)
+        assertNull(props(WoodSpecies.GLULAM_HARDWOODS, WoodGrade.G_24F_E5_RO, y18).compressionPerpCompressionFace)
+    }
+
+    @Test
+    fun `2018 Table 5A rows that the older entries had wrong`() {
+        // 20F-V3 DF/DF: 2000 1450 650 560 265 Ex true 1.7 app 1.6 min 0.85 Fby 1450 ... Ft 1000 Fc 1550 G 0.50
+        val v3 = props(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_20F_V3, y18)
+        assertEquals(1550.0, v3.compressionParallel.inPsi, 0.0)
+        assertEquals(1000.0, v3.tensionParallel.inPsi, 0.0)
+        assertEquals(1_600_000.0, v3.modulusOfElasticity.inPsi, 0.0)
+        assertEquals(850_000.0, v3.eMin!!.inPsi, 0.0)
+        assertEquals(1450.0, v3.bendingWeakAxis!!.inPsi, 0.0)
+        // 20F-V7 DF/DF: ... 650 650 265 1.7 1.6 0.85 1450 ... Ft 1050 Fc 1600
+        val v7 = props(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_20F_V7, y18)
+        assertEquals(1050.0, v7.tensionParallel.inPsi, 0.0)
+        assertEquals(1600.0, v7.compressionParallel.inPsi, 0.0)
+        assertEquals(650.0, v7.compressionPerp.inPsi, 0.0)
+        // 20F-V14 / V15 POC/POC: 2000 .. 560 560 265 1.6 1.5 0.79 Fby 1300 .. Ft 900 Fc 1600 G 0.46
+        for (g in listOf(WoodGrade.G_20F_V14, WoodGrade.G_20F_V15)) {
+            val poc = props(WoodSpecies.GLULAM_POC_POC, g, y18)
+            assertEquals(1600.0, poc.compressionParallel.inPsi, 0.0)
+            assertEquals(560.0, poc.compressionPerp.inPsi, 0.0)
+            assertEquals(1300.0, poc.bendingWeakAxis!!.inPsi, 0.0)
+            assertEquals(28.7, poc.densityPcf, 1e-9)
+        }
     }
 
     @Test
@@ -129,7 +172,9 @@ class Nds2015SupplementDataTest {
     fun `Emin for stability comes from the edition table`() {
         val m = stale
         assertEquals(790_000.0, woodEmin(m, y15), 0.0)                  // Table 5A 2015: 0.79 million
-        assertEquals(1_600_000.0 / 1.76, woodEmin(m, y18), 1e-6)        // 2018 entry has no tabulated Emin
+        assertEquals(790_000.0, woodEmin(m, y18), 0.0)                  // Table 5A 2018: 0.79 million
+        // a legacy (ESR-1940) combination has no tabulated Emin: falls back to E / 1.76
+        assertEquals(1_700_000.0 / 1.76, woodEmin(m.copy(grade = WoodGrade.G_16F_G3), y18), 1e-6)   // table E of that legacy row, 1.7 million
     }
 
     @Test

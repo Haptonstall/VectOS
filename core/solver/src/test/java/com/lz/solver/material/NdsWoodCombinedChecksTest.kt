@@ -109,16 +109,17 @@ class NdsWoodCombinedChecksTest {
 
     @Test
     fun `E'min carries CM, Ct and Ci into FbE and FcE`() {
-        val f = NdsAdjustmentFactors(cm = 0.8)
+        // wet service: CM for E and Emin on sawn lumber is 0.9 (Supplement Table 4A)
+        val f = NdsAdjustmentFactors(moisture = com.lz.model.regulatory.nds.MoistureCondition.WET)
         val s = computeNdsBeamStability(120.0, profile, material, f, false)!!
-        near(464000.0, s.eMinAdj, "E'min = 580000 x 0.8")
-        near(606.392827, s.fbE, "FbE with adjusted E'min (bare Emin would give 757.99)")
+        near(522000.0, s.eMinAdj, "E'min = 580000 x 0.9")
+        near(682.19193, s.fbE, "FbE with adjusted E'min (bare Emin gives 757.99; x 0.9)")
 
         val r = detailed(demand(axial = -500.0, lb = 60.0), factors = f)
         val fce = r.axialCheck.traces.first { it.symbolicEquation.startsWith("FcE") }
-        near(464000.0, fce.variables["E'min"]!!, "E'min in the FcE trace")
+        near(522000.0, fce.variables["E'min"]!!, "E'min in the FcE trace")
         // The trace string is rounded to whole psi; compare at that precision.
-        assertEquals("FcE = 0.822 x 464000 / 40^2", 238.38, fce.result.toDouble(), 0.5)
+        assertEquals("FcE = 0.822 x 522000 / 40^2", 268.17, fce.result.toDouble(), 0.5)
     }
 
     // ------------------------------------------------------------------
@@ -149,11 +150,11 @@ class NdsWoodCombinedChecksTest {
     fun `glulam weak axis with no sourced Fby reports zero capacity and the reason`() {
         // Precondition: if Fby for 20F-V3 is ever sourced, update this test to a combo that still lacks it.
         assertNull(
-            WoodPropertyService.getReferenceProperties(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_20F_V3)!!.bendingWeakAxis
+            WoodPropertyService.getReferenceProperties(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_G3)!!.bendingWeakAxis
         )
         val r = detailed(
             demand(moment = 1000.0, lb = 0.0), strong = false,
-            mat = glulam(WoodGrade.G_20F_V3), prof = glulamProfile
+            mat = glulam(WoodGrade.G_16F_G3), prof = glulamProfile
         )
         near(0.0, r.momentCheck.capacity.lbIn, "capacity")
         assertTrue(r.momentCheck.governingMode!!.contains("Fby"))
@@ -469,7 +470,7 @@ class NdsWoodCombinedChecksTest {
     fun `glulam properties show Fby, or say it is not sourced`() {
         val ok = detailed(demand(moment = 1000.0), mat = glulam(WoodGrade.G_16F_V3), prof = glulamProfile)
         assertEquals("1450 psi", prop(ok, "Reference design values", "Fby"))
-        val none = detailed(demand(moment = 1000.0), mat = glulam(WoodGrade.G_20F_V3), prof = glulamProfile)
+        val none = detailed(demand(moment = 1000.0), mat = glulam(WoodGrade.G_16F_G3), prof = glulamProfile)
         assertEquals("not sourced for this combination", prop(none, "Reference design values", "Fby"))
     }
 }

@@ -61,6 +61,7 @@ import com.lz.model.units.psiModulus
 import com.lz.solver.material.AiscSteelCapacityCalculator
 import com.lz.solver.material.CodeDataBlockedException
 import com.lz.solver.material.NdsCodeData
+import com.lz.solver.material.ndsDeflectionModulusPsi
 import com.lz.solver.material.NdsWoodCapacityCalculator
 import com.lz.solver.material.WoodPropertyService
 import com.lz.solver.envelope.ServiceabilityEvaluationService
@@ -260,7 +261,7 @@ class BeamViewModel @Inject constructor(
         when (val mat = activeMaterialGrade) {
             is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
             is MaterialGrade.Wood  ->
-                if (NdsCodeData.blockReason(activeNdsEdition ?: NdsEdition.NDS_2018, mat.species, mat.grade) != null) null
+                if (NdsCodeData.blockReason(activeNdsEdition ?: NdsEdition.NDS_2018, mat, ndsAdjustmentFactors.isWet) != null) null
                 else NdsWoodCapacityCalculator(
                     section, mat,
                     adjustmentFactors = ndsAdjustmentFactors,
@@ -834,8 +835,17 @@ class BeamViewModel @Inject constructor(
                 member = memberSnapshot,
                 loadCases = resolvedLoadCases,
                 combinations = activeCombinations,
-                modulusOfElasticity = (activeMaterialGrade?.modulusOfElasticity?.psi
-                    ?: selectedMaterial.defaultModulusOfElasticityPsi).psiModulus,
+                // Wood: the edition's E for this member x CM x Ct x Ci (wet service lowers E).
+                modulusOfElasticity = run {
+                    val grade = activeMaterialGrade
+                    val sec = selectedSection
+                    if (grade is MaterialGrade.Wood && sec != null) {
+                        NdsCodeData.requireUsable(activeNdsEdition ?: NdsEdition.NDS_2018, grade, ndsAdjustmentFactors.isWet)
+                        ndsDeflectionModulusPsi(grade, sec, ndsAdjustmentFactors, activeNdsEdition ?: NdsEdition.NDS_2018)
+                    } else {
+                        grade?.modulusOfElasticity?.psi ?: selectedMaterial.defaultModulusOfElasticityPsi
+                    }
+                }.psiModulus,
                 // Analysis-element stiffness for the two bending planes. This
                 // solver builds a real 6-DOF frame element (i and iy both feed
                 // the stiffness matrix — see MemberAnalysisSolver), but only

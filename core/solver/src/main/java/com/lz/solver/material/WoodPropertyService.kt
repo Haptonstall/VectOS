@@ -28,6 +28,10 @@ object WoodPropertyService {
          * Emin is only ~0.37 E, well below the old E/1.76 approximation.
          */
         val eMin: Pressure? = null,
+        /** Table 5A Fc-perp-x, tension face of the beam (null: single tabulated value). */
+        val compressionPerpTensionFace: Pressure? = null,
+        /** Table 5A Fc-perp-x, compression face of the beam (null: single tabulated value). */
+        val compressionPerpCompressionFace: Pressure? = null,
         /**
          * Tabulated NDS Fby — reference bending design value for loading
          * parallel to the wide faces of the laminations (bending about the
@@ -59,7 +63,9 @@ object WoodPropertyService {
         grade: WoodGrade,
         edition: NdsEdition = NdsEdition.NDS_2018
     ): WoodReferenceProperties? = when (edition) {
-        NdsEdition.NDS_2018 -> tabulated2018(species, grade)
+        NdsEdition.NDS_2018 ->
+            (if (species.isGlulam && species != WoodSpecies.GLULAM_HARDWOODS) glulamSoftwood2018[species to grade] else null)
+                ?: tabulated2018(species, grade)
         // NDS 2015 Supplement, checked row by row against the published tables: sawn
         // lumber (Table 4A), Southern Pine (4B) and hardwood glulam (5C) values are
         // identical to the 2018 ones the app holds. Softwood glulam (Table 5A) differs
@@ -713,26 +719,29 @@ object WoodPropertyService {
     }
 
     /**
-     * One row of the NDS 2015 Supplement Table 5A (softwood glulam), read from the
-     * published table. Columns used: Fbx+ (bottom of beam in tension), Fvx, Fc (axially
-     * loaded), Fc-perp-x, Ft, Ex and Ex-min (10^6 psi), Fby, and the fastener specific
-     * gravity G (density = 62.4 G). Table 5A lists Fc-perp-x separately for the tension
-     * and compression face; the lower of the two is kept, which is the conservative
-     * choice (the calculator does not check bearing, the value is shown for reference).
+     * One row of NDS Supplement Table 5A (softwood glulam), read from the published
+     * table. Fbx+ (bottom of beam in tension), Fvx, Fc (axially loaded), Fc-perp-x on the
+     * tension face and on the compression face, Ft, E and Ex-min (10^6 psi), Fby, and the
+     * fastener specific gravity G (density = 62.4 G). Both Fc-perp-x values are kept;
+     * [WoodReferenceProperties.compressionPerp] is the lower (conservative) of the two.
+     * E is the apparent modulus for deflection (2015 "E"; 2018 "Ex app"): the app does not
+     * calculate shear deflection separately, so the shear-free "Ex true" must not be used.
      */
-    private fun glulam2015(
-        fbx: Int, fvx: Int, fc: Int, fcPerpMin: Int, ft: Int,
-        ex: Double, exMin: Double, fby: Int, fastenerG: Double
+    private fun glulamRow(
+        fbx: Int, fvx: Int, fc: Int, fcPerpTension: Int, fcPerpCompression: Int, ft: Int,
+        e: Double, eMin: Double, fby: Int, fastenerG: Double
     ) = WoodReferenceProperties(
         bending = fbx.toDouble().psi,
         bendingWeakAxis = fby.toDouble().psi,
         shear = fvx.toDouble().psi,
         compressionParallel = fc.toDouble().psi,
-        compressionPerp = fcPerpMin.toDouble().psi,
+        compressionPerp = minOf(fcPerpTension, fcPerpCompression).toDouble().psi,
+        compressionPerpTensionFace = fcPerpTension.toDouble().psi,
+        compressionPerpCompressionFace = fcPerpCompression.toDouble().psi,
         tensionParallel = ft.toDouble().psi,
-        modulusOfElasticity = (ex * 1_000_000.0).psi,
-        shearModulus = (ex * 1_000_000.0 / 16.0).psi,
-        eMin = (exMin * 1_000_000.0).psi,
+        modulusOfElasticity = (e * 1_000_000.0).psi,
+        shearModulus = (e * 1_000_000.0 / 16.0).psi,
+        eMin = (eMin * 1_000_000.0).psi,
         densityPcf = Math.round(62.4 * fastenerG * 10.0) / 10.0
     )
 
@@ -744,94 +753,192 @@ object WoodPropertyService {
      * entry and are therefore not available for NDS 2015.
      */
     private val glulamSoftwood2015: Map<Pair<WoodSpecies, WoodGrade>, WoodReferenceProperties> = mapOf(
-        WoodSpecies.GLULAM_AC_AC to WoodGrade.G_20F_V12 to glulam2015(
-            fbx = 2000, fvx = 265, fc = 1500, fcPerpMin = 560, ft = 925,
-            ex = 1.5, exMin = 0.79, fby = 1250, fastenerG = 0.46
-        ),  // Fbx- 1400; Fc⊥ faces 560/560
-        WoodSpecies.GLULAM_AC_AC to WoodGrade.G_20F_V13 to glulam2015(
-            fbx = 2000, fvx = 265, fc = 1550, fcPerpMin = 560, ft = 950,
-            ex = 1.5, exMin = 0.79, fby = 1250, fastenerG = 0.46
-        ),  // Fbx- 2000; Fc⊥ faces 560/560
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_V3 to glulam2015(
-            fbx = 1600, fvx = 265, fc = 1500, fcPerpMin = 560, ft = 975,
-            ex = 1.5, exMin = 0.79, fby = 1450, fastenerG = 0.5
-        ),  // Fbx- 1250; Fc⊥ faces 560/560
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_V6 to glulam2015(
-            fbx = 1600, fvx = 265, fc = 1600, fcPerpMin = 560, ft = 1000,
-            ex = 1.6, exMin = 0.85, fby = 1450, fastenerG = 0.5
-        ),  // Fbx- 1600; Fc⊥ faces 560/560
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_E3 to glulam2015(
-            fbx = 1600, fvx = 265, fc = 1600, fcPerpMin = 560, ft = 975,
-            ex = 1.6, exMin = 0.85, fby = 1400, fastenerG = 0.5
-        ),  // Fbx- 1200; Fc⊥ faces 560/560
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_E6 to glulam2015(
-            fbx = 1600, fvx = 265, fc = 1600, fcPerpMin = 560, ft = 1000,
-            ex = 1.6, exMin = 0.85, fby = 1550, fastenerG = 0.5
-        ),  // Fbx- 1600; Fc⊥ faces 560/560
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_V3 to glulam2015(
-            fbx = 2000, fvx = 265, fc = 1550, fcPerpMin = 560, ft = 1000,
-            ex = 1.6, exMin = 0.85, fby = 1450, fastenerG = 0.5
-        ),  // Fbx- 1450; Fc⊥ faces 650/560
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_V7 to glulam2015(
-            fbx = 2000, fvx = 265, fc = 1600, fcPerpMin = 650, ft = 1050,
-            ex = 1.6, exMin = 0.85, fby = 1450, fastenerG = 0.5
-        ),  // Fbx- 2000; Fc⊥ faces 650/650
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_E3 to glulam2015(
-            fbx = 2000, fvx = 265, fc = 1600, fcPerpMin = 560, ft = 1050,
-            ex = 1.7, exMin = 0.9, fby = 1400, fastenerG = 0.5
-        ),  // Fbx- 1200; Fc⊥ faces 560/560
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_E6 to glulam2015(
-            fbx = 2000, fvx = 265, fc = 1650, fcPerpMin = 560, ft = 1150,
-            ex = 1.7, exMin = 0.9, fby = 1550, fastenerG = 0.5
-        ),  // Fbx- 2000; Fc⊥ faces 560/560
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_V4 to glulam2015(
-            fbx = 2400, fvx = 265, fc = 1650, fcPerpMin = 650, ft = 1100,
-            ex = 1.8, exMin = 0.95, fby = 1450, fastenerG = 0.5
-        ),  // Fbx- 1850; Fc⊥ faces 650/650
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_V8 to glulam2015(
-            fbx = 2400, fvx = 265, fc = 1650, fcPerpMin = 650, ft = 1100,
-            ex = 1.8, exMin = 0.95, fby = 1550, fastenerG = 0.5
-        ),  // Fbx- 2400; Fc⊥ faces 650/650
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_E4 to glulam2015(
-            fbx = 2400, fvx = 265, fc = 1700, fcPerpMin = 650, ft = 1100,
-            ex = 1.8, exMin = 0.95, fby = 1400, fastenerG = 0.5
-        ),  // Fbx- 1450; Fc⊥ faces 650/650
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_E13 to glulam2015(
-            fbx = 2400, fvx = 265, fc = 1700, fcPerpMin = 650, ft = 1250,
-            ex = 1.8, exMin = 0.95, fby = 1750, fastenerG = 0.5
-        ),  // Fbx- 2400; Fc⊥ faces 650/650
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_E18 to glulam2015(
-            fbx = 2400, fvx = 265, fc = 1700, fcPerpMin = 650, ft = 975,
-            ex = 1.8, exMin = 0.95, fby = 1550, fastenerG = 0.5
-        ),  // Fbx- 2400; Fc⊥ faces 650/650
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_26F_V1 to glulam2015(
-            fbx = 2600, fvx = 265, fc = 1850, fcPerpMin = 650, ft = 1350,
-            ex = 2.0, exMin = 1.06, fby = 1850, fastenerG = 0.5
-        ),  // Fbx- 1950; Fc⊥ faces 650/650
-        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_26F_V2 to glulam2015(
-            fbx = 2600, fvx = 265, fc = 1850, fcPerpMin = 650, ft = 1350,
-            ex = 2.0, exMin = 1.06, fby = 1850, fastenerG = 0.5
-        ),  // Fbx- 2600; Fc⊥ faces 650/650
-        WoodSpecies.GLULAM_DF_HF to WoodGrade.G_24F_V5 to glulam2015(
-            fbx = 2400, fvx = 215, fc = 1450, fcPerpMin = 650, ft = 1100,
-            ex = 1.7, exMin = 0.9, fby = 1350, fastenerG = 0.5
-        ),  // Fbx- 1600; Fc⊥ faces 650/650
-        WoodSpecies.GLULAM_ES_ES to WoodGrade.G_20F_E8 to glulam2015(
-            fbx = 2000, fvx = 200, fc = 1100, fcPerpMin = 450, ft = 825,
-            ex = 1.5, exMin = 0.79, fby = 1000, fastenerG = 0.41
-        ),  // Fbx- 1300; Fc⊥ faces 450/450
-        WoodSpecies.GLULAM_POC_POC to WoodGrade.G_20F_V14 to glulam2015(
-            fbx = 2000, fvx = 265, fc = 1600, fcPerpMin = 560, ft = 900,
-            ex = 1.5, exMin = 0.79, fby = 1300, fastenerG = 0.46
-        ),  // Fbx- 1450; Fc⊥ faces 560/560
-        WoodSpecies.GLULAM_POC_POC to WoodGrade.G_20F_V15 to glulam2015(
-            fbx = 2000, fvx = 265, fc = 1600, fcPerpMin = 560, ft = 900,
-            ex = 1.5, exMin = 0.79, fby = 1300, fastenerG = 0.46
-        ),  // Fbx- 2000; Fc⊥ faces 560/560
-        WoodSpecies.GLULAM_SP_SP to WoodGrade.G_16F_V2 to glulam2015(
-            fbx = 1600, fvx = 300, fc = 1300, fcPerpMin = 650, ft = 1000,
-            ex = 1.5, exMin = 0.79, fby = 1450, fastenerG = 0.55
-        ),  // Fbx- 1400; Fc⊥ faces 740/650
+        WoodSpecies.GLULAM_AC_AC to WoodGrade.G_20F_V12 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1500, fcPerpTension = 560, fcPerpCompression = 560, ft = 925,
+            e = 1.5, eMin = 0.79, fby = 1250, fastenerG = 0.46
+        ),
+        WoodSpecies.GLULAM_AC_AC to WoodGrade.G_20F_V13 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1550, fcPerpTension = 560, fcPerpCompression = 560, ft = 950,
+            e = 1.5, eMin = 0.79, fby = 1250, fastenerG = 0.46
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_V3 to glulamRow(
+            fbx = 1600, fvx = 265, fc = 1500, fcPerpTension = 560, fcPerpCompression = 560, ft = 975,
+            e = 1.5, eMin = 0.79, fby = 1450, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_V6 to glulamRow(
+            fbx = 1600, fvx = 265, fc = 1600, fcPerpTension = 560, fcPerpCompression = 560, ft = 1000,
+            e = 1.6, eMin = 0.85, fby = 1450, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_E3 to glulamRow(
+            fbx = 1600, fvx = 265, fc = 1600, fcPerpTension = 560, fcPerpCompression = 560, ft = 975,
+            e = 1.6, eMin = 0.85, fby = 1400, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_E6 to glulamRow(
+            fbx = 1600, fvx = 265, fc = 1600, fcPerpTension = 560, fcPerpCompression = 560, ft = 1000,
+            e = 1.6, eMin = 0.85, fby = 1550, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_V3 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1550, fcPerpTension = 650, fcPerpCompression = 560, ft = 1000,
+            e = 1.6, eMin = 0.85, fby = 1450, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_V7 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1600, fcPerpTension = 650, fcPerpCompression = 650, ft = 1050,
+            e = 1.6, eMin = 0.85, fby = 1450, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_E3 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1600, fcPerpTension = 560, fcPerpCompression = 560, ft = 1050,
+            e = 1.7, eMin = 0.9, fby = 1400, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_E6 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1650, fcPerpTension = 560, fcPerpCompression = 560, ft = 1150,
+            e = 1.7, eMin = 0.9, fby = 1550, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_V4 to glulamRow(
+            fbx = 2400, fvx = 265, fc = 1650, fcPerpTension = 650, fcPerpCompression = 650, ft = 1100,
+            e = 1.8, eMin = 0.95, fby = 1450, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_V8 to glulamRow(
+            fbx = 2400, fvx = 265, fc = 1650, fcPerpTension = 650, fcPerpCompression = 650, ft = 1100,
+            e = 1.8, eMin = 0.95, fby = 1550, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_E4 to glulamRow(
+            fbx = 2400, fvx = 265, fc = 1700, fcPerpTension = 650, fcPerpCompression = 650, ft = 1100,
+            e = 1.8, eMin = 0.95, fby = 1400, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_E13 to glulamRow(
+            fbx = 2400, fvx = 265, fc = 1700, fcPerpTension = 650, fcPerpCompression = 650, ft = 1250,
+            e = 1.8, eMin = 0.95, fby = 1750, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_E18 to glulamRow(
+            fbx = 2400, fvx = 265, fc = 1700, fcPerpTension = 650, fcPerpCompression = 650, ft = 975,
+            e = 1.8, eMin = 0.95, fby = 1550, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_26F_V1 to glulamRow(
+            fbx = 2600, fvx = 265, fc = 1850, fcPerpTension = 650, fcPerpCompression = 650, ft = 1350,
+            e = 2.0, eMin = 1.06, fby = 1850, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_26F_V2 to glulamRow(
+            fbx = 2600, fvx = 265, fc = 1850, fcPerpTension = 650, fcPerpCompression = 650, ft = 1350,
+            e = 2.0, eMin = 1.06, fby = 1850, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_DF_HF to WoodGrade.G_24F_V5 to glulamRow(
+            fbx = 2400, fvx = 215, fc = 1450, fcPerpTension = 650, fcPerpCompression = 650, ft = 1100,
+            e = 1.7, eMin = 0.9, fby = 1350, fastenerG = 0.5
+        ),
+        WoodSpecies.GLULAM_ES_ES to WoodGrade.G_20F_E8 to glulamRow(
+            fbx = 2000, fvx = 200, fc = 1100, fcPerpTension = 450, fcPerpCompression = 450, ft = 825,
+            e = 1.5, eMin = 0.79, fby = 1000, fastenerG = 0.41
+        ),
+        WoodSpecies.GLULAM_POC_POC to WoodGrade.G_20F_V14 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1600, fcPerpTension = 560, fcPerpCompression = 560, ft = 900,
+            e = 1.5, eMin = 0.79, fby = 1300, fastenerG = 0.46
+        ),
+        WoodSpecies.GLULAM_POC_POC to WoodGrade.G_20F_V15 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1600, fcPerpTension = 560, fcPerpCompression = 560, ft = 900,
+            e = 1.5, eMin = 0.79, fby = 1300, fastenerG = 0.46
+        ),
+        WoodSpecies.GLULAM_SP_SP to WoodGrade.G_16F_V2 to glulamRow(
+            fbx = 1600, fvx = 300, fc = 1300, fcPerpTension = 740, fcPerpCompression = 650, ft = 1000,
+            e = 1.5, eMin = 0.79, fby = 1450, fastenerG = 0.55
+        ),
+    )
+
+    /**
+     * NDS 2018 Supplement Table 5A values for the same 22 combinations, read from the
+     * published table. These take precedence over the older hand-entered rows (which
+     * mixed ESR-1940 and 2024 values: 20F-V3, 20F-V7, 20F-V14 and 20F-V15 disagreed with
+     * the 2018 table). Combinations not in the 2018 table (the ESR-1940 "G" series etc.)
+     * keep their legacy rows, whose E column is not verified.
+     */
+    private val glulamSoftwood2018: Map<Pair<WoodSpecies, WoodGrade>, WoodReferenceProperties> = mapOf(
+        WoodSpecies.GLULAM_AC_AC to WoodGrade.G_20F_V12 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1500, fcPerpTension = 560, fcPerpCompression = 560, ft = 925,
+            e = 1.5, eMin = 0.79, fby = 1250, fastenerG = 0.46
+        ),  // Ex true 1.6
+        WoodSpecies.GLULAM_AC_AC to WoodGrade.G_20F_V13 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1550, fcPerpTension = 560, fcPerpCompression = 560, ft = 950,
+            e = 1.5, eMin = 0.79, fby = 1250, fastenerG = 0.46
+        ),  // Ex true 1.6
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_V3 to glulamRow(
+            fbx = 1600, fvx = 265, fc = 1500, fcPerpTension = 560, fcPerpCompression = 560, ft = 975,
+            e = 1.5, eMin = 0.79, fby = 1450, fastenerG = 0.5
+        ),  // Ex true 1.6
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_V6 to glulamRow(
+            fbx = 1600, fvx = 265, fc = 1600, fcPerpTension = 560, fcPerpCompression = 560, ft = 1000,
+            e = 1.6, eMin = 0.85, fby = 1450, fastenerG = 0.5
+        ),  // Ex true 1.7
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_E3 to glulamRow(
+            fbx = 1600, fvx = 265, fc = 1600, fcPerpTension = 560, fcPerpCompression = 560, ft = 975,
+            e = 1.6, eMin = 0.85, fby = 1400, fastenerG = 0.5
+        ),  // Ex true 1.7
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_16F_E6 to glulamRow(
+            fbx = 1600, fvx = 265, fc = 1600, fcPerpTension = 560, fcPerpCompression = 560, ft = 1000,
+            e = 1.6, eMin = 0.85, fby = 1550, fastenerG = 0.5
+        ),  // Ex true 1.7
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_V3 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1550, fcPerpTension = 650, fcPerpCompression = 560, ft = 1000,
+            e = 1.6, eMin = 0.85, fby = 1450, fastenerG = 0.5
+        ),  // Ex true 1.7
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_V7 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1600, fcPerpTension = 650, fcPerpCompression = 650, ft = 1050,
+            e = 1.6, eMin = 0.85, fby = 1450, fastenerG = 0.5
+        ),  // Ex true 1.7
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_E3 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1600, fcPerpTension = 560, fcPerpCompression = 560, ft = 1050,
+            e = 1.7, eMin = 0.9, fby = 1400, fastenerG = 0.5
+        ),  // Ex true 1.8
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_20F_E6 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1650, fcPerpTension = 560, fcPerpCompression = 560, ft = 1150,
+            e = 1.7, eMin = 0.9, fby = 1550, fastenerG = 0.5
+        ),  // Ex true 1.8
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_V4 to glulamRow(
+            fbx = 2400, fvx = 265, fc = 1650, fcPerpTension = 650, fcPerpCompression = 650, ft = 1100,
+            e = 1.8, eMin = 0.95, fby = 1450, fastenerG = 0.5
+        ),  // Ex true 1.9
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_V8 to glulamRow(
+            fbx = 2400, fvx = 265, fc = 1650, fcPerpTension = 650, fcPerpCompression = 650, ft = 1100,
+            e = 1.8, eMin = 0.95, fby = 1550, fastenerG = 0.5
+        ),  // Ex true 1.9
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_E4 to glulamRow(
+            fbx = 2400, fvx = 265, fc = 1700, fcPerpTension = 650, fcPerpCompression = 650, ft = 1100,
+            e = 1.8, eMin = 0.95, fby = 1400, fastenerG = 0.5
+        ),  // Ex true 1.9
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_E13 to glulamRow(
+            fbx = 2400, fvx = 265, fc = 1700, fcPerpTension = 650, fcPerpCompression = 650, ft = 1250,
+            e = 1.8, eMin = 0.95, fby = 1750, fastenerG = 0.5
+        ),  // Ex true 1.9
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_24F_E18 to glulamRow(
+            fbx = 2400, fvx = 265, fc = 1700, fcPerpTension = 650, fcPerpCompression = 650, ft = 975,
+            e = 1.8, eMin = 0.95, fby = 1550, fastenerG = 0.5
+        ),  // Ex true 1.9
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_26F_V1 to glulamRow(
+            fbx = 2600, fvx = 265, fc = 1850, fcPerpTension = 650, fcPerpCompression = 650, ft = 1350,
+            e = 2.0, eMin = 1.06, fby = 1850, fastenerG = 0.5
+        ),  // Ex true 2.1
+        WoodSpecies.GLULAM_DF_DF to WoodGrade.G_26F_V2 to glulamRow(
+            fbx = 2600, fvx = 265, fc = 1850, fcPerpTension = 650, fcPerpCompression = 650, ft = 1350,
+            e = 2.0, eMin = 1.06, fby = 1850, fastenerG = 0.5
+        ),  // Ex true 2.1
+        WoodSpecies.GLULAM_DF_HF to WoodGrade.G_24F_V5 to glulamRow(
+            fbx = 2400, fvx = 215, fc = 1450, fcPerpTension = 650, fcPerpCompression = 650, ft = 1100,
+            e = 1.7, eMin = 0.9, fby = 1350, fastenerG = 0.5
+        ),  // Ex true 1.8
+        WoodSpecies.GLULAM_ES_ES to WoodGrade.G_20F_E8 to glulamRow(
+            fbx = 2000, fvx = 200, fc = 1100, fcPerpTension = 450, fcPerpCompression = 450, ft = 825,
+            e = 1.5, eMin = 0.79, fby = 1000, fastenerG = 0.41
+        ),  // Ex true 1.6
+        WoodSpecies.GLULAM_POC_POC to WoodGrade.G_20F_V14 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1600, fcPerpTension = 560, fcPerpCompression = 560, ft = 900,
+            e = 1.5, eMin = 0.79, fby = 1300, fastenerG = 0.46
+        ),  // Ex true 1.6
+        WoodSpecies.GLULAM_POC_POC to WoodGrade.G_20F_V15 to glulamRow(
+            fbx = 2000, fvx = 265, fc = 1600, fcPerpTension = 560, fcPerpCompression = 560, ft = 900,
+            e = 1.5, eMin = 0.79, fby = 1300, fastenerG = 0.46
+        ),  // Ex true 1.6
+        WoodSpecies.GLULAM_SP_SP to WoodGrade.G_16F_V2 to glulamRow(
+            fbx = 1600, fvx = 300, fc = 1300, fcPerpTension = 740, fcPerpCompression = 650, ft = 1000,
+            e = 1.5, eMin = 0.79, fby = 1450, fastenerG = 0.55
+        ),  // Ex true 1.6
     )
 
     /**

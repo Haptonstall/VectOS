@@ -68,6 +68,15 @@ object NdsCodeData {
                 "the ${standardLabel(edition)} Supplement as incorporated here, and values from another " +
                 "edition are not substituted. Choose a combination that is in the ${standardLabel(edition)} tables."
 
+    /** As the species / grade overload, plus the wet-service restriction (Dense Structural Southern Pine). */
+    fun blockReason(edition: NdsEdition, material: com.lz.model.structural.MaterialGrade.Wood, wetService: Boolean): String? =
+        blockReason(edition, material.species, material.grade)
+            ?: if (wetService) NdsWetService.blockReason(material) else null
+
+    fun requireUsable(edition: NdsEdition, material: com.lz.model.structural.MaterialGrade.Wood, wetService: Boolean) {
+        blockReason(edition, material, wetService)?.let { throw CodeDataBlockedException(it) }
+    }
+
     /** @throws CodeDataBlockedException when [blockReason] is non-null. */
     fun requireUsable(edition: NdsEdition) {
         blockReason(edition)?.let { throw CodeDataBlockedException(it) }

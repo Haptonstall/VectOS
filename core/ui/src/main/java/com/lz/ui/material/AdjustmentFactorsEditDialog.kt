@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.lz.model.regulatory.nds.LiveLoadKind
+import com.lz.model.regulatory.nds.MoistureCondition
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
 import com.lz.model.regulatory.nds.NdsLoadDurationAssumptions
 
@@ -58,7 +59,9 @@ fun AdjustmentFactorsEditDialog(
 ) {
     var cd by remember(currentFactors) { mutableStateOf(currentFactors.cd.toString()) }
     var autoCd by remember(currentFactors) { mutableStateOf(currentFactors.usesAutoLoadDuration) }
-    var cm by remember(currentFactors) { mutableStateOf(currentFactors.cm.toString()) }
+    var moisture by remember(currentFactors) {
+        mutableStateOf(if (currentFactors.isWet) MoistureCondition.WET else MoistureCondition.DRY)
+    }
     var ct by remember(currentFactors) { mutableStateOf(currentFactors.ct.toString()) }
     var cl by remember(currentFactors) { mutableStateOf(currentFactors.cl.toString()) }
     var cf by remember(currentFactors) { mutableStateOf(currentFactors.cf.toString()) }
@@ -89,15 +92,6 @@ fun AdjustmentFactorsEditDialog(
                 "Under LRFD the time effect factor λ takes its place and is also set per " +
                 "combination.",
             onValueChange = { cd = it }
-        ),
-        FactorField(
-            label = "Wet Service Factor",
-            symbol = "CM",
-            description = "NDS Table 4A/4B/5A. Reduces design values when in-service " +
-                "moisture content exceeds 19% (sawn lumber) or 16% (glulam) for an " +
-                "extended period. Typical: 1.0 (dry service), 0.7–0.85 (wet service, " +
-                "varies by property and species group).",
-            onValueChange = { cm = it }
         ),
         FactorField(
             label = "Temperature Factor",
@@ -211,7 +205,6 @@ fun AdjustmentFactorsEditDialog(
                         // snapping back.
                         val rawText = when (field.symbol) {
                             "CD" -> cd
-                            "CM" -> cm
                             "Ct" -> ct
                             "CL" -> cl
                             "CF" -> cf
@@ -252,6 +245,31 @@ fun AdjustmentFactorsEditDialog(
                     }
                     if (index != fields.lastIndex) {
                         HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+                HorizontalDivider()
+                Text(
+                    "Moisture condition (wet service factor CM)",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "NDS Supplement Tables 4A / 4B / 5A / 5C. Choose wet service when the in-service moisture " +
+                        "content will exceed 19% (sawn lumber) or reach 16% or more (glulam) for an extended " +
+                        "time. CM is then applied separately to each design value (it differs by property, e.g. " +
+                        "glulam: Fb 0.8, Ft 0.8, Fv 0.875, Fc 0.73, Fc\u22a5 0.53, E 0.833; sawn lumber: Fb 0.85, " +
+                        "Fv 0.97, Fc 0.8, Fc\u22a5 0.67, E 0.9, with the Fb\u00b7CF \u2264 1150 psi and " +
+                        "Fc\u00b7CF \u2264 750 psi exceptions) and to E in deflection.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MoistureCondition.values().forEach { m ->
+                        FilterChip(
+                            selected = moisture == m,
+                            onClick = { moisture = m },
+                            label = { Text(m.label) }
+                        )
                     }
                 }
                 HorizontalDivider()
@@ -323,7 +341,8 @@ fun AdjustmentFactorsEditDialog(
                     NdsAdjustmentFactors(
                         cd = if (autoCd) 1.0 else (cd.toDoubleOrNull() ?: 1.0),
                         loadDurationFromCombination = autoCd,
-                        cm = cm.toDoubleOrNull() ?: 1.0,
+                        moisture = moisture,
+                        cm = 1.0,
                         ct = ct.toDoubleOrNull() ?: 1.0,
                         cl = cl.toDoubleOrNull() ?: 1.0,
                         cf = cf.toDoubleOrNull() ?: 1.0,
