@@ -261,7 +261,7 @@ class BeamViewModel @Inject constructor(
         when (val mat = activeMaterialGrade) {
             is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
             is MaterialGrade.Wood  ->
-                if (NdsCodeData.blockReason(activeNdsEdition ?: NdsEdition.NDS_2018, mat, ndsAdjustmentFactors.isWet) != null) null
+                if (NdsCodeData.blockReason(activeNdsEdition ?: NdsEdition.NDS_2018, mat, ndsAdjustmentFactors) != null) null
                 else NdsWoodCapacityCalculator(
                     section, mat,
                     adjustmentFactors = ndsAdjustmentFactors,
@@ -840,7 +840,7 @@ class BeamViewModel @Inject constructor(
                     val grade = activeMaterialGrade
                     val sec = selectedSection
                     if (grade is MaterialGrade.Wood && sec != null) {
-                        NdsCodeData.requireUsable(activeNdsEdition ?: NdsEdition.NDS_2018, grade, ndsAdjustmentFactors.isWet)
+                        NdsCodeData.requireUsable(activeNdsEdition ?: NdsEdition.NDS_2018, grade, ndsAdjustmentFactors)
                         ndsDeflectionModulusPsi(grade, sec, ndsAdjustmentFactors, activeNdsEdition ?: NdsEdition.NDS_2018)
                     } else {
                         grade?.modulusOfElasticity?.psi ?: selectedMaterial.defaultModulusOfElasticityPsi

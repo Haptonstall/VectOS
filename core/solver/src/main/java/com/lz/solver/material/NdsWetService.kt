@@ -2,6 +2,8 @@ package com.lz.solver.material
 
 import com.lz.model.regulatory.nds.MoistureCondition
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+import com.lz.model.regulatory.nds.NdsVersionRegistry
+import com.lz.model.regulatory.nds.TemperatureRange
 import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.SectionProfile
 import com.lz.model.structural.WoodGrade
@@ -29,6 +31,16 @@ internal object NdsWetService {
         WoodGrade.DENSE_STRUCTURAL_86, WoodGrade.DENSE_STRUCTURAL_72, WoodGrade.DENSE_STRUCTURAL_65
     )
 
+    /** Table 2.3.3 stops at 150 F. */
+    const val MAX_TEMPERATURE_F = 150.0
+
+    /** Why the temperature input cannot be designed for, or null. */
+    fun temperatureBlockReason(f: NdsAdjustmentFactors): String? =
+        if (f.ct == 1.0 && (!f.temperatureF.isFinite() || f.temperatureF > MAX_TEMPERATURE_F))
+            "Design temperature ${f.temperatureF} F is above 150 F: NDS Table 2.3.3 (temperature factor Ct) stops " +
+                "at 150 F, so wood design is blocked above it."
+        else null
+
     /** Why wet service cannot be designed for this material, or null. */
     fun blockReason(material: MaterialGrade.Wood): String? =
         if (!material.species.isGlulam && material.grade in DENSE)
@@ -41,6 +53,13 @@ internal object NdsWetService {
      * [material] must be the design material (values already resolved for the edition).
      */
     fun resolve(
+        f: NdsAdjustmentFactors,
+        material: MaterialGrade.Wood,
+        profile: SectionProfile,
+        isGlulam: Boolean
+    ): NdsAdjustmentFactors = withTemperature(resolveMoisture(f, material, profile, isGlulam))
+
+    private fun resolveMoisture(
         f: NdsAdjustmentFactors,
         material: MaterialGrade.Wood,
         profile: SectionProfile,
@@ -69,6 +88,25 @@ internal object NdsWetService {
 }
 
 /**
+ * [f] with the per-property temperature factors Ct filled in (NDS Table 2.3.3, identical in the
+ * 2015 and 2018 texts): T <= 100 F: 1.0; 100 < T <= 125 F: Ft, E, Emin 0.9, and Fb, Fv, Fc, Fc-perp
+ * 0.8 dry / 0.7 wet; 125 < T <= 150 F: Ft, E, Emin 0.9, and Fb, Fv, Fc, Fc-perp 0.7 dry / 0.5 wet.
+ * A legacy single Ct other than 1.0 is applied to every property, as before.
+ */
+private fun withTemperature(f: NdsAdjustmentFactors): NdsAdjustmentFactors {
+    if (f.ct != 1.0) return f.copy(ctFb = f.ct, ctFt = f.ct, ctFv = f.ct, ctFcPerp = f.ct, ctFc = f.ct, ctE = f.ct)
+    NdsWetService.temperatureBlockReason(f)?.let { throw CodeDataBlockedException(it) }
+    val range = when {
+        f.temperatureF <= 100.0 -> TemperatureRange.T_100_OR_LESS
+        f.temperatureF <= 125.0 -> TemperatureRange.T_101_TO_125
+        else -> TemperatureRange.T_126_TO_150
+    }
+    val t = NdsVersionRegistry.getTemperatureFactors(range, f.isWet)
+    return f.copy(ctFb = t.ctBending, ctFt = t.ctTension, ctFv = t.ctBending, ctFcPerp = t.ctCompPerp,
+        ctFc = t.ctBending, ctE = t.ctModulus)
+}
+
+/**
  * The modulus of elasticity for deflection: the edition's tabulated E for this member
  * x CM x Ct x Ci (NDS E' = E CM Ct Ci; wet service lowers E by 0.9 / 0.833). CD does not
  * apply to E.
@@ -81,5 +119,5 @@ fun ndsDeflectionModulusPsi(
 ): Double {
     val dm = resolveDesignMaterial(material, profile, edition)
     val f = NdsWetService.resolve(factors, dm, profile, material.species.isGlulam)
-    return dm.modulusOfElasticity.inPsi * f.cmE * f.ct * f.ci
+    return dm.modulusOfElasticity.inPsi * f.cmE * f.ctE * f.ci
 }

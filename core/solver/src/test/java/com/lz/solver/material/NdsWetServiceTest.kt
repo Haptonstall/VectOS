@@ -141,4 +141,61 @@ class NdsWetServiceTest {
         // under NDS 2015 the 2015 table E is used
         assertEquals(1_500_000.0 * 0.833, ndsDeflectionModulusPsi(m, glProfile, wet, NdsEdition.NDS_2015), 1e-6)
     }
+
+    // ---------------- Ct follows temperature and moisture (Table 2.3.3) ----------------
+
+    private fun ct(t: Double, w: Boolean): NdsAdjustmentFactors {
+        val m = wood(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3)
+        val f = NdsAdjustmentFactors(temperatureF = t, moisture = if (w) MoistureCondition.WET else MoistureCondition.DRY)
+        return NdsWetService.resolve(f, m, glProfile, true)
+    }
+
+    @Test
+    fun `Ct table 2_3_3 by band, property and moisture`() {
+        // T <= 100 F: 1.0 everywhere, wet or dry (70 F default and the 100 F boundary)
+        for (t in listOf(70.0, 100.0)) for (w in listOf(false, true)) {
+            val r = ct(t, w)
+            listOf(r.ctFb, r.ctFt, r.ctFv, r.ctFcPerp, r.ctFc, r.ctE).forEach { assertEquals(1.0, it, 0.0) }
+        }
+        // 100 < T <= 125 F (110 and the 125 boundary): Ft, E 0.9; Fb, Fv, Fc, Fc-perp 0.8 dry / 0.7 wet
+        for (t in listOf(110.0, 125.0)) {
+            val d = ct(t, false); val w = ct(t, true)
+            assertEquals(0.9, d.ctFt, 0.0); assertEquals(0.9, d.ctE, 0.0); assertEquals(0.9, w.ctFt, 0.0); assertEquals(0.9, w.ctE, 0.0)
+            listOf(d.ctFb, d.ctFv, d.ctFc, d.ctFcPerp).forEach { assertEquals(0.8, it, 0.0) }
+            listOf(w.ctFb, w.ctFv, w.ctFc, w.ctFcPerp).forEach { assertEquals(0.7, it, 0.0) }
+        }
+        // 125 < T <= 150 F: Ft, E 0.9; others 0.7 dry / 0.5 wet
+        for (t in listOf(130.0, 150.0)) {
+            val d = ct(t, false); val w = ct(t, true)
+            assertEquals(0.9, d.ctFt, 0.0); assertEquals(0.9, w.ctE, 0.0)
+            listOf(d.ctFb, d.ctFv, d.ctFc, d.ctFcPerp).forEach { assertEquals(0.7, it, 0.0) }
+            listOf(w.ctFb, w.ctFv, w.ctFc, w.ctFcPerp).forEach { assertEquals(0.5, it, 0.0) }
+        }
+    }
+
+    @Test
+    fun `above 150 F is blocked and a legacy Ct still applies to every property`() {
+        val m = wood(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3)
+        val hot = NdsAdjustmentFactors(temperatureF = 151.0)
+        assertNotNull(NdsCodeData.blockReason(NdsEdition.NDS_2018, m, hot))
+        assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2018, m, NdsAdjustmentFactors(temperatureF = 150.0)))
+        var thrown = false
+        try { NdsWetService.resolve(hot, m, glProfile, true) } catch (e: CodeDataBlockedException) { thrown = true }
+        assertTrue(thrown)
+        val legacy = NdsWetService.resolve(NdsAdjustmentFactors(ct = 0.8), m, glProfile, true)
+        listOf(legacy.ctFb, legacy.ctFt, legacy.ctFv, legacy.ctFcPerp, legacy.ctFc, legacy.ctE).forEach { assertEquals(0.8, it, 0.0) }
+    }
+
+    @Test
+    fun `hot service lowers capacities and deflection E by their own Ct`() {
+        val m = wood(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3)
+        // 110 F dry: Fb' = 1600 x 0.8 x CV(0.964961 at L = 30 ft); Vn = 2/3 x 265 x 0.8 x 5.125 x 12
+        val f = NdsAdjustmentFactors(temperatureF = 110.0)
+        val r = NdsWoodCapacityCalculator(glProfile, m, f).evaluateDetailed(demand(30.0), DesignMethodology.ASD)
+        assertEquals(1600.0 * 0.8 * 0.9649610951198176 * 123.0, r.momentCheck.capacity.lbIn, 1e-3)
+        assertEquals(2.0 / 3.0 * 265.0 * 0.8 * 5.125 * 12.0, r.shearCheck.capacity.pounds, 1e-6)
+        // E for deflection 110 F wet: 1.5 million x CM 0.833 x Ct 0.9
+        assertEquals(1_500_000.0 * 0.833 * 0.9,
+            ndsDeflectionModulusPsi(m, glProfile, NdsAdjustmentFactors(temperatureF = 110.0, moisture = MoistureCondition.WET), NdsEdition.NDS_2018), 1e-6)
+    }
 }

@@ -65,7 +65,21 @@ data class NdsAdjustmentFactors(
     val cmFcPerp: Double = 1.0,
     val cmFc: Double = 1.0,
     val cmE: Double = 1.0,
-    val ct: Double = 1.0,   // Temperature factor — NDS Table 2.3.3
+    /**
+     * Design temperature of the member in service, deg F. Sustained exposure above 100 F
+     * lowers the design values (NDS Table 2.3.3; the factor depends on the moisture
+     * condition too). Table 2.3.3 stops at 150 F, so higher is blocked.
+     */
+    val temperatureF: Double = 70.0,
+    /** LEGACY single Ct from before the temperature input; any value other than 1.0 is still applied to every property. */
+    val ct: Double = 1.0,
+    // Temperature factors per design value, filled in by the calculator (not user inputs).
+    val ctFb: Double = 1.0,
+    val ctFt: Double = 1.0,
+    val ctFv: Double = 1.0,
+    val ctFcPerp: Double = 1.0,
+    val ctFc: Double = 1.0,
+    val ctE: Double = 1.0,
     val cl: Double = 1.0,   // Beam stability factor — NDS Section 3.3.3
     val cf: Double = 1.0,   // Size factor — NDS Table 4A (sawn lumber)
     val cfu: Double = 1.0,  // Flat use factor — NDS Table 4A
@@ -129,17 +143,17 @@ data class NdsAdjustmentFactors(
      * should not call these `adjusted*` helpers for any factor that
      * includes `cf` — see that resolver's doc for why.
      */
-    fun adjustedBending(fb: Double)              = fb * cdBending * cmFb * ct * cl * cf * cfu * ci * cr
+    fun adjustedBending(fb: Double)              = fb * cdBending * cmFb * ctFb * cl * cf * cfu * ci * cr
     /** Adjusted shear design value F'v */
-    fun adjustedShear(fv: Double)                = fv * cdShear * cmFv * ct * ci
+    fun adjustedShear(fv: Double)                = fv * cdShear * cmFv * ctFv * ci
     /** Adjusted compression parallel F'c. CAUTION: raw `cf` — see [adjustedBending]. */
-    fun adjustedCompressionParallel(fc: Double)  = fc * cdCompression * cmFc * ct * cf * ci * cp
+    fun adjustedCompressionParallel(fc: Double)  = fc * cdCompression * cmFc * ctFc * cf * ci * cp
     /** Adjusted compression perpendicular F'c⊥ */
-    fun adjustedCompressionPerp(fcPerp: Double)  = fcPerp * cmFcPerp * ct * ci * cb
+    fun adjustedCompressionPerp(fcPerp: Double)  = fcPerp * cmFcPerp * ctFcPerp * ci * cb
     /** Adjusted tension parallel F't. CAUTION: raw `cf` — see [adjustedBending]. */
-    fun adjustedTension(ft: Double)              = ft * cdTension * cmFt * ct * cf * ci
+    fun adjustedTension(ft: Double)              = ft * cdTension * cmFt * ctFt * cf * ci
     /** Adjusted modulus of elasticity E' */
-    fun adjustedModulus(e: Double)               = e * cmE * ct * ci
+    fun adjustedModulus(e: Double)               = e * cmE * ctE * ci
 
     companion object {
         const val TREATED_MAX_CD = 1.6

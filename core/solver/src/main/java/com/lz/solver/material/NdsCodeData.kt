@@ -73,6 +73,21 @@ object NdsCodeData {
         blockReason(edition, material.species, material.grade)
             ?: if (wetService) NdsWetService.blockReason(material) else null
 
+    /** Edition, species / grade, wet-service and design-temperature restrictions together. */
+    fun blockReason(
+        edition: NdsEdition,
+        material: com.lz.model.structural.MaterialGrade.Wood,
+        factors: com.lz.model.regulatory.nds.NdsAdjustmentFactors
+    ): String? = blockReason(edition, material, factors.isWet) ?: NdsWetService.temperatureBlockReason(factors)
+
+    fun requireUsable(
+        edition: NdsEdition,
+        material: com.lz.model.structural.MaterialGrade.Wood,
+        factors: com.lz.model.regulatory.nds.NdsAdjustmentFactors
+    ) {
+        blockReason(edition, material, factors)?.let { throw CodeDataBlockedException(it) }
+    }
+
     fun requireUsable(edition: NdsEdition, material: com.lz.model.structural.MaterialGrade.Wood, wetService: Boolean) {
         blockReason(edition, material, wetService)?.let { throw CodeDataBlockedException(it) }
     }

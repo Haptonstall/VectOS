@@ -62,7 +62,8 @@ fun AdjustmentFactorsEditDialog(
     var moisture by remember(currentFactors) {
         mutableStateOf(if (currentFactors.isWet) MoistureCondition.WET else MoistureCondition.DRY)
     }
-    var ct by remember(currentFactors) { mutableStateOf(currentFactors.ct.toString()) }
+    var temperature by remember(currentFactors) { mutableStateOf(currentFactors.temperatureF.toString()) }
+    val temperatureValid = temperature.toDoubleOrNull()?.let { it.isFinite() && it >= -60.0 && it <= 150.0 } == true
     var cl by remember(currentFactors) { mutableStateOf(currentFactors.cl.toString()) }
     var cf by remember(currentFactors) { mutableStateOf(currentFactors.cf.toString()) }
     var cfu by remember(currentFactors) { mutableStateOf(currentFactors.cfu.toString()) }
@@ -92,14 +93,6 @@ fun AdjustmentFactorsEditDialog(
                 "Under LRFD the time effect factor λ takes its place and is also set per " +
                 "combination.",
             onValueChange = { cd = it }
-        ),
-        FactorField(
-            label = "Temperature Factor",
-            symbol = "Ct",
-            description = "NDS Table 2.3.3. Reduces design values for sustained exposure " +
-                "above 100°F. Typical: 1.0 (T ≤ 100°F, the overwhelming majority of " +
-                "cases), 0.8–0.9 (100°F < T ≤ 125°F), 0.5–0.7 (125°F < T ≤ 150°F).",
-            onValueChange = { ct = it }
         ),
         FactorField(
             label = "Beam Stability Factor",
@@ -205,7 +198,6 @@ fun AdjustmentFactorsEditDialog(
                         // snapping back.
                         val rawText = when (field.symbol) {
                             "CD" -> cd
-                            "Ct" -> ct
                             "CL" -> cl
                             "CF" -> cf
                             "Cfu" -> cfu
@@ -272,6 +264,22 @@ fun AdjustmentFactorsEditDialog(
                         )
                     }
                 }
+                OutlinedTextField(
+                    value = temperature,
+                    onValueChange = { temperature = it },
+                    label = { Text("Design temperature, \u00b0F (temperature factor Ct)") },
+                    isError = !temperatureValid,
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "NDS Table 2.3.3. Sustained exposure above 100\u00b0F lowers the design values; the factor " +
+                        "depends on the property and on the moisture condition above (e.g. 100\u2013125\u00b0F: Ft, E, " +
+                        "Emin 0.9; Fb, Fv, Fc, Fc\u22a5 0.8 dry / 0.7 wet). The table stops at 150\u00b0F.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 HorizontalDivider()
                 Text(
                     "Load duration assumptions",
@@ -336,14 +344,15 @@ fun AdjustmentFactorsEditDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = assumptionsValid, onClick = {
+            TextButton(enabled = assumptionsValid && temperatureValid, onClick = {
                 onConfirm(
                     NdsAdjustmentFactors(
                         cd = if (autoCd) 1.0 else (cd.toDoubleOrNull() ?: 1.0),
                         loadDurationFromCombination = autoCd,
                         moisture = moisture,
                         cm = 1.0,
-                        ct = ct.toDoubleOrNull() ?: 1.0,
+                        temperatureF = temperature.toDouble(),
+                        ct = 1.0,
                         cl = cl.toDoubleOrNull() ?: 1.0,
                         cf = cf.toDoubleOrNull() ?: 1.0,
                         cfu = cfu.toDoubleOrNull() ?: 1.0,

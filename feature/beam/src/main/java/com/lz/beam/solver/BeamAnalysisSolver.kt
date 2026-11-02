@@ -149,7 +149,7 @@ object BeamAnalysisSolver {
             )
             is MaterialGrade.Wood  -> {
                 // Hard block: an edition without sourced design values is not designed at all.
-                NdsCodeData.requireUsable(resolveNdsEdition(config) ?: NdsEdition.NDS_2018, material, config.ndsAdjustmentFactors.isWet)
+                NdsCodeData.requireUsable(resolveNdsEdition(config) ?: NdsEdition.NDS_2018, material, config.ndsAdjustmentFactors)
                 NdsWoodCapacityCalculator(
                 profile, material,
                 adjustmentFactors = config.ndsAdjustmentFactors,

@@ -1,0 +1,588 @@
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
+index 4f3dab4..035fad0 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
+@@ -65,7 +65,21 @@ data class NdsAdjustmentFactors(
+     val cmFcPerp: Double = 1.0,
+     val cmFc: Double = 1.0,
+     val cmE: Double = 1.0,
+-    val ct: Double = 1.0,   // Temperature factor — NDS Table 2.3.3
++    /**
++     * Design temperature of the member in service, deg F. Sustained exposure above 100 F
++     * lowers the design values (NDS Table 2.3.3; the factor depends on the moisture
++     * condition too). Table 2.3.3 stops at 150 F, so higher is blocked.
++     */
++    val temperatureF: Double = 70.0,
++    /** LEGACY single Ct from before the temperature input; any value other than 1.0 is still applied to every property. */
++    val ct: Double = 1.0,
++    // Temperature factors per design value, filled in by the calculator (not user inputs).
++    val ctFb: Double = 1.0,
++    val ctFt: Double = 1.0,
++    val ctFv: Double = 1.0,
++    val ctFcPerp: Double = 1.0,
++    val ctFc: Double = 1.0,
++    val ctE: Double = 1.0,
+     val cl: Double = 1.0,   // Beam stability factor — NDS Section 3.3.3
+     val cf: Double = 1.0,   // Size factor — NDS Table 4A (sawn lumber)
+     val cfu: Double = 1.0,  // Flat use factor — NDS Table 4A
+@@ -129,17 +143,17 @@ data class NdsAdjustmentFactors(
+      * should not call these `adjusted*` helpers for any factor that
+      * includes `cf` — see that resolver's doc for why.
+      */
+-    fun adjustedBending(fb: Double)              = fb * cdBending * cmFb * ct * cl * cf * cfu * ci * cr
++    fun adjustedBending(fb: Double)              = fb * cdBending * cmFb * ctFb * cl * cf * cfu * ci * cr
+     /** Adjusted shear design value F'v */
+-    fun adjustedShear(fv: Double)                = fv * cdShear * cmFv * ct * ci
++    fun adjustedShear(fv: Double)                = fv * cdShear * cmFv * ctFv * ci
+     /** Adjusted compression parallel F'c. CAUTION: raw `cf` — see [adjustedBending]. */
+-    fun adjustedCompressionParallel(fc: Double)  = fc * cdCompression * cmFc * ct * cf * ci * cp
++    fun adjustedCompressionParallel(fc: Double)  = fc * cdCompression * cmFc * ctFc * cf * ci * cp
+     /** Adjusted compression perpendicular F'c⊥ */
+-    fun adjustedCompressionPerp(fcPerp: Double)  = fcPerp * cmFcPerp * ct * ci * cb
++    fun adjustedCompressionPerp(fcPerp: Double)  = fcPerp * cmFcPerp * ctFcPerp * ci * cb
+     /** Adjusted tension parallel F't. CAUTION: raw `cf` — see [adjustedBending]. */
+-    fun adjustedTension(ft: Double)              = ft * cdTension * cmFt * ct * cf * ci
++    fun adjustedTension(ft: Double)              = ft * cdTension * cmFt * ctFt * cf * ci
+     /** Adjusted modulus of elasticity E' */
+-    fun adjustedModulus(e: Double)               = e * cmE * ct * ci
++    fun adjustedModulus(e: Double)               = e * cmE * ctE * ci
+ 
+     companion object {
+         const val TREATED_MAX_CD = 1.6
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+index e6443bf..5caa813 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+@@ -257,7 +257,7 @@ internal fun computeNdsBeamStability(
+ 
+     val fStarB = designMaterial.referenceBending.inPsi *
+             adjustmentFactors.cdBending * adjustmentFactors.cmFb *
+-            adjustmentFactors.ct *
++            adjustmentFactors.ctFb *
+             resolveSawnCf(adjustmentFactors, designMaterial, profile, NdsCfProperty.BENDING) *
+             adjustmentFactors.ci *
+             // The repetitive member factor is a sawn-lumber factor; it does not apply to glulam.
+@@ -319,7 +319,7 @@ internal fun woodAdjustedEmin(
+     material: MaterialGrade.Wood,
+     adjustmentFactors: NdsAdjustmentFactors,
+     edition: NdsEdition = NdsEdition.NDS_2018
+-): Double = woodEmin(material, edition) * adjustmentFactors.cmE * adjustmentFactors.ct * adjustmentFactors.ci *
++): Double = woodEmin(material, edition) * adjustmentFactors.cmE * adjustmentFactors.ctE * adjustmentFactors.ci *
+     adjustmentFactors.formatEmin   // 1.0 for ASD; KF x phi-s for LRFD (NDS 2.3.5, 2.3.6)
+ 
+ /**
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+index e583066..f562547 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+@@ -73,6 +73,21 @@ object NdsCodeData {
+         blockReason(edition, material.species, material.grade)
+             ?: if (wetService) NdsWetService.blockReason(material) else null
+ 
++    /** Edition, species / grade, wet-service and design-temperature restrictions together. */
++    fun blockReason(
++        edition: NdsEdition,
++        material: com.lz.model.structural.MaterialGrade.Wood,
++        factors: com.lz.model.regulatory.nds.NdsAdjustmentFactors
++    ): String? = blockReason(edition, material, factors.isWet) ?: NdsWetService.temperatureBlockReason(factors)
++
++    fun requireUsable(
++        edition: NdsEdition,
++        material: com.lz.model.structural.MaterialGrade.Wood,
++        factors: com.lz.model.regulatory.nds.NdsAdjustmentFactors
++    ) {
++        blockReason(edition, material, factors)?.let { throw CodeDataBlockedException(it) }
++    }
++
+     fun requireUsable(edition: NdsEdition, material: com.lz.model.structural.MaterialGrade.Wood, wetService: Boolean) {
+         blockReason(edition, material, wetService)?.let { throw CodeDataBlockedException(it) }
+     }
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWetService.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWetService.kt
+index 7718ba6..4809ed0 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWetService.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWetService.kt
+@@ -2,6 +2,8 @@ package com.lz.solver.material
+ 
+ import com.lz.model.regulatory.nds.MoistureCondition
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++import com.lz.model.regulatory.nds.NdsVersionRegistry
++import com.lz.model.regulatory.nds.TemperatureRange
+ import com.lz.model.structural.MaterialGrade
+ import com.lz.model.structural.SectionProfile
+ import com.lz.model.structural.WoodGrade
+@@ -29,6 +31,16 @@ internal object NdsWetService {
+         WoodGrade.DENSE_STRUCTURAL_86, WoodGrade.DENSE_STRUCTURAL_72, WoodGrade.DENSE_STRUCTURAL_65
+     )
+ 
++    /** Table 2.3.3 stops at 150 F. */
++    const val MAX_TEMPERATURE_F = 150.0
++
++    /** Why the temperature input cannot be designed for, or null. */
++    fun temperatureBlockReason(f: NdsAdjustmentFactors): String? =
++        if (f.ct == 1.0 && (!f.temperatureF.isFinite() || f.temperatureF > MAX_TEMPERATURE_F))
++            "Design temperature ${f.temperatureF} F is above 150 F: NDS Table 2.3.3 (temperature factor Ct) stops " +
++                "at 150 F, so wood design is blocked above it."
++        else null
++
+     /** Why wet service cannot be designed for this material, or null. */
+     fun blockReason(material: MaterialGrade.Wood): String? =
+         if (!material.species.isGlulam && material.grade in DENSE)
+@@ -45,6 +57,13 @@ internal object NdsWetService {
+         material: MaterialGrade.Wood,
+         profile: SectionProfile,
+         isGlulam: Boolean
++    ): NdsAdjustmentFactors = withTemperature(resolveMoisture(f, material, profile, isGlulam))
++
++    private fun resolveMoisture(
++        f: NdsAdjustmentFactors,
++        material: MaterialGrade.Wood,
++        profile: SectionProfile,
++        isGlulam: Boolean
+     ): NdsAdjustmentFactors {
+         if (!f.isWet) {
+             return f.copy(moisture = MoistureCondition.DRY, cm = 1.0,
+@@ -68,6 +87,25 @@ internal object NdsWetService {
+     }
+ }
+ 
++/**
++ * [f] with the per-property temperature factors Ct filled in (NDS Table 2.3.3, identical in the
++ * 2015 and 2018 texts): T <= 100 F: 1.0; 100 < T <= 125 F: Ft, E, Emin 0.9, and Fb, Fv, Fc, Fc-perp
++ * 0.8 dry / 0.7 wet; 125 < T <= 150 F: Ft, E, Emin 0.9, and Fb, Fv, Fc, Fc-perp 0.7 dry / 0.5 wet.
++ * A legacy single Ct other than 1.0 is applied to every property, as before.
++ */
++private fun withTemperature(f: NdsAdjustmentFactors): NdsAdjustmentFactors {
++    if (f.ct != 1.0) return f.copy(ctFb = f.ct, ctFt = f.ct, ctFv = f.ct, ctFcPerp = f.ct, ctFc = f.ct, ctE = f.ct)
++    NdsWetService.temperatureBlockReason(f)?.let { throw CodeDataBlockedException(it) }
++    val range = when {
++        f.temperatureF <= 100.0 -> TemperatureRange.T_100_OR_LESS
++        f.temperatureF <= 125.0 -> TemperatureRange.T_101_TO_125
++        else -> TemperatureRange.T_126_TO_150
++    }
++    val t = NdsVersionRegistry.getTemperatureFactors(range, f.isWet)
++    return f.copy(ctFb = t.ctBending, ctFt = t.ctTension, ctFv = t.ctBending, ctFcPerp = t.ctCompPerp,
++        ctFc = t.ctBending, ctE = t.ctModulus)
++}
++
+ /**
+  * The modulus of elasticity for deflection: the edition's tabulated E for this member
+  * x CM x Ct x Ci (NDS E' = E CM Ct Ci; wet service lowers E by 0.9 / 0.833). CD does not
+@@ -81,5 +119,5 @@ fun ndsDeflectionModulusPsi(
+ ): Double {
+     val dm = resolveDesignMaterial(material, profile, edition)
+     val f = NdsWetService.resolve(factors, dm, profile, material.species.isGlulam)
+-    return dm.modulusOfElasticity.inPsi * f.cmE * f.ct * f.ci
++    return dm.modulusOfElasticity.inPsi * f.cmE * f.ctE * f.ci
+ }
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index d03031a..0789398 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -243,7 +243,9 @@ class NdsWoodCapacityCalculator(
+                 if (!f.isWet) "1.00 (dry service)"
+                 else "wet: Fb ${fmt(f.cmFb, 3)}, Ft ${fmt(f.cmFt, 3)}, Fv ${fmt(f.cmFv, 3)}, Fc ${fmt(f.cmFc, 3)}, " +
+                     "Fc\u22a5 ${fmt(f.cmFcPerp, 3)}, E/Emin ${fmt(f.cmE, 3)}"),
+-            row("Ct", "Temperature", fmt(f.ct, 2)),
++            row("Ct", "Temperature factors by design value (T = ${fmt(f.temperatureF, 0)} F)",
++                if (f.ctFb == 1.0 && f.ctFt == 1.0 && f.ctE == 1.0) "1.00"
++                else "Fb/Fv/Fc ${fmt(f.ctFb, 2)}, Ft ${fmt(f.ctFt, 2)}, Fc\u22a5 ${fmt(f.ctFcPerp, 2)}, E/Emin ${fmt(f.ctE, 2)}"),
+             row("Ci", "Incising", fmt(f.ci, 2)),
+             row("Cr", "Repetitive member", fmt(f.cr, 2))
+         )
+@@ -561,7 +563,7 @@ class NdsWoodCapacityCalculator(
+                 if (methodology != DesignMethodology.LRFD)
+                     put("CD",       String.format(Locale.US, "%.2f", adjustmentFactors.cd))
+                 put("CM",           String.format(Locale.US, "%.2f", adjustmentFactors.cmFb))
+-                put("Ct",           String.format(Locale.US, "%.2f", adjustmentFactors.ct))
++                put("Ct",           String.format(Locale.US, "%.2f", adjustmentFactors.ctFb))
+                 put("Cr",           String.format(Locale.US, "%.2f", adjustmentFactors.cr))
+                 if (methodology == DesignMethodology.LRFD)
+                     put("Lambda", String.format(Locale.US, "%.2f", lambda))
+@@ -689,13 +691,13 @@ class NdsWoodCapacityCalculator(
+         )
+         traces += DesignEquationTrace(
+             symbolicEquation = "F*b = Fb x ${durSym} x CM x Ct x CF x Ci x Cr   (all factors except Cfu, CV, CL)",
+-            substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ct)} x " +
++            substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ctFb)} x " +
+                 "${fmt(cfStab, 3)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
+             result = fmt(stab.fStarB, 0),
+             units = "psi",
+             codeReference = "NDS 3.3.3.8",
+             variables = mapOf(
+-                "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct,
++                "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ctFb,
+                 "CF" to cfStab, "Ci" to f.ci, "Cr" to f.cr
+             )
+         )
+@@ -753,9 +755,9 @@ class NdsWoodCapacityCalculator(
+             val cv = computeCV(cvSpan)
+             // NDS 5.3.6: use lesser of CV and CL
+             val stabilityFactor = min(cl, cv)
+-            fbAdj = fb * f.cdBending * f.cmFb * f.ct * stabilityFactor * f.cfu * f.ci
+-            fStar = fb * f.cdBending * f.cmFb * f.ct * cv * f.cfu * f.ci
+-            fStarStar = fb * f.cdBending * f.cmFb * f.ct * cl * f.cfu * f.ci
++            fbAdj = fb * f.cdBending * f.cmFb * f.ctFb * stabilityFactor * f.cfu * f.ci
++            fStar = fb * f.cdBending * f.cmFb * f.ctFb * cv * f.cfu * f.ci
++            fStarStar = fb * f.cdBending * f.cmFb * f.ctFb * cl * f.cfu * f.ci
+             limitState = if (cv <= cl)
+                 "Bending — Volume Factor CV (NDS 5.3.6)"
+             else
+@@ -763,44 +765,44 @@ class NdsWoodCapacityCalculator(
+             adjTrace = DesignEquationTrace(
+                 symbolicEquation = "F'b = Fb x ${durSym} x CM x Ct x min(CL, CV) x Cfu x Ci",
+                 substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x " +
+-                    "${fmt(f.ct)} x min(${fmt(cl, 3)}, ${fmt(cv, 3)}) x ${fmt(f.cfu)} x ${fmt(f.ci)}",
++                    "${fmt(f.ctFb)} x min(${fmt(cl, 3)}, ${fmt(cv, 3)}) x ${fmt(f.cfu)} x ${fmt(f.ci)}",
+                 result = fmt(fbAdj, 0),
+                 units = "psi",
+                 codeReference = "NDS 5.3.2, 5.3.6",
+                 variables = mapOf(
+-                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct,
++                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ctFb,
+                     "CL" to cl, "CV" to cv, "Cfu" to f.cfu, "Ci" to f.ci
+                 )
+             )
+             fStarTrace = DesignEquationTrace(
+                 symbolicEquation = "F*b = Fb x ${durSym} x CM x Ct x CV x Cfu x Ci   (all factors except CL)",
+-                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ct)} x " +
++                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ctFb)} x " +
+                     "${fmt(cv, 3)} x ${fmt(f.cfu)} x ${fmt(f.ci)}",
+                 result = fmt(fStar, 0),
+                 units = "psi",
+                 codeReference = "NDS 3.9.1",
+                 variables = mapOf(
+-                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct,
++                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ctFb,
+                     "CV" to cv, "Cfu" to f.cfu, "Ci" to f.ci
+                 )
+             )
+             fStarStarTrace = DesignEquationTrace(
+                 symbolicEquation = "F**b = Fb x ${durSym} x CM x Ct x CL x Cfu x Ci   (all factors except CV)",
+-                substitutedEquation = "F**b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ct)} x " +
++                substitutedEquation = "F**b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ctFb)} x " +
+                     "${fmt(cl, 3)} x ${fmt(f.cfu)} x ${fmt(f.ci)}",
+                 result = fmt(fStarStar, 0),
+                 units = "psi",
+                 codeReference = "NDS 3.9.1",
+                 variables = mapOf(
+-                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct,
++                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ctFb,
+                     "CL" to cl, "Cfu" to f.cfu, "Ci" to f.ci
+                 )
+             )
+         } else {
+             // Sawn lumber / SCL: CF from adjustmentFactors (caller must set it)
+             val cfEffective = computeSawnCF(NdsCfProperty.BENDING)
+-            fbAdj = fb * f.cdBending * f.cmFb * f.ct * cl * cfEffective * f.cfu * f.ci * f.cr
+-            fStar = fb * f.cdBending * f.cmFb * f.ct * cfEffective * f.cfu * f.ci * f.cr
++            fbAdj = fb * f.cdBending * f.cmFb * f.ctFb * cl * cfEffective * f.cfu * f.ci * f.cr
++            fStar = fb * f.cdBending * f.cmFb * f.ctFb * cfEffective * f.cfu * f.ci * f.cr
+             fStarStar = fbAdj
+             limitState = if (cl < 1.0)
+                 "Bending — Beam Stability CL (NDS 3.3.3)"
+@@ -809,25 +811,25 @@ class NdsWoodCapacityCalculator(
+             adjTrace = DesignEquationTrace(
+                 symbolicEquation = "F'b = Fb x ${durSym} x CM x Ct x CL x CF x Cfu x Ci x Cr",
+                 substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x " +
+-                    "${fmt(f.ct)} x ${fmt(cl, 3)} x ${fmt(cfEffective, 3)} x ${fmt(f.cfu)} x " +
++                    "${fmt(f.ctFb)} x ${fmt(cl, 3)} x ${fmt(cfEffective, 3)} x ${fmt(f.cfu)} x " +
+                     "${fmt(f.ci)} x ${fmt(f.cr)}",
+                 result = fmt(fbAdj, 0),
+                 units = "psi",
+                 codeReference = "NDS 3.3.2, 3.3.3, Table 4A",
+                 variables = mapOf(
+-                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct, "CL" to cl,
++                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ctFb, "CL" to cl,
+                     "CF" to cfEffective, "Cfu" to f.cfu, "Ci" to f.ci, "Cr" to f.cr
+                 )
+             )
+             fStarTrace = DesignEquationTrace(
+                 symbolicEquation = "F*b = Fb x ${durSym} x CM x Ct x CF x Cfu x Ci x Cr   (all factors except CL)",
+-                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ct)} x " +
++                substitutedEquation = "F*b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ctFb)} x " +
+                     "${fmt(cfEffective, 3)} x ${fmt(f.cfu)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
+                 result = fmt(fStar, 0),
+                 units = "psi",
+                 codeReference = "NDS 3.9.1",
+                 variables = mapOf(
+-                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct,
++                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ctFb,
+                     "CF" to cfEffective, "Cfu" to f.cfu, "Ci" to f.ci, "Cr" to f.cr
+                 )
+             )
+@@ -904,34 +906,34 @@ class NdsWoodCapacityCalculator(
+                     unavailableReason = reason
+                 )
+             }
+-            fStarNoCl = fby * f.cdBending * f.cmFb * f.ct * cfu * f.ci
++            fStarNoCl = fby * f.cdBending * f.cmFb * f.ctFb * cfu * f.ci
+             fbAdj = fStarNoCl * cl
+             adjTrace = DesignEquationTrace(
+                 symbolicEquation = "F'by = Fby x ${durSym} x CM x Ct x CL x Cfu x Ci",
+-                substitutedEquation = "F'by = ${fmt(fby, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ct)} x " +
++                substitutedEquation = "F'by = ${fmt(fby, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ctFb)} x " +
+                     "$clLabel x ${fmt(cfu, 3)} x ${fmt(f.ci)}",
+                 result = fmt(fbAdj, 0),
+                 units = "psi",
+                 codeReference = "NDS 3.3.3.1, Table 5A (Fby, Cfu)",
+                 variables = mapOf(
+-                    "Fby" to fby, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct,
++                    "Fby" to fby, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ctFb,
+                     "CL" to cl, "Cfu" to cfu, "Ci" to f.ci
+                 )
+             )
+         } else {
+             val fb = designMaterial.referenceBending.inPsi
+             val cf = computeSawnCF(NdsCfProperty.BENDING)
+-            fStarNoCl = fb * f.cdBending * f.cmFb * f.ct * cf * cfu * f.ci * f.cr
++            fStarNoCl = fb * f.cdBending * f.cmFb * f.ctFb * cf * cfu * f.ci * f.cr
+             fbAdj = fStarNoCl * cl
+             adjTrace = DesignEquationTrace(
+                 symbolicEquation = "F'b = Fb x ${durSym} x CM x Ct x CL x CF x Cfu x Ci x Cr",
+-                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ct)} x " +
++                substitutedEquation = "F'b = ${fmt(fb, 0)} x ${fmt(f.cdBending)} x ${fmt(f.cmFb)} x ${fmt(f.ctFb)} x " +
+                     "$clLabel x ${fmt(cf, 3)} x ${fmt(cfu, 3)} x ${fmt(f.ci)} x ${fmt(f.cr)}",
+                 result = fmt(fbAdj, 0),
+                 units = "psi",
+                 codeReference = "NDS 3.3.3.1, 4.3.7, Table 4A (CF, Cfu)",
+                 variables = mapOf(
+-                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ct, "CL" to cl,
++                    "Fb" to fb, durSym to f.cdBending, "CM" to f.cmFb, "Ct" to f.ctFb, "CL" to cl,
+                     "CF" to cf, "Cfu" to cfu, "Ci" to f.ci, "Cr" to f.cr
+                 )
+             )
+@@ -1133,11 +1135,11 @@ class NdsWoodCapacityCalculator(
+         val fvTrace = DesignEquationTrace(
+             symbolicEquation = "F'v = Fv x ${durSym} x CM x Ct x Ci",
+             substitutedEquation = "F'v = ${fmt(fv, 0)} x ${fmt(f.cdShear)} x ${fmt(f.cmFv)} x " +
+-                "${fmt(f.ct)} x ${fmt(f.ci)}",
++                "${fmt(f.ctFv)} x ${fmt(f.ci)}",
+             result = fmt(fvAdj, 0),
+             units = "psi",
+             codeReference = "NDS 3.4.1",
+-            variables = mapOf("Fv" to fv, durSym to f.cdShear, "CM" to f.cmFv, "Ct" to f.ct, "Ci" to f.ci)
++            variables = mapOf("Fv" to fv, durSym to f.cdShear, "CM" to f.cmFv, "Ct" to f.ctFv, "Ci" to f.ci)
+         )
+ 
+         val vn = (2.0 / 3.0) * fvAdj * area
+@@ -1174,7 +1176,7 @@ class NdsWoodCapacityCalculator(
+         val f = adjustmentFactors
+ 
+         val cpResult = computeCPTraced(luStrong, luWeak)
+-        val fStarC = fc * f.cdCompression * f.cmFc * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
++        val fStarC = fc * f.cdCompression * f.cmFc * f.ctFc * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
+         val fcAdj = fStarC * cpResult.cp
+ 
+         val fcAdjTrace = DesignEquationTrace(
+@@ -1264,7 +1266,7 @@ class NdsWoodCapacityCalculator(
+         // F*c = Fc with all adjustments except CP
+         val f = adjustmentFactors
+         val fcStar    = designMaterial.referenceCompressionParallel.inPsi *
+-                f.cdCompression * f.cmFc * f.ct * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
++                f.cdCompression * f.cmFc * f.ctFc * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
+ 
+         if (fcStar <= 0.0) return CpResult(1.0, listOf(planeTrace, fceTrace))
+ 
+@@ -1308,12 +1310,12 @@ class NdsWoodCapacityCalculator(
+         val ftTrace = DesignEquationTrace(
+             symbolicEquation = "F't = Ft x ${durSym} x CM x Ct x CF x Ci",
+             substitutedEquation = "F't = ${fmt(ft, 0)} x ${fmt(f.cdTension)} x ${fmt(f.cmFt)} x " +
+-                "${fmt(f.ct)} x ${fmt(cf, 3)} x ${fmt(f.ci)}",
++                "${fmt(f.ctFt)} x ${fmt(cf, 3)} x ${fmt(f.ci)}",
+             result = fmt(ftAdj, 0),
+             units = "psi",
+             codeReference = "NDS 3.8.1, Table 4A",
+             variables = mapOf(
+-                "Ft" to ft, durSym to f.cdTension, "CM" to f.cmFt, "Ct" to f.ct, "CF" to cf, "Ci" to f.ci
++                "Ft" to ft, durSym to f.cdTension, "CM" to f.cmFt, "Ct" to f.ctFt, "CF" to cf, "Ci" to f.ci
+             )
+         )
+         val pn = ftAdj * area
+@@ -1342,7 +1344,7 @@ class NdsWoodCapacityCalculator(
+     /** F't = Ft x ${durSym} x CM x Ct x CF x Ci (psi) — shared by the tension capacity and NDS 3.9.1. */
+     private fun adjustedTensionStress(): Double {
+         val f = adjustmentFactors
+-        return designMaterial.referenceTensionParallel.inPsi * f.cdTension * f.cmFt * f.ct *
++        return designMaterial.referenceTensionParallel.inPsi * f.cdTension * f.cmFt * f.ctFt *
+             computeSawnCF(NdsCfProperty.TENSION) * f.ci
+     }
+ 
+diff --git a/core/solver/src/test/java/com/lz/solver/material/NdsWetServiceTest.kt b/core/solver/src/test/java/com/lz/solver/material/NdsWetServiceTest.kt
+index d8e4712..4a4e697 100644
+--- a/core/solver/src/test/java/com/lz/solver/material/NdsWetServiceTest.kt
++++ b/core/solver/src/test/java/com/lz/solver/material/NdsWetServiceTest.kt
+@@ -141,4 +141,61 @@ class NdsWetServiceTest {
+         // under NDS 2015 the 2015 table E is used
+         assertEquals(1_500_000.0 * 0.833, ndsDeflectionModulusPsi(m, glProfile, wet, NdsEdition.NDS_2015), 1e-6)
+     }
++
++    // ---------------- Ct follows temperature and moisture (Table 2.3.3) ----------------
++
++    private fun ct(t: Double, w: Boolean): NdsAdjustmentFactors {
++        val m = wood(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3)
++        val f = NdsAdjustmentFactors(temperatureF = t, moisture = if (w) MoistureCondition.WET else MoistureCondition.DRY)
++        return NdsWetService.resolve(f, m, glProfile, true)
++    }
++
++    @Test
++    fun `Ct table 2_3_3 by band, property and moisture`() {
++        // T <= 100 F: 1.0 everywhere, wet or dry (70 F default and the 100 F boundary)
++        for (t in listOf(70.0, 100.0)) for (w in listOf(false, true)) {
++            val r = ct(t, w)
++            listOf(r.ctFb, r.ctFt, r.ctFv, r.ctFcPerp, r.ctFc, r.ctE).forEach { assertEquals(1.0, it, 0.0) }
++        }
++        // 100 < T <= 125 F (110 and the 125 boundary): Ft, E 0.9; Fb, Fv, Fc, Fc-perp 0.8 dry / 0.7 wet
++        for (t in listOf(110.0, 125.0)) {
++            val d = ct(t, false); val w = ct(t, true)
++            assertEquals(0.9, d.ctFt, 0.0); assertEquals(0.9, d.ctE, 0.0); assertEquals(0.9, w.ctFt, 0.0); assertEquals(0.9, w.ctE, 0.0)
++            listOf(d.ctFb, d.ctFv, d.ctFc, d.ctFcPerp).forEach { assertEquals(0.8, it, 0.0) }
++            listOf(w.ctFb, w.ctFv, w.ctFc, w.ctFcPerp).forEach { assertEquals(0.7, it, 0.0) }
++        }
++        // 125 < T <= 150 F: Ft, E 0.9; others 0.7 dry / 0.5 wet
++        for (t in listOf(130.0, 150.0)) {
++            val d = ct(t, false); val w = ct(t, true)
++            assertEquals(0.9, d.ctFt, 0.0); assertEquals(0.9, w.ctE, 0.0)
++            listOf(d.ctFb, d.ctFv, d.ctFc, d.ctFcPerp).forEach { assertEquals(0.7, it, 0.0) }
++            listOf(w.ctFb, w.ctFv, w.ctFc, w.ctFcPerp).forEach { assertEquals(0.5, it, 0.0) }
++        }
++    }
++
++    @Test
++    fun `above 150 F is blocked and a legacy Ct still applies to every property`() {
++        val m = wood(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3)
++        val hot = NdsAdjustmentFactors(temperatureF = 151.0)
++        assertNotNull(NdsCodeData.blockReason(NdsEdition.NDS_2018, m, hot))
++        assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2018, m, NdsAdjustmentFactors(temperatureF = 150.0)))
++        var thrown = false
++        try { NdsWetService.resolve(hot, m, glProfile, true) } catch (e: CodeDataBlockedException) { thrown = true }
++        assertTrue(thrown)
++        val legacy = NdsWetService.resolve(NdsAdjustmentFactors(ct = 0.8), m, glProfile, true)
++        listOf(legacy.ctFb, legacy.ctFt, legacy.ctFv, legacy.ctFcPerp, legacy.ctFc, legacy.ctE).forEach { assertEquals(0.8, it, 0.0) }
++    }
++
++    @Test
++    fun `hot service lowers capacities and deflection E by their own Ct`() {
++        val m = wood(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3)
++        // 110 F dry: Fb' = 1600 x 0.8 x CV(0.964961 at L = 30 ft); Vn = 2/3 x 265 x 0.8 x 5.125 x 12
++        val f = NdsAdjustmentFactors(temperatureF = 110.0)
++        val r = NdsWoodCapacityCalculator(glProfile, m, f).evaluateDetailed(demand(30.0), DesignMethodology.ASD)
++        assertEquals(1600.0 * 0.8 * 0.9649610951198176 * 123.0, r.momentCheck.capacity.lbIn, 1e-3)
++        assertEquals(2.0 / 3.0 * 265.0 * 0.8 * 5.125 * 12.0, r.shearCheck.capacity.pounds, 1e-6)
++        // E for deflection 110 F wet: 1.5 million x CM 0.833 x Ct 0.9
++        assertEquals(1_500_000.0 * 0.833 * 0.9,
++            ndsDeflectionModulusPsi(m, glProfile, NdsAdjustmentFactors(temperatureF = 110.0, moisture = MoistureCondition.WET), NdsEdition.NDS_2018), 1e-6)
++    }
+ }
+diff --git a/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt b/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt
+index 2cc17a4..f0908c1 100644
+--- a/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt
++++ b/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt
+@@ -62,7 +62,8 @@ fun AdjustmentFactorsEditDialog(
+     var moisture by remember(currentFactors) {
+         mutableStateOf(if (currentFactors.isWet) MoistureCondition.WET else MoistureCondition.DRY)
+     }
+-    var ct by remember(currentFactors) { mutableStateOf(currentFactors.ct.toString()) }
++    var temperature by remember(currentFactors) { mutableStateOf(currentFactors.temperatureF.toString()) }
++    val temperatureValid = temperature.toDoubleOrNull()?.let { it.isFinite() && it >= -60.0 && it <= 150.0 } == true
+     var cl by remember(currentFactors) { mutableStateOf(currentFactors.cl.toString()) }
+     var cf by remember(currentFactors) { mutableStateOf(currentFactors.cf.toString()) }
+     var cfu by remember(currentFactors) { mutableStateOf(currentFactors.cfu.toString()) }
+@@ -93,14 +94,6 @@ fun AdjustmentFactorsEditDialog(
+                 "combination.",
+             onValueChange = { cd = it }
+         ),
+-        FactorField(
+-            label = "Temperature Factor",
+-            symbol = "Ct",
+-            description = "NDS Table 2.3.3. Reduces design values for sustained exposure " +
+-                "above 100°F. Typical: 1.0 (T ≤ 100°F, the overwhelming majority of " +
+-                "cases), 0.8–0.9 (100°F < T ≤ 125°F), 0.5–0.7 (125°F < T ≤ 150°F).",
+-            onValueChange = { ct = it }
+-        ),
+         FactorField(
+             label = "Beam Stability Factor",
+             symbol = "CL",
+@@ -205,7 +198,6 @@ fun AdjustmentFactorsEditDialog(
+                         // snapping back.
+                         val rawText = when (field.symbol) {
+                             "CD" -> cd
+-                            "Ct" -> ct
+                             "CL" -> cl
+                             "CF" -> cf
+                             "Cfu" -> cfu
+@@ -272,6 +264,22 @@ fun AdjustmentFactorsEditDialog(
+                         )
+                     }
+                 }
++                OutlinedTextField(
++                    value = temperature,
++                    onValueChange = { temperature = it },
++                    label = { Text("Design temperature, \u00b0F (temperature factor Ct)") },
++                    isError = !temperatureValid,
++                    singleLine = true,
++                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
++                    modifier = Modifier.fillMaxWidth()
++                )
++                Text(
++                    "NDS Table 2.3.3. Sustained exposure above 100\u00b0F lowers the design values; the factor " +
++                        "depends on the property and on the moisture condition above (e.g. 100\u2013125\u00b0F: Ft, E, " +
++                        "Emin 0.9; Fb, Fv, Fc, Fc\u22a5 0.8 dry / 0.7 wet). The table stops at 150\u00b0F.",
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant
++                )
+                 HorizontalDivider()
+                 Text(
+                     "Load duration assumptions",
+@@ -336,14 +344,15 @@ fun AdjustmentFactorsEditDialog(
+             }
+         },
+         confirmButton = {
+-            TextButton(enabled = assumptionsValid, onClick = {
++            TextButton(enabled = assumptionsValid && temperatureValid, onClick = {
+                 onConfirm(
+                     NdsAdjustmentFactors(
+                         cd = if (autoCd) 1.0 else (cd.toDoubleOrNull() ?: 1.0),
+                         loadDurationFromCombination = autoCd,
+                         moisture = moisture,
+                         cm = 1.0,
+-                        ct = ct.toDoubleOrNull() ?: 1.0,
++                        temperatureF = temperature.toDouble(),
++                        ct = 1.0,
+                         cl = cl.toDoubleOrNull() ?: 1.0,
+                         cf = cf.toDoubleOrNull() ?: 1.0,
+                         cfu = cfu.toDoubleOrNull() ?: 1.0,
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 80bd1c3..a4d91b2 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -261,7 +261,7 @@ class BeamViewModel @Inject constructor(
+         when (val mat = activeMaterialGrade) {
+             is MaterialGrade.Steel -> AiscSteelCapacityCalculator(section, mat, memberIsStrongAxis = isStrongAxis)
+             is MaterialGrade.Wood  ->
+-                if (NdsCodeData.blockReason(activeNdsEdition ?: NdsEdition.NDS_2018, mat, ndsAdjustmentFactors.isWet) != null) null
++                if (NdsCodeData.blockReason(activeNdsEdition ?: NdsEdition.NDS_2018, mat, ndsAdjustmentFactors) != null) null
+                 else NdsWoodCapacityCalculator(
+                     section, mat,
+                     adjustmentFactors = ndsAdjustmentFactors,
+@@ -840,7 +840,7 @@ class BeamViewModel @Inject constructor(
+                     val grade = activeMaterialGrade
+                     val sec = selectedSection
+                     if (grade is MaterialGrade.Wood && sec != null) {
+-                        NdsCodeData.requireUsable(activeNdsEdition ?: NdsEdition.NDS_2018, grade, ndsAdjustmentFactors.isWet)
++                        NdsCodeData.requireUsable(activeNdsEdition ?: NdsEdition.NDS_2018, grade, ndsAdjustmentFactors)
+                         ndsDeflectionModulusPsi(grade, sec, ndsAdjustmentFactors, activeNdsEdition ?: NdsEdition.NDS_2018)
+                     } else {
+                         grade?.modulusOfElasticity?.psi ?: selectedMaterial.defaultModulusOfElasticityPsi
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+index 00dff32..b1337b0 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisSolver.kt
+@@ -149,7 +149,7 @@ object BeamAnalysisSolver {
+             )
+             is MaterialGrade.Wood  -> {
+                 // Hard block: an edition without sourced design values is not designed at all.
+-                NdsCodeData.requireUsable(resolveNdsEdition(config) ?: NdsEdition.NDS_2018, material, config.ndsAdjustmentFactors.isWet)
++                NdsCodeData.requireUsable(resolveNdsEdition(config) ?: NdsEdition.NDS_2018, material, config.ndsAdjustmentFactors)
+                 NdsWoodCapacityCalculator(
+                 profile, material,
+                 adjustmentFactors = config.ndsAdjustmentFactors,

@@ -257,7 +257,7 @@ internal fun computeNdsBeamStability(
 
     val fStarB = designMaterial.referenceBending.inPsi *
             adjustmentFactors.cdBending * adjustmentFactors.cmFb *
-            adjustmentFactors.ct *
+            adjustmentFactors.ctFb *
             resolveSawnCf(adjustmentFactors, designMaterial, profile, NdsCfProperty.BENDING) *
             adjustmentFactors.ci *
             // The repetitive member factor is a sawn-lumber factor; it does not apply to glulam.
@@ -319,7 +319,7 @@ internal fun woodAdjustedEmin(
     material: MaterialGrade.Wood,
     adjustmentFactors: NdsAdjustmentFactors,
     edition: NdsEdition = NdsEdition.NDS_2018
-): Double = woodEmin(material, edition) * adjustmentFactors.cmE * adjustmentFactors.ct * adjustmentFactors.ci *
+): Double = woodEmin(material, edition) * adjustmentFactors.cmE * adjustmentFactors.ctE * adjustmentFactors.ci *
     adjustmentFactors.formatEmin   // 1.0 for ASD; KF x phi-s for LRFD (NDS 2.3.5, 2.3.6)
 
 /**
