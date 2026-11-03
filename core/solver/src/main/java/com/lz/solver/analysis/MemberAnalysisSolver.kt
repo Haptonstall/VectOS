@@ -152,6 +152,37 @@ class ConstantSectionProvider(
     override fun getJ(x: Double): Double = j
 }
 
+/**
+ * Explicit shear deflection added on top of the Euler-Bernoulli FEM deflection.
+ *
+ * The shear slope is V/S with S = G*Av, so the shear deflection is the integral of V/S,
+ * i.e. (Mv(x) - chord(x)) / S in this solver's moment convention (dMz/dx = Vy; sagging is
+ * negative), where Mv is the moment with applied point moments removed (they jump M but do
+ * not add shear) and chord is the straight line through Mv at the vertically restrained
+ * nodes (zero shear deflection there). Beyond the first / last restrained node the chord is
+ * the constant Mv of that node (overhang). Exact for determinate members; for indeterminate
+ * members the small shear effect on the moment distribution is not fed back into the FEM.
+ */
+internal class ShearDeflectionPost(
+    private val shearStiffness: Double,
+    private val supportX: DoubleArray,
+    private val supportMv: DoubleArray
+) {
+    fun deflection(xGlobal: Double, mv: Double): Double {
+        if (shearStiffness <= 0.0 || supportX.isEmpty()) return 0.0
+        val chord = when {
+            xGlobal <= supportX.first() -> supportMv.first()
+            xGlobal >= supportX.last() -> supportMv.last()
+            else -> {
+                val k = (1 until supportX.size).first { xGlobal <= supportX[it] }
+                val x0 = supportX[k - 1]; val x1 = supportX[k]
+                supportMv[k - 1] + (supportMv[k] - supportMv[k - 1]) * (xGlobal - x0) / (x1 - x0)
+            }
+        }
+        return (mv - chord) / shearStiffness
+    }
+}
+
 data class SpanContext(
     val span: SpanGeometry,
     val loads: List<Load>,
@@ -647,6 +678,7 @@ object MemberAnalysisSolver {
         val structuralResult = solver.solve(system)
 
         // 6. Post-Process Spans
+        val shearPost = config.shearDeflection?.let { buildShearDeflectionPost(it, config, spanContexts, structuralResult) }
         var globalXOffset = 0.0
 
         val spanResults = spanContexts.map { ctx ->
@@ -654,7 +686,7 @@ object MemberAnalysisSolver {
                 .map { it - globalXOffset }
 
             val result = analyzeSpan(ctx, structuralResult, globalXOffset, config.braceState, spanStations,
-                Double.POSITIVE_INFINITY)
+                Double.POSITIVE_INFINITY, shearPost)
             globalXOffset += ctx.lengthInches
             result
         }
@@ -1032,7 +1064,8 @@ object MemberAnalysisSolver {
         globalXOffset: Double,
         braceState: List<NormalizedBraceState>,
         sortedStations: List<Double>,
-        allowableDeflectionInches: Double
+        allowableDeflectionInches: Double,
+        shearPost: ShearDeflectionPost? = null
     ): SpanAnalysisResult {
         val elForces = result.elementEndForces[ctx.index] ?: List(12) { 0.0 }
 
@@ -1092,7 +1125,8 @@ object MemberAnalysisSolver {
             torquePoints.add(AnalysisPoint(xGlobal.inches, internal.tx))
 
             val vp = computeParticularDeflection(ctx, xLocal)
-            val vTotal = getHomogeneousDeflection(xLocal) + vp
+            val vShear = shearPost?.deflection(xGlobal, internal.mz - pointMomentSum(ctx, xLocal)) ?: 0.0
+            val vTotal = getHomogeneousDeflection(xLocal) + vp + vShear
             deflectionPoints.add(AnalysisPoint(xGlobal.inches, vTotal))
 
             stationDemands.add(
@@ -1167,6 +1201,56 @@ object MemberAnalysisSolver {
             stationDemands = stationDemands,
             utilizationDiagram = emptyList()
         )
+    }
+
+    /** Sum of applied point moments at or before [x], in the same sign as the mz of [computeInternalForces]. */
+    private fun pointMomentSum(ctx: SpanContext, x: Double): Double =
+        ctx.loads.filterIsInstance<Load.PointMoment>()
+            .filter { x >= it.locationStart.inches }
+            .sumOf { (if (it.direction == LoadDirection.MOMENT_CLOCKWISE) 1.0 else -1.0) * it.value.inLbIn }
+
+    private fun spanForces(result: StructuralResult, index: Int): SpanForces {
+        val el = result.elementEndForces[index] ?: List(12) { 0.0 }
+        return SpanForces(
+            vyStart = -el[1], mzStart = el[5], vyEnd = el[7], mzEnd = el[11],
+            axialStart = el[0], axialEnd = -el[6],
+            vzStart = -el[2], myStart = -el[4], vzEnd = el[8], myEnd = el[10],
+            txStart = el[3], txEnd = -el[9]
+        )
+    }
+
+    private fun buildShearDeflectionPost(
+        input: ShearDeflectionInput,
+        config: AnalysisConfig,
+        spanContexts: List<SpanContext>,
+        result: StructuralResult
+    ): ShearDeflectionPost? {
+        val stiffness = input.shearModulus.psi * input.effectiveShearArea.inIn2
+        if (stiffness <= 0.0 || spanContexts.isEmpty()) return null
+
+        // Node k sits at the start of span k (k = 0..n-1) and at the end of the last span.
+        val nodeIdByIndex = mutableMapOf<Int, java.util.UUID>()
+        config.member.spans.forEachIndexed { idx, span ->
+            nodeIdByIndex[idx] = span.startNodeId
+            nodeIdByIndex[idx + 1] = span.endNodeId
+        }
+        val xs = ArrayList<Double>(); val ms = ArrayList<Double>()
+        var x = 0.0
+        for (k in 0..spanContexts.size) {
+            val restrained = config.member.nodes.firstOrNull { it.id == nodeIdByIndex[k] }
+                ?.boundaryCondition?.uy
+                ?.let { it.type == ConstraintType.FIXED || (it.type == ConstraintType.SPRING && (it.stiffness ?: 0.0) > 0.0) }
+                ?: false
+            if (restrained) {
+                val ctx = spanContexts[minOf(k, spanContexts.size - 1)]
+                val local = if (k < spanContexts.size) 0.0 else ctx.lengthInches
+                val mz = computeInternalForces(ctx, spanForces(result, ctx.index), local).mz
+                xs.add(x); ms.add(mz - pointMomentSum(ctx, local))
+            }
+            if (k < spanContexts.size) x += spanContexts[k].lengthInches
+        }
+        if (xs.isEmpty()) return null
+        return ShearDeflectionPost(stiffness, xs.toDoubleArray(), ms.toDoubleArray())
     }
 
     private fun computeInternalForces(ctx: SpanContext, endForces: SpanForces, x: Double): InternalForces {

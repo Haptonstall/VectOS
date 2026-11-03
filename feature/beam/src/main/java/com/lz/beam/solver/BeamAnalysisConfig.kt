@@ -16,6 +16,7 @@ import com.lz.model.units.MomentOfInertia
 import com.lz.model.units.Pressure
 import com.lz.model.units.TorsionalConstant
 import com.lz.solver.analysis.AnalysisConfig
+import com.lz.solver.analysis.ShearDeflectionInput
 
 /**
  * Configuration for a beam analysis run.
@@ -60,7 +61,13 @@ data class BeamAnalysisConfig(
      * every factor either unapplied or auto-calculated by the solver
      * (CL/CF/CP).
      */
-    val ndsAdjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors()
+    val ndsAdjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors(),
+    /**
+     * Explicit shear deflection (NDS 3.5.1, App. F.3.2). Null = none: [modulusOfElasticity]
+     * is then an apparent E that already includes shear (sawn lumber, glulam tables). Set
+     * only with a true (shear-free) E, e.g. engineered wood, to avoid counting shear twice.
+     */
+    val shearDeflection: ShearDeflectionInput? = null
 ) {
     /**
      * All loads across all load cases.
@@ -78,6 +85,7 @@ data class BeamAnalysisConfig(
         crossSectionalArea = crossSectionalArea,
         shearModulus = shearModulus,
         torsionalConstant = torsionalConstant,
-        braceState = braceState
+        braceState = braceState,
+        shearDeflection = shearDeflection
     )
 }
