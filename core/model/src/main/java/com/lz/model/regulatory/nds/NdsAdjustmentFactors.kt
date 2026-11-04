@@ -43,6 +43,31 @@ data class NdsLoadDurationAssumptions(
 }
 
 /**
+ * Net-section ratios for members with bolt holes, notches, split-ring grooves or other
+ * removed material (NDS 3.1.2). [areaRatio] = An / Ag; [modulusRatio] = Sn / S. They are
+ * applied to the tension check (NDS 3.8.1) and to the combined bending and axial tension
+ * check (NDS 3.9.1) only; 1.0 means the gross section (no reduction), which is an
+ * assumption the output states. One ratio per quantity covers both bending axes.
+ */
+@Serializable
+data class NdsNetSection(
+    val areaRatio: Double = 1.0,
+    val modulusRatio: Double = 1.0
+) {
+    val isValid: Boolean
+        get() = areaRatio.isFinite() && areaRatio > 0.0 && areaRatio <= 1.0 &&
+            modulusRatio.isFinite() && modulusRatio > 0.0 && modulusRatio <= 1.0
+
+    /** True when no reduction is entered (the gross section is used). */
+    val isGross: Boolean get() = areaRatio == 1.0 && modulusRatio == 1.0
+
+    fun blockReason(): String? =
+        if (isValid) null
+        else "Net-section ratios must be greater than 0 and not more than 1 (An/Ag = $areaRatio, " +
+            "Sn/S = $modulusRatio): the net section of NDS 3.1.2 cannot exceed the gross section."
+}
+
+/**
  * NDS Table 4.3.1 adjustment factors applied to reference design values.
  * F' = F * CD * CM * Ct * CL * CF * Cfu * Ci * Cr
  * All factors default to 1.0 (no adjustment) until explicitly set.
@@ -102,6 +127,8 @@ data class NdsAdjustmentFactors(
      * 2.3.2 note 2, 2.3.4, Table N3 note 1).
      */
     val treatedMember: Boolean = false,
+    /** Net-section ratios for tension and combined tension + bending (NDS 3.1.2, 3.8.1, 3.9.1). */
+    val netSection: NdsNetSection = NdsNetSection(),
     // --- LRFD only: set by the wood calculator, not by the user -------------
     // For LRFD the reference design values are multiplied by KF x phi x lambda
     // (Fb, Ft, Fv, Fc) and KF x phi-s (Emin) BEFORE the stability factors are

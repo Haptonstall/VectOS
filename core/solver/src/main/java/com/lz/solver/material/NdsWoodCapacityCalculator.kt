@@ -227,7 +227,13 @@ class NdsWoodCapacityCalculator(
             row("Sx", "Section modulus, strong axis", "${fmt(profile.propertiesStrongAxis.s.inIn3, 3)} in\u00b3"),
             row("Sy", "Section modulus, weak axis", "${fmt(profile.propertiesWeakAxis.s.inIn3, 3)} in\u00b3"),
             row("Ix", "Moment of inertia, strong axis", "${fmt(profile.propertiesStrongAxis.i.inIn4, 3)} in\u2074"),
-            row("Iy", "Moment of inertia, weak axis", "${fmt(profile.propertiesWeakAxis.i.inIn4, 3)} in\u2074")
+            row("Iy", "Moment of inertia, weak axis", "${fmt(profile.propertiesWeakAxis.i.inIn4, 3)} in\u2074"),
+            row("An/Ag", "Net / gross area (tension, tension + bending)" +
+                (if (adjustmentFactors.netSection.areaRatio == 1.0) " \u2014 ASSUMED default: gross section" else ""),
+                fmt(adjustmentFactors.netSection.areaRatio, 3)),
+            row("Sn/S", "Net / gross section modulus (tension + bending)" +
+                (if (adjustmentFactors.netSection.modulusRatio == 1.0) " \u2014 ASSUMED default: gross section" else ""),
+                fmt(adjustmentFactors.netSection.modulusRatio, 3))
         ))
 
         val strongAx = bendingAxis(true, u)
@@ -1305,7 +1311,9 @@ class NdsWoodCapacityCalculator(
         val f = adjustmentFactors
         val cf = computeSawnCF(NdsCfProperty.TENSION)
         val ftAdj = adjustedTensionStress()
-        val area = profile.area.inIn2
+        val ns = f.netSection
+        val gross = profile.area.inIn2
+        val area = gross * ns.areaRatio          // An (NDS 3.1.2.1, 3.8.1)
 
         val ftTrace = DesignEquationTrace(
             symbolicEquation = "F't = Ft x ${durSym} x CM x Ct x CF x Ci",
@@ -1320,12 +1328,13 @@ class NdsWoodCapacityCalculator(
         )
         val pn = ftAdj * area
         val pnTrace = DesignEquationTrace(
-            symbolicEquation = "Pn = F't x A",
-            substitutedEquation = "Pn = ${fmt(ftAdj, 0)} x ${fmt(area, 2)}",
+            symbolicEquation = "Pn = F't x An   (An = (An/Ag) x A)",
+            substitutedEquation = "Pn = ${fmt(ftAdj, 0)} x ${fmt(area, 2)}  [An/Ag = ${fmt(ns.areaRatio, 3)}" +
+                (if (ns.areaRatio == 1.0) ", ASSUMED: gross section, no net-section reduction entered" else "") + "]",
             result = "${fmt(pn, 0)} lb (${kips(pn)} kips)",
             units = "lb",
-            codeReference = "NDS 3.8",
-            variables = mapOf("F't" to ftAdj, "A" to area)
+            codeReference = "NDS 3.8.1, 3.1.2.1",
+            variables = mapOf("F't" to ftAdj, "A" to gross, "An/Ag" to ns.areaRatio, "An" to area)
         )
 
         return LimitStateResult(pn, "Tension (NDS 3.8)", listOf(ftTrace, pnTrace))
@@ -1409,46 +1418,62 @@ class NdsWoodCapacityCalculator(
         }
     }
 
-    private fun stressTrace(name: String, moment: Double, axis: BendingAxis, stress: Double) =
+    /** [snOverS] = Sn/S (1.0 = gross section); used only by the tension + bending check. */
+    private fun stressTrace(name: String, moment: Double, axis: BendingAxis, stress: Double, snOverS: Double = 1.0) =
         DesignEquationTrace(
-            symbolicEquation = "$name = M / ${if (axis.strong) "Sx" else "Sy"}",
-            substitutedEquation = "$name = ${fmt(moment, 0)} / ${fmt(axis.s, 2)}",
+            symbolicEquation = if (snOverS == 1.0) "$name = M / ${if (axis.strong) "Sx" else "Sy"}"
+                else "$name = M / (${if (axis.strong) "Sx" else "Sy"} x Sn/S)",
+            substitutedEquation = if (snOverS == 1.0) "$name = ${fmt(moment, 0)} / ${fmt(axis.s, 2)}"
+                else "$name = ${fmt(moment, 0)} / (${fmt(axis.s, 2)} x ${fmt(snOverS, 3)})",
             result = fmt(stress, 1),
             units = "psi",
-            codeReference = "NDS 3.9",
-            variables = mapOf("M" to moment, if (axis.strong) "Sx" to axis.s else "Sy" to axis.s)
+            codeReference = if (snOverS == 1.0) "NDS 3.9" else "NDS 3.9, 3.1.2.1",
+            variables = mapOf("M" to moment, if (axis.strong) "Sx" to axis.s else "Sy" to axis.s, "Sn/S" to snOverS)
         )
 
     /** NDS 3.9.1 — bending and axial tension. */
     private fun combinedTension(
         axialLb: Double, area: Double, mStrong: Double, mWeak: Double,
-        fb1: Double, fb2: Double, strongAx: BendingAxis, weakAx: BendingAxis,
+        fb1Gross: Double, fb2Gross: Double, strongAx: BendingAxis, weakAx: BendingAxis,
         kBend: Double, kTens: Double, notes: List<String>
     ): CombinedStressCheck {
         val inf = Double.POSITIVE_INFINITY
-        val ft = abs(axialLb) / area
+        val ns = adjustmentFactors.netSection
+        val an = area * ns.areaRatio                 // net area, NDS 3.1.2.1
+        val ft = abs(axialLb) / an
         val ftAdj = adjustedTensionStress() * kTens
+        val fb1 = fb1Gross / ns.modulusRatio         // fb = M / Sn
+        val fb2 = fb2Gross / ns.modulusRatio
         val allNotes = notes.toMutableList()
+        allNotes += if (ns.isGross)
+            "ASSUMED: gross section (An/Ag = 1.0, Sn/S = 1.0). Enter net-section ratios if bolt holes, notches or " +
+                "connector grooves reduce the section at the critical location (NDS 3.1.2). Net section is applied " +
+                "to tension and to this combined check only, not to bending-only, shear or compression checks."
+        else
+            "Net section (user input): An/Ag = ${fmt(ns.areaRatio, 3)}, Sn/S = ${fmt(ns.modulusRatio, 3)}; the same " +
+                "Sn/S is used for both bending axes. Applied to tension and to this combined check only, not to " +
+                "bending-only, shear or compression checks. Eccentricity of load at the critical net section " +
+                "(NDS 3.1.2.1) is not evaluated."
         val traces = mutableListOf<DesignEquationTrace>()
         val equations = mutableListOf<InteractionEquationResult>()
 
         traces += DesignEquationTrace(
-            symbolicEquation = "ft = T / A",
-            substitutedEquation = "ft = ${fmt(abs(axialLb), 0)} / ${fmt(area, 2)}",
+            symbolicEquation = "ft = T / An",
+            substitutedEquation = "ft = ${fmt(abs(axialLb), 0)} / ${fmt(an, 2)}",
             result = fmt(ft, 1),
             units = "psi",
-            codeReference = "NDS 3.9.1",
-            variables = mapOf("T" to abs(axialLb), "A" to area)
+            codeReference = "NDS 3.9.1, 3.8.1",
+            variables = mapOf("T" to abs(axialLb), "An" to an)
         )
         calculateTension().traces.firstOrNull()?.let { traces += it }
 
         if (fb1 > 0.0) {
-            traces += stressTrace("fb1", mStrong, strongAx, fb1)
+            traces += stressTrace("fb1", mStrong, strongAx, fb1, ns.modulusRatio)
             strongAx.fStarTrace?.let { traces += it }
             strongAx.fStarStarTrace?.let { traces += it }
         }
         if (fb2 > 0.0) {
-            traces += stressTrace("fb2", mWeak, weakAx, fb2)
+            traces += stressTrace("fb2", mWeak, weakAx, fb2, ns.modulusRatio)
             if (!weakAx.available) allNotes += weakAx.limitState
             weakAx.fStarTrace?.let { traces += it }
         }

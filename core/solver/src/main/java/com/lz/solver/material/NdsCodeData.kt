@@ -79,6 +79,7 @@ object NdsCodeData {
         material: com.lz.model.structural.MaterialGrade.Wood,
         factors: com.lz.model.regulatory.nds.NdsAdjustmentFactors
     ): String? = blockReason(edition, material, factors.isWet) ?: NdsWetService.temperatureBlockReason(factors)
+        ?: factors.netSection.blockReason()
 
     fun requireUsable(
         edition: NdsEdition,

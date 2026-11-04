@@ -96,6 +96,7 @@ internal object NdsWetService {
 private fun withTemperature(f: NdsAdjustmentFactors): NdsAdjustmentFactors {
     if (f.ct != 1.0) return f.copy(ctFb = f.ct, ctFt = f.ct, ctFv = f.ct, ctFcPerp = f.ct, ctFc = f.ct, ctE = f.ct)
     NdsWetService.temperatureBlockReason(f)?.let { throw CodeDataBlockedException(it) }
+    f.netSection.blockReason()?.let { throw CodeDataBlockedException(it) }
     val range = when {
         f.temperatureF <= 100.0 -> TemperatureRange.T_100_OR_LESS
         f.temperatureF <= 125.0 -> TemperatureRange.T_101_TO_125

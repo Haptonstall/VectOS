@@ -30,6 +30,7 @@ import com.lz.model.regulatory.nds.LiveLoadKind
 import com.lz.model.regulatory.nds.MoistureCondition
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
 import com.lz.model.regulatory.nds.NdsLoadDurationAssumptions
+import com.lz.model.regulatory.nds.NdsNetSection
 
 /**
  * One editable NDS adjustment factor. Description text is always visible
@@ -64,6 +65,10 @@ fun AdjustmentFactorsEditDialog(
     }
     var temperature by remember(currentFactors) { mutableStateOf(currentFactors.temperatureF.toString()) }
     val temperatureValid = temperature.toDoubleOrNull()?.let { it.isFinite() && it >= -60.0 && it <= 150.0 } == true
+    var netAreaRatio by remember(currentFactors) { mutableStateOf(currentFactors.netSection.areaRatio.toString()) }
+    var netModulusRatio by remember(currentFactors) { mutableStateOf(currentFactors.netSection.modulusRatio.toString()) }
+    val netAreaValid = netAreaRatio.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 && it <= 1.0 } == true
+    val netModulusValid = netModulusRatio.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 && it <= 1.0 } == true
     var cl by remember(currentFactors) { mutableStateOf(currentFactors.cl.toString()) }
     var cf by remember(currentFactors) { mutableStateOf(currentFactors.cf.toString()) }
     var cfu by remember(currentFactors) { mutableStateOf(currentFactors.cfu.toString()) }
@@ -282,6 +287,37 @@ fun AdjustmentFactorsEditDialog(
                 )
                 HorizontalDivider()
                 Text(
+                    "Net section (tension and tension + bending)",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                OutlinedTextField(
+                    value = netAreaRatio,
+                    onValueChange = { netAreaRatio = it },
+                    label = { Text("Net / gross area, An/Ag") },
+                    isError = !netAreaValid,
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = netModulusRatio,
+                    onValueChange = { netModulusRatio = it },
+                    label = { Text("Net / gross section modulus, Sn/S") },
+                    isError = !netModulusValid,
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "NDS 3.1.2, 3.8.1. Leave at 1.0 for the gross section (no holes, notches or connector grooves). " +
+                        "Enter ratios above 0 and not more than 1 for the critical net section. Applied to the tension " +
+                        "and tension + bending checks only; one Sn/S covers both bending axes. Eccentricity at the " +
+                        "net section is not evaluated.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                HorizontalDivider()
+                Text(
                     "Load duration assumptions",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold
@@ -344,7 +380,7 @@ fun AdjustmentFactorsEditDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = assumptionsValid && temperatureValid, onClick = {
+            TextButton(enabled = assumptionsValid && temperatureValid && netAreaValid && netModulusValid, onClick = {
                 onConfirm(
                     NdsAdjustmentFactors(
                         cd = if (autoCd) 1.0 else (cd.toDoubleOrNull() ?: 1.0),
@@ -367,7 +403,8 @@ fun AdjustmentFactorsEditDialog(
                             rainCd = rainCd.toDouble(),
                             liveKind = liveKind
                         ),
-                        treatedMember = treated
+                        treatedMember = treated,
+                        netSection = NdsNetSection(netAreaRatio.toDouble(), netModulusRatio.toDouble())
                     )
                 )
             }) {
