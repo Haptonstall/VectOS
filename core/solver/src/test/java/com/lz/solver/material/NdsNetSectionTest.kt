@@ -93,6 +93,19 @@ class NdsNetSectionTest {
         near(0.6326530415837113, eq(detailed(demand(axial = 2000.0, moment = 5000.0), s = 0.6), "Eq. 3.9-1"), "Sn only")
     }
 
+    // ---------------- per-station value used by the beam plot ----------------
+
+    @Test
+    fun `the per-station interaction value behind the beam plot includes the net section`() {
+        fun ratio(a: Double, s: Double) = NdsWoodCapacityCalculator(
+            profile, material,
+            adjustmentFactors = NdsAdjustmentFactors(netSection = NdsNetSection(a, s)),
+            memberIsStrongAxis = true
+        ).pointInteractionCheck(demand(axial = 2000.0, moment = 5000.0), DesignMethodology.ASD).ratio
+        near(0.47075017697814403, ratio(1.0, 1.0), "gross")
+        near(0.6896270116011596, ratio(0.8, 0.6), "An/Ag 0.8, Sn/S 0.6")
+    }
+
     // ---------------- scope: not applied elsewhere ----------------
 
     @Test
