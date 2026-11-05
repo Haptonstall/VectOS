@@ -60,6 +60,7 @@ import com.lz.model.units.lbPerFt
 import com.lz.model.units.psiModulus
 import com.lz.solver.material.AiscSteelCapacityCalculator
 import com.lz.solver.material.CodeDataBlockedException
+import com.lz.solver.regulatory.CombinationSelectionResolver
 import com.lz.solver.material.NdsCodeData
 import com.lz.solver.material.ndsDeflectionModulusPsi
 import com.lz.solver.material.NdsWoodCapacityCalculator
@@ -195,6 +196,9 @@ class BeamViewModel @Inject constructor(
 
     var selectedAnalysisCombination by mutableStateOf<LoadCombination?>(null)
     var enabledCombinations by mutableStateOf<Set<String>>(emptySet())
+
+    /** What a restored calculation's saved combination selection could not be matched to (see CombinationSelectionResolver). */
+    var combinationNotices by mutableStateOf<List<String>>(emptyList())
 
     var showBracingOnPlot by mutableStateOf(false)
     var showUtilizationOnPlot by mutableStateOf(true)
@@ -471,6 +475,7 @@ class BeamViewModel @Inject constructor(
 
                     // Sync enabled combinations when set changes
                     enabledCombinations = selectedCombinationSet?.combinations?.map { it.name }?.toSet() ?: emptySet()
+                    combinationNotices = emptyList()
                 }
             } catch (e: Exception) {
                 // If DB is not yet seeded, this might fail on first run.
@@ -697,6 +702,7 @@ class BeamViewModel @Inject constructor(
     }
 
     fun toggleCombination(name: String) {
+        combinationNotices = emptyList()   // the user has now set the selection themselves
         enabledCombinations = if (enabledCombinations.contains(name)) {
             enabledCombinations - name
         } else {
@@ -829,6 +835,14 @@ class BeamViewModel @Inject constructor(
         val activeCombinations = combinationSet.combinations.filter {
             enabledCombinations.contains(it.name)
         }
+        // With no combinations the solver runs every load unfactored (its legacy path), which
+        // would look like a normal design check. Block instead.
+        if (activeCombinations.isEmpty()) {
+            throw CodeDataBlockedException(
+                "No load combinations are enabled (set \"${combinationSet.id}\"). Enable at least one " +
+                    "combination: without any, the loads would be checked unfactored."
+            )
+        }
 
         val analysisResult = BeamAnalysisSolver.solve(
             BeamAnalysisConfig(
@@ -947,15 +961,19 @@ class BeamViewModel @Inject constructor(
                 ?: availableSections.find { it.id == sectionId }
         } ?: availableSections.firstOrNull()
 
-        selectedCombinationSet = inputs.selectedCombinationSetId?.let { setId ->
-            activeBuildingCode?.getCombinationSet(setId)
-        } ?: selectedCombinationSet
-        enabledCombinations = inputs.enabledCombinationNames.ifEmpty {
-            selectedCombinationSet?.combinations?.map { it.name }?.toSet() ?: emptySet()
+        val combinationSelection = CombinationSelectionResolver.resolve(
+            savedSetId = inputs.selectedCombinationSetId,
+            savedEnabledNames = inputs.enabledCombinationNames,
+            savedAnalysisName = inputs.selectedAnalysisCombinationName,
+            lookup = { setId -> activeBuildingCode?.getCombinationSet(setId) },
+            currentSet = selectedCombinationSet
+        )
+        selectedCombinationSet = combinationSelection.set
+        enabledCombinations = combinationSelection.enabledNames
+        selectedAnalysisCombination = combinationSelection.analysisCombinationName?.let { name ->
+            combinationSelection.set?.combinations?.find { it.name == name }
         }
-        selectedAnalysisCombination = inputs.selectedAnalysisCombinationName?.let { name ->
-            selectedCombinationSet?.combinations?.find { it.name == name }
-        }
+        combinationNotices = combinationSelection.notices
     }
 
 

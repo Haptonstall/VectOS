@@ -445,6 +445,35 @@ fun BeamCalculatorScreen(
                 }
             }
 
+            // 1a. Saved-combination notices: what a restored calculation's saved combination
+            // selection could not be matched to (renamed / removed / newly added combinations,
+            // a missing set). Shown so a changed selection is never silent.
+            if (viewModel.combinationNotices.isNotEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Load combinations changed since this calculation was saved",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        viewModel.combinationNotices.forEach { notice ->
+                            Text(
+                                notice,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
+                }
+            }
+
             // 1b. Calculation error banner. viewModel.calculationError is set
             // whenever calculate() throws, but calculationResult is
             // deliberately left as whatever it last was (so a transient

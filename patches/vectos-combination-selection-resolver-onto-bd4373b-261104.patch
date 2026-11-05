@@ -1,0 +1,341 @@
+diff --git a/core/data/src/main/java/com/lz/data/persistence/room/seeder/StructuralDataSeeder.kt b/core/data/src/main/java/com/lz/data/persistence/room/seeder/StructuralDataSeeder.kt
+index 208d644..16693d9 100644
+--- a/core/data/src/main/java/com/lz/data/persistence/room/seeder/StructuralDataSeeder.kt
++++ b/core/data/src/main/java/com/lz/data/persistence/room/seeder/StructuralDataSeeder.kt
+@@ -6,6 +6,7 @@ import com.lz.data.persistence.room.entity.LoadCombinationSetEntity
+ import com.lz.data.persistence.room.entity.LoadFactorEntity
+ import com.lz.model.regulatory.loads.AsceEdition
+ import com.lz.model.regulatory.loads.AsceLoadCombinationCatalog
++import com.lz.model.regulatory.loads.CatalogCombination
+ import com.lz.model.regulatory.loads.CombinationType
+ import com.lz.model.structural.DesignMethodology
+ 
+@@ -40,6 +41,23 @@ class StructuralDataSeeder(private val dao: LoadCombinationDao) {
+         if (existingIds == desiredIds) return                 // already up to date
+         if (existingIds.isNotEmpty()) dao.deleteCombinationSet(setId)   // stale definition — replace it
+ 
++        // The delete and the inserts below are separate statements, not one transaction. If
++        // anything fails part-way, remove the half-written set so a partial combination list
++        // is never served; the next launch sees no ids and seeds it again in full.
++        try {
++            insertSet(edition, methodology, setId, combos)
++        } catch (e: Exception) {
++            runCatching { dao.deleteCombinationSet(setId) }
++            throw e
++        }
++    }
++
++    private suspend fun insertSet(
++        edition: AsceEdition,
++        methodology: DesignMethodology,
++        setId: String,
++        combos: List<CatalogCombination>
++    ) {
+         dao.insertCombinationSet(
+             LoadCombinationSetEntity(
+                 setId,
+diff --git a/core/solver/src/main/java/com/lz/solver/regulatory/CombinationSelectionResolver.kt b/core/solver/src/main/java/com/lz/solver/regulatory/CombinationSelectionResolver.kt
+new file mode 100644
+index 0000000..3528bb5
+--- /dev/null
++++ b/core/solver/src/main/java/com/lz/solver/regulatory/CombinationSelectionResolver.kt
+@@ -0,0 +1,85 @@
++package com.lz.solver.regulatory
++
++import com.lz.model.regulatory.LoadCombinationSet
++
++/** A saved calculation's combination selection resolved against the combination sets that exist now. */
++data class CombinationSelection(
++    val set: LoadCombinationSet?,
++    val enabledNames: Set<String>,
++    /** Null = envelope of the enabled combinations is shown. */
++    val analysisCombinationName: String?,
++    /** Plain-language statements of everything that was not found or not enabled; empty when nothing needed resolving. */
++    val notices: List<String>
++)
++
++/**
++ * Resolves what a saved calculation stored (a combination-set id, enabled combination NAMES and
++ * the selected analysis combination NAME; combination row ids are never stored) against the
++ * sets seeded now. Never silently produces an empty combination list: with no enabled
++ * combinations the solver would run every load unfactored.
++ *
++ * Rules:
++ *  - set id found -> that set; no id saved -> [currentSet]; id not found -> [currentSet] with a notice
++ *  - nothing saved as enabled -> every combination of the set
++ *  - saved names that no longer exist are dropped with a notice; if none are left, every
++ *    combination is enabled (with a notice) rather than none
++ *  - combinations in the set that are not in the saved enabled list are kept disabled but
++ *    listed in a notice (a saved calculation cannot say whether the user disabled them or the
++ *    catalog added them later)
++ *  - a selected analysis combination that no longer exists falls back to the envelope with a notice
++ */
++object CombinationSelectionResolver {
++
++    fun resolve(
++        savedSetId: String?,
++        savedEnabledNames: Set<String>,
++        savedAnalysisName: String?,
++        lookup: (String) -> LoadCombinationSet?,
++        currentSet: LoadCombinationSet?
++    ): CombinationSelection {
++        val notices = mutableListOf<String>()
++
++        val found = savedSetId?.let(lookup)
++        val set = found ?: currentSet
++        if (savedSetId != null && found == null) {
++            notices += "The load combination set saved with this calculation (\"$savedSetId\") is not available" +
++                (if (currentSet != null) "; \"${currentSet.id}\" is used instead, which may be a different code edition or methodology." else ".")
++        }
++        if (set == null) {
++            notices += "No load combination set is available, so no combinations can be applied."
++            return CombinationSelection(null, emptySet(), null, notices)
++        }
++
++        val names = set.combinations.map { it.name }
++        val nameSet = names.toSet()
++
++        val enabled: Set<String>
++        if (savedEnabledNames.isEmpty()) {
++            enabled = nameSet
++        } else {
++            val matched = savedEnabledNames.filter { it in nameSet }.toSet()
++            val dropped = savedEnabledNames.filter { it !in nameSet }.sorted()
++            if (dropped.isNotEmpty()) {
++                notices += "${dropped.size} saved load combination(s) no longer exist in \"${set.id}\" and were dropped: " +
++                    dropped.joinToString("; ") + "."
++            }
++            if (matched.isEmpty()) {
++                enabled = nameSet
++                notices += "None of the saved combinations matched, so all ${nameSet.size} combinations of \"${set.id}\" are enabled."
++            } else {
++                enabled = matched
++                val notEnabled = names.filter { it !in matched }
++                if (notEnabled.isNotEmpty()) {
++                    notices += "${notEnabled.size} combination(s) of \"${set.id}\" are not enabled in this saved calculation " +
++                        "(disabled by the user or added to the set after it was saved): " + notEnabled.joinToString("; ") + "."
++                }
++            }
++        }
++
++        val analysis = savedAnalysisName?.let { n ->
++            if (n in nameSet) n
++            else { notices += "The selected combination \"$n\" no longer exists; the envelope of the enabled combinations is shown."; null }
++        }
++        return CombinationSelection(set, enabled, analysis, notices)
++    }
++}
+diff --git a/core/solver/src/test/java/com/lz/solver/regulatory/CombinationSelectionResolverTest.kt b/core/solver/src/test/java/com/lz/solver/regulatory/CombinationSelectionResolverTest.kt
+new file mode 100644
+index 0000000..6eeeecf
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/regulatory/CombinationSelectionResolverTest.kt
+@@ -0,0 +1,87 @@
++package com.lz.solver.regulatory
++
++import com.lz.model.regulatory.CombinationSource
++import com.lz.model.regulatory.LoadCategory
++import com.lz.model.regulatory.LoadCombination
++import com.lz.model.regulatory.LoadCombinationSet
++import com.lz.model.regulatory.loads.CombinationType
++import com.lz.model.structural.DesignMethodology
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class CombinationSelectionResolverTest {
++
++    private fun combo(name: String) = LoadCombination(
++        id = "id_$name", name = name, methodology = DesignMethodology.LRFD, type = CombinationType.STRENGTH,
++        equationText = name, factors = mapOf(LoadCategory.DEAD to 1.0), codeReference = "ref"
++    )
++    private fun set(id: String, vararg names: String) = LoadCombinationSet(
++        id = id, source = CombinationSource("src", "Source", ""), methodology = DesignMethodology.LRFD,
++        description = "", combinations = names.map(::combo)
++    )
++
++    private val cur = set("CUR", "A", "B", "C")
++    private val old = set("OLD", "X", "Y")
++    private fun lookup(id: String) = mapOf("CUR" to cur, "OLD" to old)[id]
++
++    private fun resolve(setId: String?, enabled: Set<String>, analysis: String? = null, current: LoadCombinationSet? = cur) =
++        CombinationSelectionResolver.resolve(setId, enabled, analysis, ::lookup, current)
++
++    @Test
++    fun `an intact selection resolves with no notices`() {
++        val r = resolve("CUR", setOf("A", "B", "C"), "B")
++        assertEquals("CUR", r.set!!.id); assertEquals(setOf("A", "B", "C"), r.enabledNames)
++        assertEquals("B", r.analysisCombinationName); assertTrue(r.notices.isEmpty())
++    }
++
++    @Test
++    fun `a saved set id that exists is used even when it is not the current set`() {
++        val r = resolve("OLD", setOf("X"))
++        assertEquals("OLD", r.set!!.id); assertEquals(setOf("X"), r.enabledNames)
++    }
++
++    @Test
++    fun `nothing saved enables every combination of the set`() {
++        val r = resolve(null, emptySet())
++        assertEquals("CUR", r.set!!.id); assertEquals(setOf("A", "B", "C"), r.enabledNames); assertTrue(r.notices.isEmpty())
++    }
++
++    @Test
++    fun `a saved set id that is gone falls back to the current set with a notice`() {
++        val r = resolve("GONE", setOf("A"))
++        assertEquals("CUR", r.set!!.id)
++        assertTrue(r.notices.first(), r.notices.first().contains("\"GONE\"") && r.notices.first().contains("\"CUR\""))
++    }
++
++    @Test
++    fun `stale names are dropped and listed, and never leave zero enabled`() {
++        val partial = resolve("CUR", setOf("A", "Z1", "Z2"))
++        assertEquals(setOf("A"), partial.enabledNames)
++        assertTrue(partial.notices.any { it.contains("2 saved") && it.contains("Z1") && it.contains("Z2") })
++        val none = resolve("CUR", setOf("Z1", "Z2"))
++        assertEquals(setOf("A", "B", "C"), none.enabledNames)
++        assertTrue(none.notices.any { it.contains("None of the saved combinations matched") })
++    }
++
++    @Test
++    fun `combinations missing from the saved list are kept off but listed`() {
++        val r = resolve("CUR", setOf("A", "B"))
++        assertEquals(setOf("A", "B"), r.enabledNames)
++        assertTrue(r.notices.single(), r.notices.single().contains("1 combination(s)") && r.notices.single().contains("C"))
++    }
++
++    @Test
++    fun `a missing analysis combination falls back to the envelope with a notice`() {
++        val r = resolve("CUR", setOf("A", "B", "C"), "Gone")
++        assertNull(r.analysisCombinationName)
++        assertTrue(r.notices.single().contains("\"Gone\""))
++    }
++
++    @Test
++    fun `no set at all returns an empty selection with a notice`() {
++        val r = resolve("GONE", setOf("A"), current = null)
++        assertNull(r.set); assertTrue(r.enabledNames.isEmpty()); assertTrue(r.notices.isNotEmpty())
++    }
++}
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index a4d91b2..6760d70 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -60,6 +60,7 @@ import com.lz.model.units.lbPerFt
+ import com.lz.model.units.psiModulus
+ import com.lz.solver.material.AiscSteelCapacityCalculator
+ import com.lz.solver.material.CodeDataBlockedException
++import com.lz.solver.regulatory.CombinationSelectionResolver
+ import com.lz.solver.material.NdsCodeData
+ import com.lz.solver.material.ndsDeflectionModulusPsi
+ import com.lz.solver.material.NdsWoodCapacityCalculator
+@@ -196,6 +197,9 @@ class BeamViewModel @Inject constructor(
+     var selectedAnalysisCombination by mutableStateOf<LoadCombination?>(null)
+     var enabledCombinations by mutableStateOf<Set<String>>(emptySet())
+ 
++    /** What a restored calculation's saved combination selection could not be matched to (see CombinationSelectionResolver). */
++    var combinationNotices by mutableStateOf<List<String>>(emptyList())
++
+     var showBracingOnPlot by mutableStateOf(false)
+     var showUtilizationOnPlot by mutableStateOf(true)
+     var showJointLabels by mutableStateOf(false)
+@@ -471,6 +475,7 @@ class BeamViewModel @Inject constructor(
+ 
+                     // Sync enabled combinations when set changes
+                     enabledCombinations = selectedCombinationSet?.combinations?.map { it.name }?.toSet() ?: emptySet()
++                    combinationNotices = emptyList()
+                 }
+             } catch (e: Exception) {
+                 // If DB is not yet seeded, this might fail on first run.
+@@ -697,6 +702,7 @@ class BeamViewModel @Inject constructor(
+     }
+ 
+     fun toggleCombination(name: String) {
++        combinationNotices = emptyList()   // the user has now set the selection themselves
+         enabledCombinations = if (enabledCombinations.contains(name)) {
+             enabledCombinations - name
+         } else {
+@@ -829,6 +835,14 @@ class BeamViewModel @Inject constructor(
+         val activeCombinations = combinationSet.combinations.filter {
+             enabledCombinations.contains(it.name)
+         }
++        // With no combinations the solver runs every load unfactored (its legacy path), which
++        // would look like a normal design check. Block instead.
++        if (activeCombinations.isEmpty()) {
++            throw CodeDataBlockedException(
++                "No load combinations are enabled (set \"${combinationSet.id}\"). Enable at least one " +
++                    "combination: without any, the loads would be checked unfactored."
++            )
++        }
+ 
+         val analysisResult = BeamAnalysisSolver.solve(
+             BeamAnalysisConfig(
+@@ -947,15 +961,19 @@ class BeamViewModel @Inject constructor(
+                 ?: availableSections.find { it.id == sectionId }
+         } ?: availableSections.firstOrNull()
+ 
+-        selectedCombinationSet = inputs.selectedCombinationSetId?.let { setId ->
+-            activeBuildingCode?.getCombinationSet(setId)
+-        } ?: selectedCombinationSet
+-        enabledCombinations = inputs.enabledCombinationNames.ifEmpty {
+-            selectedCombinationSet?.combinations?.map { it.name }?.toSet() ?: emptySet()
+-        }
+-        selectedAnalysisCombination = inputs.selectedAnalysisCombinationName?.let { name ->
+-            selectedCombinationSet?.combinations?.find { it.name == name }
++        val combinationSelection = CombinationSelectionResolver.resolve(
++            savedSetId = inputs.selectedCombinationSetId,
++            savedEnabledNames = inputs.enabledCombinationNames,
++            savedAnalysisName = inputs.selectedAnalysisCombinationName,
++            lookup = { setId -> activeBuildingCode?.getCombinationSet(setId) },
++            currentSet = selectedCombinationSet
++        )
++        selectedCombinationSet = combinationSelection.set
++        enabledCombinations = combinationSelection.enabledNames
++        selectedAnalysisCombination = combinationSelection.analysisCombinationName?.let { name ->
++            combinationSelection.set?.combinations?.find { it.name == name }
+         }
++        combinationNotices = combinationSelection.notices
+     }
+ 
+ 
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index c8e9be7..b8b4efd 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -445,6 +445,35 @@ fun BeamCalculatorScreen(
+                 }
+             }
+ 
++            // 1a. Saved-combination notices: what a restored calculation's saved combination
++            // selection could not be matched to (renamed / removed / newly added combinations,
++            // a missing set). Shown so a changed selection is never silent.
++            if (viewModel.combinationNotices.isNotEmpty()) {
++                Card(
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .padding(horizontal = 16.dp, vertical = 8.dp),
++                    colors = CardDefaults.cardColors(
++                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
++                    )
++                ) {
++                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
++                        Text(
++                            "Load combinations changed since this calculation was saved",
++                            style = MaterialTheme.typography.labelLarge,
++                            color = MaterialTheme.colorScheme.onTertiaryContainer
++                        )
++                        viewModel.combinationNotices.forEach { notice ->
++                            Text(
++                                notice,
++                                style = MaterialTheme.typography.bodySmall,
++                                color = MaterialTheme.colorScheme.onTertiaryContainer
++                            )
++                        }
++                    }
++                }
++            }
++
+             // 1b. Calculation error banner. viewModel.calculationError is set
+             // whenever calculate() throws, but calculationResult is
+             // deliberately left as whatever it last was (so a transient

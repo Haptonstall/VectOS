@@ -6,6 +6,7 @@ import com.lz.data.persistence.room.entity.LoadCombinationSetEntity
 import com.lz.data.persistence.room.entity.LoadFactorEntity
 import com.lz.model.regulatory.loads.AsceEdition
 import com.lz.model.regulatory.loads.AsceLoadCombinationCatalog
+import com.lz.model.regulatory.loads.CatalogCombination
 import com.lz.model.regulatory.loads.CombinationType
 import com.lz.model.structural.DesignMethodology
 
@@ -40,6 +41,23 @@ class StructuralDataSeeder(private val dao: LoadCombinationDao) {
         if (existingIds == desiredIds) return                 // already up to date
         if (existingIds.isNotEmpty()) dao.deleteCombinationSet(setId)   // stale definition — replace it
 
+        // The delete and the inserts below are separate statements, not one transaction. If
+        // anything fails part-way, remove the half-written set so a partial combination list
+        // is never served; the next launch sees no ids and seeds it again in full.
+        try {
+            insertSet(edition, methodology, setId, combos)
+        } catch (e: Exception) {
+            runCatching { dao.deleteCombinationSet(setId) }
+            throw e
+        }
+    }
+
+    private suspend fun insertSet(
+        edition: AsceEdition,
+        methodology: DesignMethodology,
+        setId: String,
+        combos: List<CatalogCombination>
+    ) {
         dao.insertCombinationSet(
             LoadCombinationSetEntity(
                 setId,
