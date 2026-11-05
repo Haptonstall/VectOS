@@ -314,6 +314,20 @@ class NdsWoodCombinedChecksTest {
     }
 
     @Test
+    fun `a capped point-path ratio is labelled N_G and an ordinary one is not`() {
+        val calc = NdsWoodCapacityCalculator(profile, material)
+        val capped = calc.pointInteractionCheck(
+            demand(moment = 15000.0, momentY = 800.0, axial = -5000.0, lb = 60.0), DesignMethodology.ASD
+        )
+        assertEquals(99.0, capped.ratio, 0.0)
+        assertTrue(capped.limitState, capped.limitState.contains("N.G.") && capped.limitState.contains("precondition not met") &&
+            capped.limitState.contains("capped at 99"))
+        val ordinary = calc.pointInteractionCheck(demand(moment = 12000.0, axial = 1000.0, lb = 120.0), DesignMethodology.ASD)
+        near(0.721681, ordinary.ratio, "ordinary ratio")
+        assertFalse(ordinary.limitState, ordinary.limitState.contains("N.G.") || ordinary.limitState.contains("capped"))
+    }
+
+    @Test
     fun `engine keeps AISC H1-1 when no provider is given`() {
         val calc = NdsWoodCapacityCalculator(profile, material)
         val r = com.lz.solver.capacity.CapacityEngine.evaluate(

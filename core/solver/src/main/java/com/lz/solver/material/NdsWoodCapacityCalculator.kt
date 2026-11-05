@@ -1747,6 +1747,14 @@ class NdsWoodCapacityCalculator(
         val worst = evaluateDetailed(demand, methodology).combinedChecks.maxByOrNull { it.utilization }
             ?: return CodeCheck(label, 0.0, 1.0, 0.0)
         val ratio = worst.utilization.coerceAtMost(POINT_RATIO_CAP)
-        return CodeCheck("${worst.clause} ${worst.governingEquation}", ratio, 1.0, ratio)
+        // A capped value must not read as a real ratio of 99: say so in the label that the diagram shows.
+        val note = when {
+            worst.utilization.isNaN() || worst.utilization.isInfinite() ->
+                " \u2014 N.G. (precondition not met; shown capped at ${POINT_RATIO_CAP.toInt()})"
+            worst.utilization > POINT_RATIO_CAP ->
+                " \u2014 N.G. (ratio ${fmt(worst.utilization, 1)}; shown capped at ${POINT_RATIO_CAP.toInt()})"
+            else -> ""
+        }
+        return CodeCheck("${worst.clause} ${worst.governingEquation}$note", ratio, 1.0, ratio)
     }
 }
