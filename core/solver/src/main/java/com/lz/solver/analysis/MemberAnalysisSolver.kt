@@ -256,9 +256,16 @@ object MemberAnalysisSolver {
         // 5. Build Individual Combination Results
         val combinationResults = combinations.associate { combo ->
             // Factor each category's station demands by this combo's load factors
+            // Table 3.3.3 loading row, from the loads that actually act in this combination.
+            val lengthCases = EffectiveLengthClassifier.classify(
+                config.member,
+                config.allLoads.filter { (combo.factors[it.category] ?: 0.0) != 0.0 },
+                config.braceState
+            )
             val comboDemands = buildFactoredDemands(
                 resultsByCategory, combo, demandsByCategory,
-                appliedCategories = appliedCategories
+                appliedCategories = appliedCategories,
+                effectiveLengthCases = lengthCases
             )
 
             // Apply factors to reactions
@@ -480,7 +487,8 @@ object MemberAnalysisSolver {
         resultsByCategory: Map<com.lz.model.regulatory.LoadCategory, AnalysisResult>,
         combo: com.lz.model.regulatory.LoadCombination,
         demandsByCategory: Map<com.lz.model.regulatory.LoadCategory, List<StationDemand>>,
-        appliedCategories: Set<com.lz.model.regulatory.LoadCategory> = emptySet()
+        appliedCategories: Set<com.lz.model.regulatory.LoadCategory> = emptySet(),
+        effectiveLengthCases: Map<java.util.UUID, com.lz.model.structural.EffectiveLengthCase> = emptyMap()
     ): List<StationDemand> {
         val actingLoads = loadFactorsActing(combo, appliedCategories)
         val stationCount = demandsByCategory.values.firstOrNull()?.size ?: return emptyList()
@@ -512,7 +520,9 @@ object MemberAnalysisSolver {
                 momentSpanLength = zeroSpans[index]?.let { Length(it) },
                 combinationName = combo.name,
                 combinationLoadFactors = actingLoads,
-                combinationMethodology = combo.methodology
+                combinationMethodology = combo.methodology,
+                effectiveLengthCase = effectiveLengthCases[firstStation.spanId]
+                    ?: com.lz.model.structural.EffectiveLengthCase.UNSPECIFIED
             )
         }
     }

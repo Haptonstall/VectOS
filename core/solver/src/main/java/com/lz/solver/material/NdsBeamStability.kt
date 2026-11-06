@@ -2,6 +2,7 @@ package com.lz.solver.material
 
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
 import com.lz.model.regulatory.nds.NdsEdition
+import com.lz.model.structural.EffectiveLengthCase
 import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.SectionProfile
 import com.lz.model.structural.WoodGrade
@@ -196,17 +197,43 @@ internal data class NdsEffectiveLength(
         get() = if (dTerm > 0.0) "le = ${coefficient} lu + ${dTerm.toInt()}d" else "le = ${coefficient} lu"
 }
 
-internal fun ndsBeamEffectiveLength(lu: Double, d: Double): NdsEffectiveLength {
+internal fun ndsBeamEffectiveLength(
+    lu: Double,
+    d: Double,
+    case: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED
+): NdsEffectiveLength {
     val ratio = if (d > 0.0) lu / d else 0.0
+
+    // Specific Table 3.3.3 rows, as printed: (coefficient for lu/d < 7, coefficient for lu/d >= 7 with + 3d).
+    val row: Triple<Double, Double, String>? = when (case) {
+        EffectiveLengthCase.SINGLE_SPAN_UNIFORM -> Triple(2.06, 1.63, "single span, uniformly distributed load")
+        EffectiveLengthCase.SINGLE_SPAN_CENTER_POINT ->
+            Triple(1.80, 1.37, "single span, concentrated load at center, no intermediate lateral support")
+        EffectiveLengthCase.CANTILEVER_UNIFORM -> Triple(1.33, 0.90, "cantilever, uniformly distributed load")
+        EffectiveLengthCase.CANTILEVER_TIP_POINT -> Triple(1.87, 1.44, "cantilever, concentrated load at unsupported end")
+        else -> null
+    }
+    if (row != null) {
+        return if (ratio < 7.0) NdsEffectiveLength(
+            row.first * lu, row.first, 0.0, ratio, "NDS Table 3.3.3: ${row.third} (lu/d < 7)"
+        ) else NdsEffectiveLength(
+            row.second * lu + 3.0 * d, row.second, 3.0, ratio, "NDS Table 3.3.3: ${row.third} (lu/d >= 7)"
+        )
+    }
+
+    // Footnote 1: loading not specified in the table. Flagged so the output says why.
+    val flag = if (case == EffectiveLengthCase.MULTI_SPAN)
+        " \u2014 ASSUMED: multi-span member (fn. 2 calls for table values or engineering analysis)"
+    else " \u2014 ASSUMED: loading is not one of the supported Table 3.3.3 rows"
     return when {
         ratio < 7.0 -> NdsEffectiveLength(
-            2.06 * lu, 2.06, 0.0, ratio, "NDS Table 3.3.3 fn. 1 (lu/d < 7)"
+            2.06 * lu, 2.06, 0.0, ratio, "NDS Table 3.3.3 fn. 1 (lu/d < 7)$flag"
         )
         ratio <= 14.3 -> NdsEffectiveLength(
-            1.63 * lu + 3.0 * d, 1.63, 3.0, ratio, "NDS Table 3.3.3 fn. 1 (7 <= lu/d <= 14.3)"
+            1.63 * lu + 3.0 * d, 1.63, 3.0, ratio, "NDS Table 3.3.3 fn. 1 (7 <= lu/d <= 14.3)$flag"
         )
         else -> NdsEffectiveLength(
-            1.84 * lu, 1.84, 0.0, ratio, "NDS Table 3.3.3 fn. 1 (lu/d > 14.3)"
+            1.84 * lu, 1.84, 0.0, ratio, "NDS Table 3.3.3 fn. 1 (lu/d > 14.3)$flag"
         )
     }
 }
@@ -225,7 +252,8 @@ internal fun computeNdsBeamStability(
     adjustmentFactors: NdsAdjustmentFactors,
     isGlulam: Boolean,
     aboutStrongAxis: Boolean = true,
-    edition: NdsEdition = NdsEdition.NDS_2018
+    edition: NdsEdition = NdsEdition.NDS_2018,
+    effLenCase: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED
 ): NdsBeamStabilityDetail? {
     if (lb <= 0.0) return null
 
@@ -245,7 +273,7 @@ internal fun computeNdsBeamStability(
     val b = if (aboutStrongAxis) width else depth
 
     // Effective length le (NDS Table 3.3.3) — see ndsBeamEffectiveLength.
-    val effLen = ndsBeamEffectiveLength(lb, d)
+    val effLen = ndsBeamEffectiveLength(lb, d, effLenCase)
     val le = effLen.le
 
     val rbSquared = le * d / b.pow(2)
@@ -305,8 +333,9 @@ internal fun computeNdsCL(
     adjustmentFactors: NdsAdjustmentFactors,
     isGlulam: Boolean,
     aboutStrongAxis: Boolean = true,
-    edition: NdsEdition = NdsEdition.NDS_2018
-): Double = computeNdsBeamStability(lb, profile, material, adjustmentFactors, isGlulam, aboutStrongAxis, edition)?.cl ?: 1.0
+    edition: NdsEdition = NdsEdition.NDS_2018,
+    effLenCase: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED
+): Double = computeNdsBeamStability(lb, profile, material, adjustmentFactors, isGlulam, aboutStrongAxis, edition, effLenCase)?.cl ?: 1.0
 
 /**
  * E'min = Emin x CM x Ct x Ci (NDS Table 4.3.1) — the adjusted stability

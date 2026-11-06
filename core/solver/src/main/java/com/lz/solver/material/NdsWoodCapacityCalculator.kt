@@ -12,6 +12,7 @@ import com.lz.model.structural.DesignPropertyRow
 import com.lz.model.structural.CombinedStressCheck
 import com.lz.model.structural.DesignEquationTrace
 import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.EffectiveLengthCase
 import com.lz.model.structural.Flange
 import com.lz.model.structural.InteractionEquationResult
 import com.lz.model.structural.MaterialGrade
@@ -267,7 +268,7 @@ class NdsWoodCapacityCalculator(
         factorRows += row("CP", "Column stability", fmt(cpParts.cp, 3))
         groups += DesignPropertyGroup("Adjustment factors", factorRows)
 
-        val bendStrong = computeNdsBeamStability(u.strongBend, profile, m, f, isGlulam, aboutStrongAxis = true, edition = edition)
+        val bendStrong = computeNdsBeamStability(u.strongBend, profile, m, f, isGlulam, aboutStrongAxis = true, edition = edition, effLenCase = u.strongCase)
         val bendWeak = computeNdsBeamStability(u.weakBend, profile, m, f, isGlulam, aboutStrongAxis = false, edition = edition)
         val lenRows = mutableListOf<DesignPropertyRow>()
         lenRows += row("lu (strong-axis bending)", "Unbraced length, compression edge", "${fmt(u.strongBend, 1)} in")
@@ -330,6 +331,8 @@ class NdsWoodCapacityCalculator(
         val colWeak: Double,
         val weakIsDefault: Boolean,
         val strongIsDefault: Boolean,
+        /** Table 3.3.3 loading row for the primary bending plane (UNSPECIFIED when the member is oriented about its weak axis). */
+        val strongCase: EffectiveLengthCase,
         /** Length for the glulam volume factor CV (NDS 5.3.6): between points of zero moment. */
         val cvSpan: Double
     )
@@ -344,6 +347,7 @@ class NdsWoodCapacityCalculator(
             strongBend = flangeLb, weakBend = weakPlane,
             colStrong = strongPlane, colWeak = weakPlane,
             weakIsDefault = demand.luWeakAxis == null, strongIsDefault = demand.luStrongAxis == null,
+            strongCase = if (memberIsStrongAxis) demand.effectiveLengthCase else EffectiveLengthCase.UNSPECIFIED,
             // CV uses the length between points of zero moment (5.3.6), NOT the
             // unbraced length; the solver supplies it (the whole member where
             // the moment diagram doesn't bracket the station). Only a demand
@@ -514,7 +518,7 @@ class NdsWoodCapacityCalculator(
             isLrfd = methodology == DesignMethodology.LRFD
         )
 
-        val cl = computeCL(lb)
+        val cl = computeCL(lb, u.strongCase)
         val cv = if (isGlulam) computeCV(u.cvSpan) else 1.0
 
         return StrengthDesignResult(
@@ -643,7 +647,8 @@ class NdsWoodCapacityCalculator(
     }
 
     private fun bendingAxis(strong: Boolean, u: Unbraced): BendingAxis =
-        if (strong) strongBendingAxis(u.strongBend, u.cvSpan) else weakBendingAxis(u.weakBend)
+        if (strong) strongBendingAxis(u.strongBend, u.cvSpan, if (memberIsStrongAxis) u.strongCase else EffectiveLengthCase.UNSPECIFIED)
+        else weakBendingAxis(u.weakBend)
 
     /**
      * The NDS 3.3.3 development for one axis, as traces: the effective-length
@@ -739,12 +744,12 @@ class NdsWoodCapacityCalculator(
         )
     }
 
-    private fun strongBendingAxis(lb: Double, cvSpan: Double = lb): BendingAxis {
+    private fun strongBendingAxis(lb: Double, cvSpan: Double = lb, effLenCase: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED): BendingAxis {
         val fb = designMaterial.referenceBending.inPsi
         val sx = profile.propertiesStrongAxis.s.inIn3
         val f = adjustmentFactors
 
-        val stab = computeNdsBeamStability(lb, profile, designMaterial, f, isGlulam, edition = edition)
+        val stab = computeNdsBeamStability(lb, profile, designMaterial, f, isGlulam, edition = edition, effLenCase = effLenCase)
         val cl = stab?.cl ?: 1.0
 
         val traces = if (stab != null) stabilityTraces(stab, fb).toMutableList() else mutableListOf<DesignEquationTrace>()
@@ -992,8 +997,8 @@ class NdsWoodCapacityCalculator(
      * Delegates to [computeNdsCL] — see that function for the formula and
      * why it's shared with [NdsClCalculator].
      */
-    private fun computeCL(lb: Double): Double =
-        computeNdsCL(lb, profile, designMaterial, adjustmentFactors, isGlulam, edition = edition)
+    private fun computeCL(lb: Double, effLenCase: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED): Double =
+        computeNdsCL(lb, profile, designMaterial, adjustmentFactors, isGlulam, edition = edition, effLenCase = effLenCase)
 
     /**
      * NDS 5.3.6 Volume Factor CV for glulam.
@@ -1580,7 +1585,7 @@ class NdsWoodCapacityCalculator(
         val fcE1 = if (le1 > 0.0 && d1 > 0.0) 0.822 * eMinAdj / (le1 / d1).pow(2) else inf
         val fcE2 = if (le2 > 0.0 && d2 > 0.0) 0.822 * eMinAdj / (le2 / d2).pow(2) else inf
 
-        val stab = computeNdsBeamStability(u.strongBend, profile, designMaterial, adjustmentFactors, isGlulam, aboutStrongAxis = true, edition = edition)
+        val stab = computeNdsBeamStability(u.strongBend, profile, designMaterial, adjustmentFactors, isGlulam, aboutStrongAxis = true, edition = edition, effLenCase = u.strongCase)
         val fbE = stab?.fbE ?: inf
 
         val fb1Adj = strongAx.fbAdj * kBend

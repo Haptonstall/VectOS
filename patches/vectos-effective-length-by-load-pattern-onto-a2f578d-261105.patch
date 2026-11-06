@@ -1,0 +1,584 @@
+diff --git a/core/model/src/main/java/com/lz/model/structural/StationDemand.kt b/core/model/src/main/java/com/lz/model/structural/StationDemand.kt
+index 1c03d63..8b4257c 100644
+--- a/core/model/src/main/java/com/lz/model/structural/StationDemand.kt
++++ b/core/model/src/main/java/com/lz/model/structural/StationDemand.kt
+@@ -61,6 +61,9 @@ data class StationDemand(
+     val luStrongAxis: Length? = null,
+     val luWeakAxis: Length? = null,
+ 
++    // Table 3.3.3 loading row for this station's span (see EffectiveLengthCase); set by the solver.
++    val effectiveLengthCase: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED,
++
+     // Length of the member between the points of zero moment that bracket this
+     // station (NDS 5.3.6, glulam volume factor CV). Where the moment diagram
+     // doesn't have a zero on both sides (a cantilever, a fixed end) it is the
+@@ -86,4 +89,19 @@ data class StationDemand(
+ ) {
+     /** The categories of [combinationLoadFactors]. */
+     val combinationLoadCategories: Set<LoadCategory> get() = combinationLoadFactors.keys
+-}
+\ No newline at end of file
++}
++
++/**
++ * Which row of NDS Table 3.3.3 (effective length le) describes the loading on a station's span,
++ * set by the solver from the loads that act in the station's combination.
++ * UNSPECIFIED = the loading is not one of the supported rows, so footnote 1 applies; MULTI_SPAN =
++ * a member with more than one span (footnote 2: table values or engineering analysis).
++ */
++enum class EffectiveLengthCase {
++    UNSPECIFIED,
++    SINGLE_SPAN_UNIFORM,
++    SINGLE_SPAN_CENTER_POINT,
++    CANTILEVER_UNIFORM,
++    CANTILEVER_TIP_POINT,
++    MULTI_SPAN
++}
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/EffectiveLengthClassifier.kt b/core/solver/src/main/java/com/lz/solver/analysis/EffectiveLengthClassifier.kt
+new file mode 100644
+index 0000000..c26cbc8
+--- /dev/null
++++ b/core/solver/src/main/java/com/lz/solver/analysis/EffectiveLengthClassifier.kt
+@@ -0,0 +1,100 @@
++package com.lz.solver.analysis
++
++import com.lz.model.structural.ConstraintType
++import com.lz.model.structural.EffectiveLengthCase
++import com.lz.model.structural.Load
++import com.lz.model.structural.LoadDirection
++import com.lz.model.structural.NodeBoundaryCondition
++import com.lz.model.structural.SpanGeometry
++import com.lz.model.structural.StructuralMember
++import com.lz.model.structural.NormalizedBraceState
++import java.util.UUID
++import kotlin.math.abs
++
++/**
++ * Matches the loads acting in one combination to a row of NDS Table 3.3.3 (effective length),
++ * span by span. A row is used only when EVERY transverse load on the span fits that one pattern
++ * and the span meets the row's conditions; otherwise the span is UNSPECIFIED (footnote 1).
++ *
++ *  - more than one span                         -> MULTI_SPAN (footnote 2: no table row applies)
++ *  - simple span (pin / roller), unbraced:
++ *      only full-length uniform loads           -> SINGLE_SPAN_UNIFORM
++ *      exactly one point load at midspan        -> SINGLE_SPAN_CENTER_POINT
++ *  - cantilever (fixed root, free tip), unbraced:
++ *      only full-length uniform loads           -> CANTILEVER_UNIFORM
++ *      exactly one point load at the free end   -> CANTILEVER_TIP_POINT
++ *
++ * "Unbraced" means no brace point inside the span and no unbraced segment shorter than the span
++ * (the table rows assume no intermediate lateral support). Only downward vertical loads match;
++ * axial loads do not change the transverse pattern and are ignored; anything else (moments,
++ * torque, lateral or upward loads, partial or varying loads) leaves the span UNSPECIFIED.
++ */
++internal object EffectiveLengthClassifier {
++
++    private const val REL_TOL = 1e-6
++
++    fun classify(
++        member: StructuralMember,
++        loadsInCombination: List<Load>,
++        braceState: List<NormalizedBraceState>
++    ): Map<UUID, EffectiveLengthCase> {
++        val spans = member.spans
++        if (spans.size > 1) return spans.associate { it.id to EffectiveLengthCase.MULTI_SPAN }
++        val span = spans.firstOrNull() ?: return emptyMap()
++        return mapOf(span.id to classifySpan(member, span, loadsInCombination, braceState))
++    }
++
++    private fun restrained(bc: NodeBoundaryCondition?, dof: (NodeBoundaryCondition) -> com.lz.model.structural.DofConstraint): Boolean =
++        bc != null && dof(bc).type != ConstraintType.FREE
++
++    private fun classifySpan(
++        member: StructuralMember,
++        span: SpanGeometry,
++        loads: List<Load>,
++        braceState: List<NormalizedBraceState>
++    ): EffectiveLengthCase {
++        val len = span.length.inches
++        if (len <= 0.0) return EffectiveLengthCase.UNSPECIFIED
++        val tol = REL_TOL * len
++
++        // Support condition
++        val start = member.nodes.firstOrNull { it.id == span.startNodeId }?.boundaryCondition
++        val end = member.nodes.firstOrNull { it.id == span.endNodeId }?.boundaryCondition
++        val startUy = restrained(start) { it.uy }; val endUy = restrained(end) { it.uy }
++        val startRz = restrained(start) { it.rz }; val endRz = restrained(end) { it.rz }
++        val simple = startUy && endUy && !startRz && !endRz
++        val cantileverRootAtStart = startUy && startRz && !endUy && !endRz
++        val cantileverRootAtEnd = endUy && endRz && !startUy && !startRz
++        if (!simple && !cantileverRootAtStart && !cantileverRootAtEnd) return EffectiveLengthCase.UNSPECIFIED
++
++        // The table rows assume no intermediate lateral support on the compression edge.
++        if (braceState.any { it.x.inches > tol && it.x.inches < len - tol }) return EffectiveLengthCase.UNSPECIFIED
++        if (span.unbracedSegments.any { it.lbTop.inches < len - tol || it.lbBottom.inches < len - tol }) {
++            return EffectiveLengthCase.UNSPECIFIED
++        }
++
++        // Transverse loads only; every one must fit a single pattern.
++        val transverse = loads.filter {
++            it.spanId == span.id && it.direction != LoadDirection.AXIAL_COMPRESSION &&
++                it.direction != LoadDirection.AXIAL_TENSION
++        }
++        if (transverse.isEmpty()) return EffectiveLengthCase.UNSPECIFIED
++        if (transverse.any { it.direction != LoadDirection.VERTICAL_DOWN }) return EffectiveLengthCase.UNSPECIFIED
++
++        val allUniformFullSpan = transverse.all {
++            it is Load.UniformDistributedLoad &&
++                abs(it.locationStart.inches) <= tol && abs(it.locationEnd.inches - len) <= tol
++        }
++        if (allUniformFullSpan) {
++            return if (simple) EffectiveLengthCase.SINGLE_SPAN_UNIFORM else EffectiveLengthCase.CANTILEVER_UNIFORM
++        }
++        val single = transverse.singleOrNull() as? Load.PointLoad ?: return EffectiveLengthCase.UNSPECIFIED
++        val x = single.locationStart.inches
++        return when {
++            simple && abs(x - len / 2.0) <= tol -> EffectiveLengthCase.SINGLE_SPAN_CENTER_POINT
++            cantileverRootAtStart && abs(x - len) <= tol -> EffectiveLengthCase.CANTILEVER_TIP_POINT
++            cantileverRootAtEnd && abs(x) <= tol -> EffectiveLengthCase.CANTILEVER_TIP_POINT
++            else -> EffectiveLengthCase.UNSPECIFIED
++        }
++    }
++}
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+index ffd02aa..6707c68 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+@@ -256,9 +256,16 @@ object MemberAnalysisSolver {
+         // 5. Build Individual Combination Results
+         val combinationResults = combinations.associate { combo ->
+             // Factor each category's station demands by this combo's load factors
++            // Table 3.3.3 loading row, from the loads that actually act in this combination.
++            val lengthCases = EffectiveLengthClassifier.classify(
++                config.member,
++                config.allLoads.filter { (combo.factors[it.category] ?: 0.0) != 0.0 },
++                config.braceState
++            )
+             val comboDemands = buildFactoredDemands(
+                 resultsByCategory, combo, demandsByCategory,
+-                appliedCategories = appliedCategories
++                appliedCategories = appliedCategories,
++                effectiveLengthCases = lengthCases
+             )
+ 
+             // Apply factors to reactions
+@@ -480,7 +487,8 @@ object MemberAnalysisSolver {
+         resultsByCategory: Map<com.lz.model.regulatory.LoadCategory, AnalysisResult>,
+         combo: com.lz.model.regulatory.LoadCombination,
+         demandsByCategory: Map<com.lz.model.regulatory.LoadCategory, List<StationDemand>>,
+-        appliedCategories: Set<com.lz.model.regulatory.LoadCategory> = emptySet()
++        appliedCategories: Set<com.lz.model.regulatory.LoadCategory> = emptySet(),
++        effectiveLengthCases: Map<java.util.UUID, com.lz.model.structural.EffectiveLengthCase> = emptyMap()
+     ): List<StationDemand> {
+         val actingLoads = loadFactorsActing(combo, appliedCategories)
+         val stationCount = demandsByCategory.values.firstOrNull()?.size ?: return emptyList()
+@@ -512,7 +520,9 @@ object MemberAnalysisSolver {
+                 momentSpanLength = zeroSpans[index]?.let { Length(it) },
+                 combinationName = combo.name,
+                 combinationLoadFactors = actingLoads,
+-                combinationMethodology = combo.methodology
++                combinationMethodology = combo.methodology,
++                effectiveLengthCase = effectiveLengthCases[firstStation.spanId]
++                    ?: com.lz.model.structural.EffectiveLengthCase.UNSPECIFIED
+             )
+         }
+     }
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+index 5caa813..bc4440d 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsBeamStability.kt
+@@ -2,6 +2,7 @@ package com.lz.solver.material
+ 
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.regulatory.nds.NdsEdition
++import com.lz.model.structural.EffectiveLengthCase
+ import com.lz.model.structural.MaterialGrade
+ import com.lz.model.structural.SectionProfile
+ import com.lz.model.structural.WoodGrade
+@@ -196,17 +197,43 @@ internal data class NdsEffectiveLength(
+         get() = if (dTerm > 0.0) "le = ${coefficient} lu + ${dTerm.toInt()}d" else "le = ${coefficient} lu"
+ }
+ 
+-internal fun ndsBeamEffectiveLength(lu: Double, d: Double): NdsEffectiveLength {
++internal fun ndsBeamEffectiveLength(
++    lu: Double,
++    d: Double,
++    case: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED
++): NdsEffectiveLength {
+     val ratio = if (d > 0.0) lu / d else 0.0
++
++    // Specific Table 3.3.3 rows, as printed: (coefficient for lu/d < 7, coefficient for lu/d >= 7 with + 3d).
++    val row: Triple<Double, Double, String>? = when (case) {
++        EffectiveLengthCase.SINGLE_SPAN_UNIFORM -> Triple(2.06, 1.63, "single span, uniformly distributed load")
++        EffectiveLengthCase.SINGLE_SPAN_CENTER_POINT ->
++            Triple(1.80, 1.37, "single span, concentrated load at center, no intermediate lateral support")
++        EffectiveLengthCase.CANTILEVER_UNIFORM -> Triple(1.33, 0.90, "cantilever, uniformly distributed load")
++        EffectiveLengthCase.CANTILEVER_TIP_POINT -> Triple(1.87, 1.44, "cantilever, concentrated load at unsupported end")
++        else -> null
++    }
++    if (row != null) {
++        return if (ratio < 7.0) NdsEffectiveLength(
++            row.first * lu, row.first, 0.0, ratio, "NDS Table 3.3.3: ${row.third} (lu/d < 7)"
++        ) else NdsEffectiveLength(
++            row.second * lu + 3.0 * d, row.second, 3.0, ratio, "NDS Table 3.3.3: ${row.third} (lu/d >= 7)"
++        )
++    }
++
++    // Footnote 1: loading not specified in the table. Flagged so the output says why.
++    val flag = if (case == EffectiveLengthCase.MULTI_SPAN)
++        " \u2014 ASSUMED: multi-span member (fn. 2 calls for table values or engineering analysis)"
++    else " \u2014 ASSUMED: loading is not one of the supported Table 3.3.3 rows"
+     return when {
+         ratio < 7.0 -> NdsEffectiveLength(
+-            2.06 * lu, 2.06, 0.0, ratio, "NDS Table 3.3.3 fn. 1 (lu/d < 7)"
++            2.06 * lu, 2.06, 0.0, ratio, "NDS Table 3.3.3 fn. 1 (lu/d < 7)$flag"
+         )
+         ratio <= 14.3 -> NdsEffectiveLength(
+-            1.63 * lu + 3.0 * d, 1.63, 3.0, ratio, "NDS Table 3.3.3 fn. 1 (7 <= lu/d <= 14.3)"
++            1.63 * lu + 3.0 * d, 1.63, 3.0, ratio, "NDS Table 3.3.3 fn. 1 (7 <= lu/d <= 14.3)$flag"
+         )
+         else -> NdsEffectiveLength(
+-            1.84 * lu, 1.84, 0.0, ratio, "NDS Table 3.3.3 fn. 1 (lu/d > 14.3)"
++            1.84 * lu, 1.84, 0.0, ratio, "NDS Table 3.3.3 fn. 1 (lu/d > 14.3)$flag"
+         )
+     }
+ }
+@@ -225,7 +252,8 @@ internal fun computeNdsBeamStability(
+     adjustmentFactors: NdsAdjustmentFactors,
+     isGlulam: Boolean,
+     aboutStrongAxis: Boolean = true,
+-    edition: NdsEdition = NdsEdition.NDS_2018
++    edition: NdsEdition = NdsEdition.NDS_2018,
++    effLenCase: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED
+ ): NdsBeamStabilityDetail? {
+     if (lb <= 0.0) return null
+ 
+@@ -245,7 +273,7 @@ internal fun computeNdsBeamStability(
+     val b = if (aboutStrongAxis) width else depth
+ 
+     // Effective length le (NDS Table 3.3.3) — see ndsBeamEffectiveLength.
+-    val effLen = ndsBeamEffectiveLength(lb, d)
++    val effLen = ndsBeamEffectiveLength(lb, d, effLenCase)
+     val le = effLen.le
+ 
+     val rbSquared = le * d / b.pow(2)
+@@ -305,8 +333,9 @@ internal fun computeNdsCL(
+     adjustmentFactors: NdsAdjustmentFactors,
+     isGlulam: Boolean,
+     aboutStrongAxis: Boolean = true,
+-    edition: NdsEdition = NdsEdition.NDS_2018
+-): Double = computeNdsBeamStability(lb, profile, material, adjustmentFactors, isGlulam, aboutStrongAxis, edition)?.cl ?: 1.0
++    edition: NdsEdition = NdsEdition.NDS_2018,
++    effLenCase: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED
++): Double = computeNdsBeamStability(lb, profile, material, adjustmentFactors, isGlulam, aboutStrongAxis, edition, effLenCase)?.cl ?: 1.0
+ 
+ /**
+  * E'min = Emin x CM x Ct x Ci (NDS Table 4.3.1) — the adjusted stability
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index b30645f..6929d6a 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -12,6 +12,7 @@ import com.lz.model.structural.DesignPropertyRow
+ import com.lz.model.structural.CombinedStressCheck
+ import com.lz.model.structural.DesignEquationTrace
+ import com.lz.model.structural.DesignMethodology
++import com.lz.model.structural.EffectiveLengthCase
+ import com.lz.model.structural.Flange
+ import com.lz.model.structural.InteractionEquationResult
+ import com.lz.model.structural.MaterialGrade
+@@ -267,7 +268,7 @@ class NdsWoodCapacityCalculator(
+         factorRows += row("CP", "Column stability", fmt(cpParts.cp, 3))
+         groups += DesignPropertyGroup("Adjustment factors", factorRows)
+ 
+-        val bendStrong = computeNdsBeamStability(u.strongBend, profile, m, f, isGlulam, aboutStrongAxis = true, edition = edition)
++        val bendStrong = computeNdsBeamStability(u.strongBend, profile, m, f, isGlulam, aboutStrongAxis = true, edition = edition, effLenCase = u.strongCase)
+         val bendWeak = computeNdsBeamStability(u.weakBend, profile, m, f, isGlulam, aboutStrongAxis = false, edition = edition)
+         val lenRows = mutableListOf<DesignPropertyRow>()
+         lenRows += row("lu (strong-axis bending)", "Unbraced length, compression edge", "${fmt(u.strongBend, 1)} in")
+@@ -330,6 +331,8 @@ class NdsWoodCapacityCalculator(
+         val colWeak: Double,
+         val weakIsDefault: Boolean,
+         val strongIsDefault: Boolean,
++        /** Table 3.3.3 loading row for the primary bending plane (UNSPECIFIED when the member is oriented about its weak axis). */
++        val strongCase: EffectiveLengthCase,
+         /** Length for the glulam volume factor CV (NDS 5.3.6): between points of zero moment. */
+         val cvSpan: Double
+     )
+@@ -344,6 +347,7 @@ class NdsWoodCapacityCalculator(
+             strongBend = flangeLb, weakBend = weakPlane,
+             colStrong = strongPlane, colWeak = weakPlane,
+             weakIsDefault = demand.luWeakAxis == null, strongIsDefault = demand.luStrongAxis == null,
++            strongCase = if (memberIsStrongAxis) demand.effectiveLengthCase else EffectiveLengthCase.UNSPECIFIED,
+             // CV uses the length between points of zero moment (5.3.6), NOT the
+             // unbraced length; the solver supplies it (the whole member where
+             // the moment diagram doesn't bracket the station). Only a demand
+@@ -514,7 +518,7 @@ class NdsWoodCapacityCalculator(
+             isLrfd = methodology == DesignMethodology.LRFD
+         )
+ 
+-        val cl = computeCL(lb)
++        val cl = computeCL(lb, u.strongCase)
+         val cv = if (isGlulam) computeCV(u.cvSpan) else 1.0
+ 
+         return StrengthDesignResult(
+@@ -643,7 +647,8 @@ class NdsWoodCapacityCalculator(
+     }
+ 
+     private fun bendingAxis(strong: Boolean, u: Unbraced): BendingAxis =
+-        if (strong) strongBendingAxis(u.strongBend, u.cvSpan) else weakBendingAxis(u.weakBend)
++        if (strong) strongBendingAxis(u.strongBend, u.cvSpan, if (memberIsStrongAxis) u.strongCase else EffectiveLengthCase.UNSPECIFIED)
++        else weakBendingAxis(u.weakBend)
+ 
+     /**
+      * The NDS 3.3.3 development for one axis, as traces: the effective-length
+@@ -739,12 +744,12 @@ class NdsWoodCapacityCalculator(
+         )
+     }
+ 
+-    private fun strongBendingAxis(lb: Double, cvSpan: Double = lb): BendingAxis {
++    private fun strongBendingAxis(lb: Double, cvSpan: Double = lb, effLenCase: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED): BendingAxis {
+         val fb = designMaterial.referenceBending.inPsi
+         val sx = profile.propertiesStrongAxis.s.inIn3
+         val f = adjustmentFactors
+ 
+-        val stab = computeNdsBeamStability(lb, profile, designMaterial, f, isGlulam, edition = edition)
++        val stab = computeNdsBeamStability(lb, profile, designMaterial, f, isGlulam, edition = edition, effLenCase = effLenCase)
+         val cl = stab?.cl ?: 1.0
+ 
+         val traces = if (stab != null) stabilityTraces(stab, fb).toMutableList() else mutableListOf<DesignEquationTrace>()
+@@ -992,8 +997,8 @@ class NdsWoodCapacityCalculator(
+      * Delegates to [computeNdsCL] — see that function for the formula and
+      * why it's shared with [NdsClCalculator].
+      */
+-    private fun computeCL(lb: Double): Double =
+-        computeNdsCL(lb, profile, designMaterial, adjustmentFactors, isGlulam, edition = edition)
++    private fun computeCL(lb: Double, effLenCase: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED): Double =
++        computeNdsCL(lb, profile, designMaterial, adjustmentFactors, isGlulam, edition = edition, effLenCase = effLenCase)
+ 
+     /**
+      * NDS 5.3.6 Volume Factor CV for glulam.
+@@ -1580,7 +1585,7 @@ class NdsWoodCapacityCalculator(
+         val fcE1 = if (le1 > 0.0 && d1 > 0.0) 0.822 * eMinAdj / (le1 / d1).pow(2) else inf
+         val fcE2 = if (le2 > 0.0 && d2 > 0.0) 0.822 * eMinAdj / (le2 / d2).pow(2) else inf
+ 
+-        val stab = computeNdsBeamStability(u.strongBend, profile, designMaterial, adjustmentFactors, isGlulam, aboutStrongAxis = true, edition = edition)
++        val stab = computeNdsBeamStability(u.strongBend, profile, designMaterial, adjustmentFactors, isGlulam, aboutStrongAxis = true, edition = edition, effLenCase = u.strongCase)
+         val fbE = stab?.fbE ?: inf
+ 
+         val fb1Adj = strongAx.fbAdj * kBend
+diff --git a/core/solver/src/test/java/com/lz/solver/material/NdsEffectiveLengthCaseTest.kt b/core/solver/src/test/java/com/lz/solver/material/NdsEffectiveLengthCaseTest.kt
+new file mode 100644
+index 0000000..a9d0ca9
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/material/NdsEffectiveLengthCaseTest.kt
+@@ -0,0 +1,210 @@
++package com.lz.solver.material
++
++import com.lz.model.regulatory.LoadCategory
++import com.lz.model.regulatory.LoadCombination
++import com.lz.model.regulatory.loads.CombinationType
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++import com.lz.model.structural.*
++import com.lz.model.units.*
++import com.lz.solver.analysis.AnalysisConfig
++import com.lz.solver.analysis.EffectiveLengthClassifier
++import com.lz.solver.analysis.MemberAnalysisSolver
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.util.UUID
++
++/**
++ * NDS Table 3.3.3 effective length by the actual loading (rows as printed in the 2015, 2018 and 2024
++ * editions, which are identical). Hand calcs, 2x10 (d = 9.25 in, b = 1.5 in), lu = 60 in (lu/d = 6.49) or
++ * 100 in (10.81), E'min = 580,000 psi, F*b = 875 x 1.1 = 962.5 psi:
++ *   fn. 1 / UDL row  le = 2.06 x 60 = 123.6      CL = 0.916942
++ *   center point     le = 1.80 x 60 = 108.0      CL = 0.936617
++ *   cantilever UDL   le = 1.33 x 60 =  79.8      CL = 0.962676
++ *   cantilever tip   le = 1.87 x 60 = 112.2      CL = 0.931743
++ */
++class NdsEffectiveLengthCaseTest {
++
++    private val d = 9.25
++
++    private fun le(lu: Double, c: EffectiveLengthCase) = ndsBeamEffectiveLength(lu, d, c)
++
++    @Test
++    fun `specific Table 3_3_3 rows give the printed coefficients below and above lu over d of 7`() {
++        assertEquals(108.0, le(60.0, EffectiveLengthCase.SINGLE_SPAN_CENTER_POINT).le, 1e-9)
++        assertEquals(164.75, le(100.0, EffectiveLengthCase.SINGLE_SPAN_CENTER_POINT).le, 1e-9)      // 1.37 x 100 + 3 x 9.25
++        assertEquals(79.8, le(60.0, EffectiveLengthCase.CANTILEVER_UNIFORM).le, 1e-9)
++        assertEquals(117.75, le(100.0, EffectiveLengthCase.CANTILEVER_UNIFORM).le, 1e-9)            // 0.90 x 100 + 27.75
++        assertEquals(112.2, le(60.0, EffectiveLengthCase.CANTILEVER_TIP_POINT).le, 1e-9)
++        assertEquals(171.75, le(100.0, EffectiveLengthCase.CANTILEVER_TIP_POINT).le, 1e-9)          // 1.44 x 100 + 27.75
++        assertEquals(123.6, le(60.0, EffectiveLengthCase.SINGLE_SPAN_UNIFORM).le, 1e-9)
++        assertEquals(190.75, le(100.0, EffectiveLengthCase.SINGLE_SPAN_UNIFORM).le, 1e-9)           // 1.63 x 100 + 27.75
++        // lu/d = 7 exactly takes the second expression: 0.90 x 64.75 + 27.75
++        assertEquals(86.025, le(64.75, EffectiveLengthCase.CANTILEVER_UNIFORM).le, 1e-9)
++    }
++
++    @Test
++    fun `unspecified and multi-span use footnote 1 and say it was assumed`() {
++        val u = le(60.0, EffectiveLengthCase.UNSPECIFIED)
++        assertEquals(123.6, u.le, 1e-9)
++        assertTrue(u.tableReference, u.tableReference.contains("ASSUMED") && u.tableReference.contains("not one of the supported"))
++        val m = le(60.0, EffectiveLengthCase.MULTI_SPAN)
++        assertEquals(123.6, m.le, 1e-9)
++        assertTrue(m.tableReference, m.tableReference.contains("ASSUMED") && m.tableReference.contains("multi-span"))
++        // above lu/d = 14.3 footnote 1 keeps 1.84 lu (the printed UDL row has no such cap)
++        assertEquals(368.0, le(200.0, EffectiveLengthCase.UNSPECIFIED).le, 1e-9)
++        assertEquals(353.75, le(200.0, EffectiveLengthCase.SINGLE_SPAN_UNIFORM).le, 1e-9)
++    }
++
++    // ---------------- classifier ----------------
++
++    private fun member(vararg bcs: NodeBoundaryCondition, lengths: List<Double> = listOf(100.0)): StructuralMember {
++        val nodes = bcs.map { StructuralNode(id = UUID.randomUUID(), boundaryCondition = it) }
++        val spans = lengths.mapIndexed { i, l ->
++            SpanGeometry(id = UUID.randomUUID(), length = l.inches, startNodeId = nodes[i].id, endNodeId = nodes[i + 1].id)
++        }
++        return StructuralMember(nodes = nodes, spans = spans)
++    }
++
++    private fun udl(m: StructuralMember, from: Double = 0.0, to: Double = 100.0) =
++        Load.UniformDistributedLoad(ForcePerLength(10.0), m.spans[0].id, from.inches, to.inches)
++
++    private fun pt(m: StructuralMember, x: Double, dir: LoadDirection = LoadDirection.VERTICAL_DOWN) =
++        Load.PointLoad(Force(1000.0), m.spans[0].id, x.inches, direction = dir)
++
++    private fun cls(m: StructuralMember, loads: List<Load>, braces: List<NormalizedBraceState> = emptyList()) =
++        EffectiveLengthClassifier.classify(m, loads, braces)[m.spans[0].id]
++
++    private val simple get() = member(NodeBoundaryCondition.pinned(), NodeBoundaryCondition.roller())
++    private val cantilever get() = member(NodeBoundaryCondition.fixed(), NodeBoundaryCondition.free())
++
++    @Test
++    fun `simple span patterns`() {
++        val m = simple
++        assertEquals(EffectiveLengthCase.SINGLE_SPAN_UNIFORM, cls(m, listOf(udl(m))))
++        assertEquals(EffectiveLengthCase.SINGLE_SPAN_UNIFORM, cls(m, listOf(udl(m), udl(m))))
++        assertEquals(EffectiveLengthCase.SINGLE_SPAN_CENTER_POINT, cls(m, listOf(pt(m, 50.0))))
++        // axial loads do not change the transverse pattern
++        assertEquals(EffectiveLengthCase.SINGLE_SPAN_CENTER_POINT, cls(m, listOf(pt(m, 50.0), pt(m, 50.0, LoadDirection.AXIAL_COMPRESSION))))
++        // mixed or off-pattern loading is not matched
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(m, listOf(udl(m), pt(m, 50.0))))
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(m, listOf(pt(m, 40.0))))
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(m, listOf(pt(m, 50.0), pt(m, 50.0))))
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(m, listOf(udl(m, 0.0, 60.0))))
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(m, listOf(pt(m, 50.0, LoadDirection.VERTICAL_UP))))
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(m, listOf(Load.PointMoment(Moment(1000.0), m.spans[0].id, 50.0.inches))))
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(m, emptyList()))
++    }
++
++    @Test
++    fun `cantilever patterns`() {
++        val c = cantilever
++        assertEquals(EffectiveLengthCase.CANTILEVER_UNIFORM, cls(c, listOf(udl(c))))
++        assertEquals(EffectiveLengthCase.CANTILEVER_TIP_POINT, cls(c, listOf(pt(c, 100.0))))
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(c, listOf(pt(c, 50.0))))
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(c, listOf(udl(c), pt(c, 100.0))))
++        // fixed root at the span end, free tip at the start
++        val r = member(NodeBoundaryCondition.free(), NodeBoundaryCondition.fixed())
++        assertEquals(EffectiveLengthCase.CANTILEVER_TIP_POINT, cls(r, listOf(pt(r, 0.0))))
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(r, listOf(pt(r, 100.0))))
++    }
++
++    @Test
++    fun `bracing, supports and span count`() {
++        val m = simple
++        // an intermediate brace point or a short unbraced segment removes the "no intermediate lateral support" condition
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(m, listOf(udl(m)), listOf(NormalizedBraceState(50.0.inches))))
++        assertEquals(EffectiveLengthCase.SINGLE_SPAN_UNIFORM, cls(m, listOf(udl(m)), listOf(NormalizedBraceState(0.0.inches), NormalizedBraceState(100.0.inches))))
++        val braced = StructuralMember(m.nodes, listOf(m.spans[0].copy(unbracedSegments = listOf(
++            UnbracedSegment(0.0.inches, 100.0.inches, lbTop = 48.0.inches, lbBottom = 100.0.inches)))))
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(braced, listOf(udl(braced))))
++        // fixed-fixed is neither a simple span nor a cantilever
++        val ff = member(NodeBoundaryCondition.fixed(), NodeBoundaryCondition.fixed())
++        assertEquals(EffectiveLengthCase.UNSPECIFIED, cls(ff, listOf(udl(ff))))
++        // more than one span
++        val two = member(NodeBoundaryCondition.pinned(), NodeBoundaryCondition.roller(), NodeBoundaryCondition.roller(), lengths = listOf(100.0, 100.0))
++        val r = EffectiveLengthClassifier.classify(two, listOf(udl(two)), emptyList())
++        assertEquals(setOf(EffectiveLengthCase.MULTI_SPAN), r.values.toSet())
++        assertEquals(2, r.size)
++    }
++
++    // ---------------- per combination, through the solver ----------------
++
++    @Test
++    fun `the case follows the loads that act in each combination`() {
++        val m = simple
++        val dead = udl(m).copy(category = LoadCategory.DEAD)
++        val live = pt(m, 50.0).copy(category = LoadCategory.LIVE)
++        fun combo(name: String, vararg f: Pair<LoadCategory, Double>) = LoadCombination(
++            id = name, name = name, methodology = DesignMethodology.ASD, type = CombinationType.STRENGTH,
++            equationText = name, factors = mapOf(*f), codeReference = "test"
++        )
++        val r = MemberAnalysisSolver.solve(
++            AnalysisConfig(
++                member = m,
++                loadCases = listOf(LoadCase("D", "Dead", listOf(dead)), LoadCase("L", "Live", listOf(live))),
++                combinations = listOf(
++                    combo("D only", LoadCategory.DEAD to 1.0),
++                    combo("L only", LoadCategory.LIVE to 1.0),
++                    combo("D+L", LoadCategory.DEAD to 1.0, LoadCategory.LIVE to 1.0)
++                ),
++                modulusOfElasticity = ElasticModulus(1_600_000.0),
++                momentOfInertiaX = MomentOfInertia(100.0),
++                crossSectionalArea = Area(10.0)
++            )
++        )
++        fun caseOf(name: String) = r.combinationResults[name]!!.spanResults.flatMap { it.stationDemands }.map { it.effectiveLengthCase }.toSet()
++        assertEquals(setOf(EffectiveLengthCase.SINGLE_SPAN_UNIFORM), caseOf("D only"))
++        assertEquals(setOf(EffectiveLengthCase.SINGLE_SPAN_CENTER_POINT), caseOf("L only"))
++        assertEquals(setOf(EffectiveLengthCase.UNSPECIFIED), caseOf("D+L"))
++    }
++
++    // ---------------- calculator: CL and the flagged le row ----------------
++
++    private val profile = WoodProfile(
++        id = "2x10", designation = "2x10", nominalWidth = 2.0.inches, nominalDepth = 10.0.inches,
++        dressedWidth = 1.5.inches, dressedDepth = 9.25.inches
++    )
++    private val material = MaterialGrade.Wood(
++        id = "df-l-no2", name = "DF-L No.2", species = WoodSpecies.DF_L, grade = WoodGrade.NO_2,
++        referenceBending = 875.0.psi, referenceShear = 180.0.psi, referenceCompressionParallel = 1350.0.psi,
++        referenceCompressionPerp = 625.0.psi, referenceTensionParallel = 575.0.psi,
++        modulusOfElasticity = 1600000.0.psi, shearModulus = 100000.0.psi, densityPcf = 35.0
++    )
++
++    private fun result(c: EffectiveLengthCase, strongOrientation: Boolean = true) =
++        NdsWoodCapacityCalculator(profile, material, adjustmentFactors = NdsAdjustmentFactors(), memberIsStrongAxis = strongOrientation)
++            .evaluateDetailed(
++                StationDemand(
++                    spanId = UUID.randomUUID(), x = 50.0.inches, moment = Moment(-5000.0), shear = Force(0.0),
++                    momentY = Moment(0.0), axial = Force(0.0), lbTop = 60.0.inches, lbBottom = 60.0.inches,
++                    compressionFlange = Flange.TOP, effectiveLengthCase = c
++                ), DesignMethodology.ASD
++            )
++
++    private fun row(r: StrengthDesignResult, symbol: String) =
++        r.selectedProperties.flatMap { it.rows }.first { it.symbol == symbol }
++
++    @Test
++    fun `CL and the reported le follow the matched row`() {
++        assertEquals("0.917", row(result(EffectiveLengthCase.UNSPECIFIED), "CL (strong axis)").value)
++        assertEquals("0.937", row(result(EffectiveLengthCase.SINGLE_SPAN_CENTER_POINT), "CL (strong axis)").value)
++        assertEquals("0.963", row(result(EffectiveLengthCase.CANTILEVER_UNIFORM), "CL (strong axis)").value)
++        assertEquals("0.932", row(result(EffectiveLengthCase.CANTILEVER_TIP_POINT), "CL (strong axis)").value)
++        val le = row(result(EffectiveLengthCase.SINGLE_SPAN_CENTER_POINT), "le (strong-axis bending)")
++        assertTrue(le.value, le.value.startsWith("108.0 in"))
++        assertTrue(le.description, le.description.contains("concentrated load at center") && !le.description.contains("ASSUMED"))
++        val fn1 = row(result(EffectiveLengthCase.UNSPECIFIED), "le (strong-axis bending)")
++        assertTrue(fn1.value, fn1.value.startsWith("123.6 in"))
++        assertTrue(fn1.description, fn1.description.contains("ASSUMED"))
++        assertTrue(row(result(EffectiveLengthCase.MULTI_SPAN), "le (strong-axis bending)").description.contains("multi-span"))
++    }
++
++    @Test
++    fun `a member oriented about its weak axis keeps footnote 1`() {
++        // the loading row describes the primary plane; here the strong axis is the secondary plane
++        val r = result(EffectiveLengthCase.SINGLE_SPAN_CENTER_POINT, strongOrientation = false)
++        assertFalse(row(r, "le (strong-axis bending)").description.contains("concentrated load at center"))
++    }
++}
