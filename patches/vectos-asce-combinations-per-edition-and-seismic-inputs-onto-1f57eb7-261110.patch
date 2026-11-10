@@ -1,0 +1,639 @@
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/loads/AsceLoadCombinationCatalog.kt b/core/model/src/main/java/com/lz/model/regulatory/loads/AsceLoadCombinationCatalog.kt
+index 4c168c8..ea5981d 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/loads/AsceLoadCombinationCatalog.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/loads/AsceLoadCombinationCatalog.kt
+@@ -11,7 +11,16 @@ data class CatalogCombination(
+     val idSuffix: String,
+     val factors: Map<LoadCategory, Double>,
+     /** The ASCE 7 equation this expands, e.g. "Eq. 3 (L or 0.5W)". */
+-    val reference: String
++    val reference: String,
++    /**
++     * Seismic combinations only: the vertical seismic effect Ev = 0.2 SDS D adds [seismicDeadCoefficient] x SDS
++     * to the dead-load factor (negative where the code writes -Ev). 0 = not a seismic combination.
++     */
++    val seismicDeadCoefficient: Double = 0.0,
++    /** True where the code's exception lets the factor on L be 0.5 (Lo <= 100 psf, not garages or public assembly). */
++    val halfLiveAllowed: Boolean = false,
++    /** A source remark that the output must carry when this combination is used. */
++    val note: String? = null
+ )
+ 
+ /** ASCE 7 editions whose basic combinations are catalogued. */
+@@ -22,45 +31,24 @@ enum class AsceEdition(val sourceId: String, val sourceName: String, val lrfdSec
+ }
+ 
+ /**
+- * The ASCE 7 basic load combinations for strength design (LRFD) and
+- * allowable stress design (ASD), with EVERY "or" alternative written out as
+- * its own combination.
++ * The ASCE 7 basic load combinations for strength design (LRFD) and allowable stress design (ASD),
++ * with EVERY "or" alternative written out as its own combination, taken from each edition's own
++ * Chapter 2 (checked against the published pages of ASCE 7-10, 7-16 and 7-22):
+  *
+- * The code writes several combinations with alternatives, e.g.
+- *   1.2D + 1.6(Lr or S or R) + (L or 0.5W)
+- * which is six separate combinations: each of Lr, S, R with each of L, 0.5W.
+- * A member carrying snow must be checked against the snow combinations —
+- * folding the alternatives into one combination that carries only the first
+- * (roof live load) silently drops snow and rain from the design.
++ *  - ASCE 7-10 §2.3.2 / §2.4.1: seismic E is inside the basic list (LRFD Eq. 5 and 7; ASD Eq. 5, 6b and 8).
++ *  - ASCE 7-16 and 7-22: seismic is in §2.3.6 (LRFD Eq. 6 and 7) and §2.4.5 (ASD Eq. 8, 9, 10), written with
++ *    Ev and Eh; 0.9D + 1.0W is LRFD Eq. 5 (5a in 7-22).
++ *  - Snow factors differ: 7-10 and 7-16 use 0.5S (companion) and 1.6S (principal) in LRFD, 0.2S / 0.75S in the
++ *    seismic combination; 7-22 uses 0.3S, 1.0S and 0.15S in LRFD and 0.7S in ASD (so 0.525S where the code
++ *    multiplies by 0.75), 0.1S in ASD Eq. 9.
+  *
+- * LRFD (ASCE 7-16 / 7-22 \u00a72.3.1, ASCE 7-10 \u00a72.3.2), 16 combinations:
+- *  1. 1.4D
+- *  2. 1.2D + 1.6L + 0.5(Lr or S or R)                 x3
+- *  3. 1.2D + 1.6(Lr or S or R) + (L or 0.5W)          x6
+- *  4. 1.2D + 1.0W + L + 0.5(Lr or S or R)             x3
+- *  5. 1.2D + 1.0E + L + 0.2S
+- *  6. 0.9D + 1.0W
+- *  7. 0.9D + 1.0E
++ * Seismic combinations carry E as the horizontal effect Eh = rho QE. With the optional SDS and rho inputs
++ * [SeismicCombinationAdjuster] adds Ev = 0.2 SDS D and multiplies E by rho; with neither, E is used as
++ * entered (Ev = 0, rho = 1.0), which the output states.
+  *
+- * ASD (\u00a72.4.1), 16 combinations:
+- *  1. D            2. D + L
+- *  3. D + (Lr or S or R)                               x3
+- *  4. D + 0.75L + 0.75(Lr or S or R)                   x3
+- *  5. D + (0.6W or 0.7E)                               x2
+- *  6. D + 0.75L + 0.75(0.6W) + 0.75(Lr or S or R)      x3
+- *  7. D + 0.75L + 0.75(0.7E) + 0.75S
+- *  8. 0.6D + 0.6W  9. 0.6D + 0.7E
+- * (the 0.75 x 0.6 and 0.75 x 0.7 products are stored as 0.45 and 0.525).
+- *
+- * L is taken at its full factor in every combination that contains it —
+- * conservative where the code allows 0.5L (e.g. L <= 100 psf, not garages).
+- *
+- * STATUS: transcribed from the published ASCE 7 combinations. The basic
+- * combinations have the same structure in 7-10, 7-16 and 7-22 as far as is
+- * known, so all three editions currently share one definition and differ
+- * only in their section reference; they have NOT yet been checked against
+- * each edition's own pages — branch on [AsceEdition] in [combinations] where
+- * an edition is found to differ.
++ * L is at its full factor unless the user claims the 0.5L exception (see [CatalogCombination.halfLiveAllowed]).
++ * Tornado load WT (ASCE 7-22) and the flood, ice, self-straining and notional-load combinations are not
++ * catalogued.
+  */
+ object AsceLoadCombinationCatalog {
+ 
+@@ -87,42 +75,80 @@ object AsceLoadCombinationCatalog {
+     fun combinations(edition: AsceEdition, methodology: DesignMethodology): List<CatalogCombination> =
+         if (methodology == DesignMethodology.LRFD) lrfd(edition) else asd(edition)
+ 
++    private const val NOTE_7_10_6B =
++        "ASCE 7-10 prints 0.10 SDS in 12.4.2.3 and 0.105 SDS in 12.4.3.2 for this combination; 0.75 x 0.14 = 0.105 is used."
++
+     // ------------------------------------------------------------------
+ 
+     private fun lrfd(edition: AsceEdition): List<CatalogCombination> {
++        val is22 = edition == AsceEdition.ASCE_7_22
++        val is10 = edition == AsceEdition.ASCE_7_10
++        val sCompanion = if (is22) 0.3 else 0.5       // Eq. 2 and 4
++        val sPrincipal = if (is22) 1.0 else 1.6       // Eq. 3
++        val sSeismic = if (is22) 0.15 else 0.2        // seismic combination with L
+         val ref = edition.lrfdSection
++        val seismicRef = if (is10) ref else "${edition.sourceName} \u00a72.3.6"
++        val n = { k: Int -> if (is22) "${k}a" else "$k" }
++        fun companion(c: LoadCategory) = if (c == S) sCompanion else 0.5
++        fun principal(c: LoadCategory) = if (c == S) sPrincipal else 1.6
++
+         val out = mutableListOf<CatalogCombination>()
+-        out += combo(mapOf(D to 1.4), "$ref Eq. 1")
++        out += combo(mapOf(D to 1.4), "$ref Eq. ${n(1)}")
+         for (alt in roofAlternatives)
+-            out += combo(mapOf(D to 1.2, L to 1.6, alt to 0.5), "$ref Eq. 2 (${label(alt)})")
++            out += combo(mapOf(D to 1.2, L to 1.6, alt to companion(alt)), "$ref Eq. ${n(2)} (${label(alt)})")
+         for (alt in roofAlternatives) {
+-            out += combo(mapOf(D to 1.2, alt to 1.6, L to 1.0), "$ref Eq. 3 (${label(alt)}, L)")
+-            out += combo(mapOf(D to 1.2, alt to 1.6, W to 0.5), "$ref Eq. 3 (${label(alt)}, 0.5W)")
++            out += combo(mapOf(D to 1.2, alt to principal(alt), L to 1.0), "$ref Eq. ${n(3)} (${label(alt)}, L)", halfLive = true)
++            out += combo(mapOf(D to 1.2, alt to principal(alt), W to 0.5), "$ref Eq. ${n(3)} (${label(alt)}, 0.5W)")
+         }
+         for (alt in roofAlternatives)
+-            out += combo(mapOf(D to 1.2, W to 1.0, L to 1.0, alt to 0.5), "$ref Eq. 4 (${label(alt)})")
+-        out += combo(mapOf(D to 1.2, E to 1.0, L to 1.0, S to 0.2), "$ref Eq. 5")
+-        out += combo(mapOf(D to 0.9, W to 1.0), "$ref Eq. 6")
+-        out += combo(mapOf(D to 0.9, E to 1.0), "$ref Eq. 7")
++            out += combo(mapOf(D to 1.2, W to 1.0, L to 1.0, alt to companion(alt)), "$ref Eq. ${n(4)} (${label(alt)})", halfLive = true)
++        if (is10) {
++            out += combo(mapOf(D to 1.2, E to 1.0, L to 1.0, S to sSeismic), "$ref Eq. 5", ev = 0.2, halfLive = true)
++            out += combo(mapOf(D to 0.9, W to 1.0), "$ref Eq. 6")
++            out += combo(mapOf(D to 0.9, E to 1.0), "$ref Eq. 7", ev = -0.2)
++        } else {
++            out += combo(mapOf(D to 0.9, W to 1.0), "$ref Eq. ${n(5)}")
++            out += combo(mapOf(D to 1.2, E to 1.0, L to 1.0, S to sSeismic), "$seismicRef Eq. 6", ev = 0.2, halfLive = true)
++            out += combo(mapOf(D to 0.9, E to 1.0), "$seismicRef Eq. 7", ev = -0.2)
++        }
+         return out
+     }
+ 
+     private fun asd(edition: AsceEdition): List<CatalogCombination> {
++        val is22 = edition == AsceEdition.ASCE_7_22
++        val is10 = edition == AsceEdition.ASCE_7_10
++        val sFull = if (is22) 0.7 else 1.0            // D + (Lr or S or R)
++        val sPart = if (is22) 0.525 else 0.75         // 0.75 (Lr or S or R), 0.75 x 0.7 = 0.525 in 7-22
++        val sSeismic = if (is22) 0.1 else 0.75        // seismic combination with L
+         val ref = edition.asdSection
++        val seismicRef = if (is10) ref else "${edition.sourceName} \u00a72.4.5"
++        val n = { k: Int -> if (is22) "${k}a" else "$k" }
++        fun full(c: LoadCategory) = if (c == S) sFull else 1.0
++        fun part(c: LoadCategory) = if (c == S) sPart else 0.75
++
+         val out = mutableListOf<CatalogCombination>()
+-        out += combo(mapOf(D to 1.0), "$ref Eq. 1")
+-        out += combo(mapOf(D to 1.0, L to 1.0), "$ref Eq. 2")
++        out += combo(mapOf(D to 1.0), "$ref Eq. ${n(1)}")
++        out += combo(mapOf(D to 1.0, L to 1.0), "$ref Eq. ${n(2)}")
+         for (alt in roofAlternatives)
+-            out += combo(mapOf(D to 1.0, alt to 1.0), "$ref Eq. 3 (${label(alt)})")
++            out += combo(mapOf(D to 1.0, alt to full(alt)), "$ref Eq. ${n(3)} (${label(alt)})")
+         for (alt in roofAlternatives)
+-            out += combo(mapOf(D to 1.0, L to 0.75, alt to 0.75), "$ref Eq. 4 (${label(alt)})")
+-        out += combo(mapOf(D to 1.0, W to 0.6), "$ref Eq. 5 (0.6W)")
+-        out += combo(mapOf(D to 1.0, E to 0.7), "$ref Eq. 5 (0.7E)")
+-        for (alt in roofAlternatives)
+-            out += combo(mapOf(D to 1.0, L to 0.75, W to 0.45, alt to 0.75), "$ref Eq. 6 (${label(alt)})")
+-        out += combo(mapOf(D to 1.0, L to 0.75, E to 0.525, S to 0.75), "$ref Eq. 7")
+-        out += combo(mapOf(D to 0.6, W to 0.6), "$ref Eq. 8")
+-        out += combo(mapOf(D to 0.6, E to 0.7), "$ref Eq. 9")
++            out += combo(mapOf(D to 1.0, L to 0.75, alt to part(alt)), "$ref Eq. ${n(4)} (${label(alt)})")
++        out += combo(mapOf(D to 1.0, W to 0.6), "$ref Eq. ${n(5)} (0.6W)")
++        if (is10) {
++            out += combo(mapOf(D to 1.0, E to 0.7), "$ref Eq. 5 (0.7E)", ev = 0.14)
++            for (alt in roofAlternatives)
++                out += combo(mapOf(D to 1.0, L to 0.75, W to 0.45, alt to part(alt)), "$ref Eq. 6a (${label(alt)})")
++            out += combo(mapOf(D to 1.0, L to 0.75, E to 0.525, S to sSeismic), "$ref Eq. 6b", ev = 0.105, note = NOTE_7_10_6B)
++            out += combo(mapOf(D to 0.6, W to 0.6), "$ref Eq. 7")
++            out += combo(mapOf(D to 0.6, E to 0.7), "$ref Eq. 8", ev = -0.14)
++        } else {
++            for (alt in roofAlternatives)
++                out += combo(mapOf(D to 1.0, L to 0.75, W to 0.45, alt to part(alt)), "$ref Eq. ${n(6)} (${label(alt)})")
++            out += combo(mapOf(D to 0.6, W to 0.6), "$ref Eq. ${n(7)}")
++            out += combo(mapOf(D to 1.0, E to 0.7), "$seismicRef Eq. 8", ev = 0.14)
++            out += combo(mapOf(D to 1.0, L to 0.75, E to 0.525, S to sSeismic), "$seismicRef Eq. 9", ev = 0.105)
++            out += combo(mapOf(D to 0.6, E to 0.7), "$seismicRef Eq. 10", ev = -0.14)
++        }
+         return out
+     }
+ 
+@@ -146,14 +172,23 @@ object AsceLoadCombinationCatalog {
+         LoadCategory.RAIN, LoadCategory.WIND, LoadCategory.SEISMIC
+     )
+ 
+-    private fun combo(factors: Map<LoadCategory, Double>, reference: String): CatalogCombination {
++    private fun combo(
++        factors: Map<LoadCategory, Double>,
++        reference: String,
++        ev: Double = 0.0,
++        halfLive: Boolean = false,
++        note: String? = null
++    ): CatalogCombination {
+         val terms = nameOrder.filter { it in factors }.map { num(factors.getValue(it)) + label(it) }
+         val name = terms.joinToString(" + ")
+         return CatalogCombination(
+             name = name,
+             idSuffix = terms.joinToString("_"),
+             factors = factors,
+-            reference = reference
++            reference = reference,
++            seismicDeadCoefficient = ev,
++            halfLiveAllowed = halfLive,
++            note = note
+         )
+     }
+ }
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/loads/SeismicCombinationAdjuster.kt b/core/model/src/main/java/com/lz/model/regulatory/loads/SeismicCombinationAdjuster.kt
+new file mode 100644
+index 0000000..11dbdd7
+--- /dev/null
++++ b/core/model/src/main/java/com/lz/model/regulatory/loads/SeismicCombinationAdjuster.kt
+@@ -0,0 +1,117 @@
++package com.lz.model.regulatory.loads
++
++import com.lz.model.regulatory.LoadCategory
++import com.lz.model.regulatory.LoadCombination
++import com.lz.model.structural.DesignMethodology
++import kotlin.math.abs
++
++/**
++ * Optional seismic and live-load inputs applied to the catalogued ASCE 7 combinations at run time.
++ *
++ *  - [sds]: design spectral response acceleration at short periods. When entered, the vertical seismic
++ *    effect Ev = 0.2 SDS D (ASCE 7-10 §12.4.2.2 / 7-16, 7-22 §12.4.2.2) is added to the dead-load factor
++ *    of each seismic combination (e.g. LRFD 1.2D becomes (1.2 + 0.2 SDS) D; 0.9D becomes (0.9 - 0.2 SDS) D).
++ *  - [rho]: redundancy factor (§12.3.4), 1.0 or 1.3. The entered seismic load is QE (the horizontal effect
++ *    before rho); Eh = rho QE.
++ *  - [halfLive]: the user claims the exception that permits 0.5L (Lo <= 100 psf, not a garage or place of
++ *    public assembly) in the combinations where the code allows it (strength design only).
++ *
++ * With none of them the seismic load is used exactly as entered (Ev = 0, rho = 1.0) and L at its full factor,
++ * and the notes say so.
++ */
++data class SeismicCombinationInputs(
++    val sds: Double? = null,
++    val rho: Double? = null,
++    val halfLive: Boolean = false
++) {
++    fun blockReason(): String? = when {
++        sds != null && !(sds.isFinite() && sds >= 0.0) -> "SDS must be zero or more (entered $sds)."
++        rho != null && rho != 1.0 && rho != 1.3 -> "The redundancy factor rho is 1.0 or 1.3 (ASCE 7 §12.3.4); entered $rho."
++        else -> null
++    }
++}
++
++object SeismicCombinationAdjuster {
++
++    data class Result(
++        val combinations: List<LoadCombination>,
++        /** Every assumption and source remark that applies; the output must carry these. */
++        val notes: List<String>
++    )
++
++    private fun parse(setId: String): Pair<AsceEdition, DesignMethodology>? {
++        for (e in AsceEdition.values()) for (m in DesignMethodology.values())
++            if (setId == AsceLoadCombinationCatalog.setId(e, m)) return e to m
++        return null
++    }
++
++    private fun clean(v: Double) = Math.round(v * 1e6) / 1e6
++
++    private fun fmt(v: Double): String {
++        val s = java.math.BigDecimal.valueOf(clean(v)).stripTrailingZeros().toPlainString()
++        return s
++    }
++
++    private val order = listOf(
++        LoadCategory.DEAD, LoadCategory.LIVE, LoadCategory.ROOF_LIVE, LoadCategory.SNOW,
++        LoadCategory.RAIN, LoadCategory.WIND, LoadCategory.SEISMIC
++    )
++
++    private fun text(f: Map<LoadCategory, Double>) = order.filter { it in f }.joinToString(" + ") {
++        val v = f.getValue(it)
++        (if (v == 1.0) "" else fmt(v)) + it.shortLabel
++    }
++
++    fun adjust(setId: String, combinations: List<LoadCombination>, inputs: SeismicCombinationInputs): Result {
++        val (edition, method) = parse(setId) ?: return Result(combinations, emptyList())
++        inputs.blockReason()?.let { throw IllegalArgumentException(it) }
++        val catalog = AsceLoadCombinationCatalog.combinations(edition, method).associateBy { it.name }
++        val rho = inputs.rho ?: 1.0
++        val applied = mutableListOf<String>()
++        val halfNames = mutableListOf<String>()
++        var anySeismic = false
++
++        val out = combinations.map { c ->
++            val entry = catalog[c.name] ?: return@map c
++            val f = c.factors.toMutableMap()
++            val seismic = LoadCategory.SEISMIC in f
++            if (seismic) anySeismic = true
++            if (seismic && inputs.sds != null && entry.seismicDeadCoefficient != 0.0) {
++                f[LoadCategory.DEAD] = clean(f.getValue(LoadCategory.DEAD) + entry.seismicDeadCoefficient * inputs.sds)
++            }
++            if (seismic && rho != 1.0) f[LoadCategory.SEISMIC] = clean(f.getValue(LoadCategory.SEISMIC) * rho)
++            if (inputs.halfLive && entry.halfLiveAllowed && LoadCategory.LIVE in f) {
++                f[LoadCategory.LIVE] = 0.5; halfNames += c.name
++            }
++            if (f == c.factors) c
++            else c.copy(factors = f, equationText = text(f) + " [" + listOfNotNull(
++                inputs.sds?.takeIf { seismic && entry.seismicDeadCoefficient != 0.0 }?.let { "SDS = ${fmt(it)}" },
++                inputs.rho?.takeIf { seismic }?.let { "\u03C1 = ${fmt(it)}" },
++                "0.5L exception".takeIf { c.name in halfNames }
++            ).joinToString(", ") + "]")
++        }
++
++        if (anySeismic) {
++            applied += if (inputs.sds != null)
++                "Vertical seismic effect included: Ev = 0.2 x SDS x D with SDS = ${fmt(inputs.sds)} in the seismic combinations."
++            else
++                "ASSUMED: SDS not entered, so the vertical seismic effect Ev = 0.2 SDS D is not included (Ev = 0); " +
++                    "enter SDS, or enter E as the total effect including Ev."
++            applied += if (inputs.rho != null)
++                "Redundancy factor \u03C1 = ${fmt(inputs.rho)} applied to the seismic load (the seismic load entered is QE)."
++            else
++                "ASSUMED: \u03C1 not entered, so \u03C1 = 1.0 and the seismic load is used as entered " +
++                    "(\u03C1 is 1.3 for Seismic Design Categories D to F unless ASCE 7 \u00a712.3.4.2 is met)."
++        }
++        if (method == DesignMethodology.LRFD) {
++            applied += if (inputs.halfLive)
++                "0.5L exception claimed (Lo <= 100 psf, not a garage or place of public assembly): L at 0.5 in ${halfNames.size} " +
++                    "combinations where the code allows it."
++            else "L is at its full factor in every combination (the 0.5L exception is not claimed)."
++        }
++        combinations.mapNotNull { catalog[it.name]?.note }.distinct().forEach { applied += it }
++        if (edition == AsceEdition.ASCE_7_22)
++            applied += "ASCE 7-22 tornado load WT is not offered; the combinations use W only."
++        return Result(out, applied)
++    }
++}
+diff --git a/core/solver/src/test/java/com/lz/solver/material/AsceLoadCombinationCatalogTest.kt b/core/solver/src/test/java/com/lz/solver/material/AsceLoadCombinationCatalogTest.kt
+index 3f7ab12..7cce5fa 100644
+--- a/core/solver/src/test/java/com/lz/solver/material/AsceLoadCombinationCatalogTest.kt
++++ b/core/solver/src/test/java/com/lz/solver/material/AsceLoadCombinationCatalogTest.kt
+@@ -21,7 +21,8 @@ class AsceLoadCombinationCatalogTest {
+     private fun names(e: AsceEdition, m: DesignMethodology) =
+         AsceLoadCombinationCatalog.combinations(e, m).map { it.name }
+ 
+-    private val expectedLrfd = listOf(
++    // ---- LRFD, 7-10 §2.3.2 (seismic E inside the basic list) and 7-16 §2.3.1 + §2.3.6 --------
++    private val lrfd10 = listOf(
+         "1.4D",
+         // Eq 2: 1.2D + 1.6L + 0.5(Lr or S or R)
+         "1.2D + 1.6L + 0.5Lr", "1.2D + 1.6L + 0.5S", "1.2D + 1.6L + 0.5R",
+@@ -31,43 +32,110 @@ class AsceLoadCombinationCatalogTest {
+         "1.2D + L + 1.6R", "1.2D + 1.6R + 0.5W",
+         // Eq 4: 1.2D + 1.0W + L + 0.5(Lr or S or R)
+         "1.2D + L + 0.5Lr + W", "1.2D + L + 0.5S + W", "1.2D + L + 0.5R + W",
+-        // Eq 5, 6, 7
++        // 7-10 Eq 5 (1.2D + 1.0E + L + 0.2S), Eq 6 (0.9D + 1.0W), Eq 7 (0.9D + 1.0E)
+         "1.2D + L + 0.2S + E", "0.9D + W", "0.9D + E"
+     )
++    private val lrfd16 = lrfd10.take(13) + listOf(
++        "0.9D + W",                                   // Eq 5
++        "1.2D + L + 0.2S + E", "0.9D + E"             // §2.3.6 Eq 6, 7
++    )
++
++    // ---- LRFD, 7-22 §2.3.1 (1a to 5a) + §2.3.6: S at 0.3 (companion), 1.0 (principal), 0.15 (seismic) ----
++    private val lrfd22 = listOf(
++        "1.4D",
++        "1.2D + 1.6L + 0.5Lr", "1.2D + 1.6L + 0.3S", "1.2D + 1.6L + 0.5R",                 // 2a
++        "1.2D + L + 1.6Lr", "1.2D + 1.6Lr + 0.5W",                                          // 3a
++        "1.2D + L + S", "1.2D + S + 0.5W",
++        "1.2D + L + 1.6R", "1.2D + 1.6R + 0.5W",
++        "1.2D + L + 0.5Lr + W", "1.2D + L + 0.3S + W", "1.2D + L + 0.5R + W",              // 4a
++        "0.9D + W",                                                                          // 5a
++        "1.2D + L + 0.15S + E", "0.9D + E"                                                   // 6, 7
++    )
+ 
+-    private val expectedAsd = listOf(
++    // ---- ASD, 7-10 §2.4.1 ---------------------------------------------------------------
++    private val asd10 = listOf(
+         "D", "D + L",
+-        // Eq 3: D + (Lr or S or R)
+-        "D + Lr", "D + S", "D + R",
+-        // Eq 4: D + 0.75L + 0.75(Lr or S or R)
+-        "D + 0.75L + 0.75Lr", "D + 0.75L + 0.75S", "D + 0.75L + 0.75R",
+-        // Eq 5: D + (0.6W or 0.7E)
+-        "D + 0.6W", "D + 0.7E",
+-        // Eq 6: D + 0.75L + 0.75(0.6W) + 0.75(Lr or S or R)  (0.75 x 0.6 = 0.45)
+-        "D + 0.75L + 0.75Lr + 0.45W", "D + 0.75L + 0.75S + 0.45W", "D + 0.75L + 0.75R + 0.45W",
+-        // Eq 7: D + 0.75L + 0.75(0.7E) + 0.75S  (0.75 x 0.7 = 0.525)
+-        "D + 0.75L + 0.75S + 0.525E",
+-        // Eq 8, 9
+-        "0.6D + 0.6W", "0.6D + 0.7E"
++        "D + Lr", "D + S", "D + R",                                                          // 3
++        "D + 0.75L + 0.75Lr", "D + 0.75L + 0.75S", "D + 0.75L + 0.75R",                     // 4
++        "D + 0.6W", "D + 0.7E",                                                              // 5
++        "D + 0.75L + 0.75Lr + 0.45W", "D + 0.75L + 0.75S + 0.45W", "D + 0.75L + 0.75R + 0.45W", // 6a (0.75 x 0.6)
++        "D + 0.75L + 0.75S + 0.525E",                                                        // 6b (0.75 x 0.7)
++        "0.6D + 0.6W", "0.6D + 0.7E"                                                         // 7, 8
++    )
++    // ---- ASD, 7-16 §2.4.1 + §2.4.5 (8, 9, 10) ----------------------------------------------
++    private val asd16 = asd10.take(9) + listOf(
++        "D + 0.75L + 0.75Lr + 0.45W", "D + 0.75L + 0.75S + 0.45W", "D + 0.75L + 0.75R + 0.45W", // 6
++        "0.6D + 0.6W",                                                                       // 7
++        "D + 0.7E", "D + 0.75L + 0.75S + 0.525E", "0.6D + 0.7E"                              // 8, 9, 10
++    )
++    // ---- ASD, 7-22 §2.4.1 (1a to 7a) + §2.4.5: S at 0.7, 0.525 (0.75 x 0.7), 0.1 in Eq 9 ----
++    private val asd22 = listOf(
++        "D", "D + L",
++        "D + Lr", "D + 0.7S", "D + R",                                                       // 3a
++        "D + 0.75L + 0.75Lr", "D + 0.75L + 0.525S", "D + 0.75L + 0.75R",                     // 4a
++        "D + 0.6W",                                                                          // 5a
++        "D + 0.75L + 0.75Lr + 0.45W", "D + 0.75L + 0.525S + 0.45W", "D + 0.75L + 0.75R + 0.45W", // 6a
++        "0.6D + 0.6W",                                                                       // 7a
++        "D + 0.7E", "D + 0.75L + 0.1S + 0.525E", "0.6D + 0.7E"                               // 8, 9, 10
+     )
+ 
+     @Test
+-    fun `every or alternative is its own combination for every edition`() {
++    fun `every or alternative is its own combination, per edition, as printed in the code`() {
++        assertEquals(lrfd10, names(AsceEdition.ASCE_7_10, lrfd))
++        assertEquals(lrfd16, names(AsceEdition.ASCE_7_16, lrfd))
++        assertEquals(lrfd22, names(AsceEdition.ASCE_7_22, lrfd))
++        assertEquals(asd10, names(AsceEdition.ASCE_7_10, asd))
++        assertEquals(asd16, names(AsceEdition.ASCE_7_16, asd))
++        assertEquals(asd22, names(AsceEdition.ASCE_7_22, asd))
+         for (e in AsceEdition.values()) {
+-            assertEquals("LRFD ${e.sourceName}", expectedLrfd, names(e, lrfd))
+-            assertEquals("ASD ${e.sourceName}", expectedAsd, names(e, asd))
+             assertEquals(AsceLoadCombinationCatalog.LRFD_COUNT, names(e, lrfd).size)
+             assertEquals(AsceLoadCombinationCatalog.ASD_COUNT, names(e, asd).size)
+         }
+     }
+ 
++    @Test
++    fun `references use each edition's own section and equation numbers`() {
++        fun ref(e: AsceEdition, m: DesignMethodology, name: String) =
++            AsceLoadCombinationCatalog.combinations(e, m).first { it.name == name }.reference
++        assertEquals("ASCE 7-10 \u00a72.3.2 Eq. 5", ref(AsceEdition.ASCE_7_10, lrfd, "1.2D + L + 0.2S + E"))
++        assertEquals("ASCE 7-16 \u00a72.3.6 Eq. 6", ref(AsceEdition.ASCE_7_16, lrfd, "1.2D + L + 0.2S + E"))
++        assertEquals("ASCE 7-16 \u00a72.3.1 Eq. 5", ref(AsceEdition.ASCE_7_16, lrfd, "0.9D + W"))
++        assertEquals("ASCE 7-22 \u00a72.3.1 Eq. 5a", ref(AsceEdition.ASCE_7_22, lrfd, "0.9D + W"))
++        assertEquals("ASCE 7-22 \u00a72.3.6 Eq. 6", ref(AsceEdition.ASCE_7_22, lrfd, "1.2D + L + 0.15S + E"))
++        assertEquals("ASCE 7-10 \u00a72.4.1 Eq. 6b", ref(AsceEdition.ASCE_7_10, asd, "D + 0.75L + 0.75S + 0.525E"))
++        assertEquals("ASCE 7-16 \u00a72.4.5 Eq. 9", ref(AsceEdition.ASCE_7_16, asd, "D + 0.75L + 0.75S + 0.525E"))
++        assertEquals("ASCE 7-22 \u00a72.4.5 Eq. 9", ref(AsceEdition.ASCE_7_22, asd, "D + 0.75L + 0.1S + 0.525E"))
++        assertEquals("ASCE 7-22 \u00a72.4.1 Eq. 4a (S)", ref(AsceEdition.ASCE_7_22, asd, "D + 0.75L + 0.525S"))
++    }
++
++    @Test
++    fun `seismic Ev coefficients and the 0_5L exception flags match the code`() {
++        fun c(e: AsceEdition, m: DesignMethodology, name: String) =
++            AsceLoadCombinationCatalog.combinations(e, m).first { it.name == name }
++        // Ev = 0.2 SDS D: LRFD +0.2 / -0.2; ASD 0.7 x 0.2 = 0.14, 0.525 x 0.2 = 0.105
++        assertEquals(0.2, c(AsceEdition.ASCE_7_16, lrfd, "1.2D + L + 0.2S + E").seismicDeadCoefficient, 0.0)
++        assertEquals(-0.2, c(AsceEdition.ASCE_7_16, lrfd, "0.9D + E").seismicDeadCoefficient, 0.0)
++        assertEquals(0.14, c(AsceEdition.ASCE_7_22, asd, "D + 0.7E").seismicDeadCoefficient, 0.0)
++        assertEquals(0.105, c(AsceEdition.ASCE_7_22, asd, "D + 0.75L + 0.1S + 0.525E").seismicDeadCoefficient, 0.0)
++        assertEquals(-0.14, c(AsceEdition.ASCE_7_22, asd, "0.6D + 0.7E").seismicDeadCoefficient, 0.0)
++        assertEquals(0.0, c(AsceEdition.ASCE_7_22, lrfd, "0.9D + W").seismicDeadCoefficient, 0.0)
++        // 0.5L: LRFD Eq 3 (the L alternative), Eq 4 and the seismic combination with L; never Eq 2; never ASD
++        for (e in AsceEdition.values()) {
++            val flagged = AsceLoadCombinationCatalog.combinations(e, lrfd).filter { it.halfLiveAllowed }.map { it.name }.toSet()
++            assertEquals(e.sourceName, 7, flagged.size)
++            assertTrue(e.sourceName, "1.2D + L + 1.6Lr" in flagged && "1.2D + L + 0.5Lr + W" in flagged)
++            assertTrue(e.sourceName, flagged.none { it.startsWith("1.2D + 1.6L") })
++            assertTrue(AsceLoadCombinationCatalog.combinations(e, asd).none { it.halfLiveAllowed })
++        }
++    }
++
+     @Test
+     fun `roof live, snow and rain each get the same number of gravity combinations`() {
+         for (m in listOf(lrfd, asd)) {
+             val combos = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_16, m)
+             fun count(c: LoadCategory) = combos.count { c in it.factors }
+             assertEquals("Lr vs R, $m", count(LoadCategory.ROOF_LIVE), count(LoadCategory.RAIN))
+-            // Snow additionally appears in the 0.2S / 0.75(0.7E) seismic combination.
++            // Snow additionally appears in the seismic combination that carries L.
+             assertEquals("S, $m", count(LoadCategory.ROOF_LIVE) + 1, count(LoadCategory.SNOW))
+         }
+         val l = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_16, lrfd)
+@@ -78,16 +146,24 @@ class AsceLoadCombinationCatalogTest {
+ 
+     @Test
+     fun `factors are exactly the code's, including the 0_75 products`() {
+-        val a = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_22, asd)
+-        val wind = a.first { it.name == "D + 0.75L + 0.75S + 0.45W" }.factors
+-        assertEquals(0.45, wind.getValue(LoadCategory.WIND), 0.0)
++        val a = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_16, asd)
++        assertEquals(0.45, a.first { it.name == "D + 0.75L + 0.75S + 0.45W" }.factors.getValue(LoadCategory.WIND), 0.0)
+         val eq = a.first { it.name == "D + 0.75L + 0.75S + 0.525E" }.factors
+         assertEquals(0.525, eq.getValue(LoadCategory.SEISMIC), 0.0)
+         assertEquals(0.75, eq.getValue(LoadCategory.SNOW), 0.0)
+-        val l = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_22, lrfd)
++        val l = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_16, lrfd)
+         assertEquals(0.5, l.first { it.name == "1.2D + 1.6R + 0.5W" }.factors.getValue(LoadCategory.WIND), 0.0)
+         assertEquals(1.6, l.first { it.name == "1.2D + 1.6R + 0.5W" }.factors.getValue(LoadCategory.RAIN), 0.0)
+         assertEquals(0.2, l.first { it.name == "1.2D + L + 0.2S + E" }.factors.getValue(LoadCategory.SNOW), 0.0)
++        // 7-22 snow: 0.3 / 1.0 / 0.15 (LRFD) and 0.7 / 0.525 / 0.1 (ASD)
++        val l22 = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_22, lrfd)
++        assertEquals(0.3, l22.first { it.name == "1.2D + 1.6L + 0.3S" }.factors.getValue(LoadCategory.SNOW), 0.0)
++        assertEquals(1.0, l22.first { it.name == "1.2D + L + S" }.factors.getValue(LoadCategory.SNOW), 0.0)
++        assertEquals(0.15, l22.first { it.name == "1.2D + L + 0.15S + E" }.factors.getValue(LoadCategory.SNOW), 0.0)
++        val a22 = AsceLoadCombinationCatalog.combinations(AsceEdition.ASCE_7_22, asd)
++        assertEquals(0.7, a22.first { it.name == "D + 0.7S" }.factors.getValue(LoadCategory.SNOW), 0.0)
++        assertEquals(0.525, a22.first { it.name == "D + 0.75L + 0.525S" }.factors.getValue(LoadCategory.SNOW), 0.0)
++        assertEquals(0.1, a22.first { it.name == "D + 0.75L + 0.1S + 0.525E" }.factors.getValue(LoadCategory.SNOW), 0.0)
+     }
+ 
+     @Test
+diff --git a/core/solver/src/test/java/com/lz/solver/material/SeismicCombinationAdjusterTest.kt b/core/solver/src/test/java/com/lz/solver/material/SeismicCombinationAdjusterTest.kt
+new file mode 100644
+index 0000000..d97c0ae
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/material/SeismicCombinationAdjusterTest.kt
+@@ -0,0 +1,129 @@
++package com.lz.solver.material
++
++import com.lz.model.regulatory.LoadCategory
++import com.lz.model.regulatory.LoadCombination
++import com.lz.model.regulatory.loads.AsceEdition
++import com.lz.model.regulatory.loads.AsceLoadCombinationCatalog
++import com.lz.model.regulatory.loads.CombinationType
++import com.lz.model.regulatory.loads.SeismicCombinationAdjuster
++import com.lz.model.regulatory.loads.SeismicCombinationInputs
++import com.lz.model.structural.DesignMethodology
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/**
++ * Optional SDS, rho and 0.5L inputs applied to the catalogued ASCE combinations. Expected factors are hand
++ * calculations from the code's expressions:
++ *   Ev = 0.2 SDS D, Eh = rho QE
++ *   LRFD seismic:  (1.2 + 0.2 SDS) D + rho QE + L + 0.2S   and   (0.9 - 0.2 SDS) D + rho QE
++ *   ASD (7-16/22): (1.0 + 0.14 SDS) D + 0.7 rho QE;  (1.0 + 0.105 SDS) D + 0.525 rho QE + 0.75L + S-term;
++ *                  (0.6 - 0.14 SDS) D + 0.7 rho QE
++ */
++class SeismicCombinationAdjusterTest {
++
++    private fun combos(e: AsceEdition, m: DesignMethodology) =
++        AsceLoadCombinationCatalog.combinations(e, m).map {
++            LoadCombination(
++                id = AsceLoadCombinationCatalog.combinationId(e, m, it), name = it.name, methodology = m,
++                type = CombinationType.STRENGTH, equationText = "", factors = it.factors, codeReference = it.reference
++            )
++        }
++
++    private fun adjust(e: AsceEdition, m: DesignMethodology, i: SeismicCombinationInputs) =
++        SeismicCombinationAdjuster.adjust(AsceLoadCombinationCatalog.setId(e, m), combos(e, m), i)
++
++    private fun f(r: SeismicCombinationAdjuster.Result, name: String) = r.combinations.first { it.name == name }.factors
++
++    private fun near(expected: Double, actual: Double?, what: String) = assertEquals(what, expected, actual!!, 1e-9)
++
++    @Test
++    fun `LRFD SDS and rho scale the dead and seismic factors, nothing else`() {
++        val r = adjust(AsceEdition.ASCE_7_16, DesignMethodology.LRFD, SeismicCombinationInputs(sds = 0.4, rho = 1.3))
++        val a = f(r, "1.2D + L + 0.2S + E")
++        near(1.28, a[LoadCategory.DEAD], "D"); near(1.3, a[LoadCategory.SEISMIC], "E")
++        near(1.0, a[LoadCategory.LIVE], "L"); near(0.2, a[LoadCategory.SNOW], "S")
++        val b = f(r, "0.9D + E")
++        near(0.82, b[LoadCategory.DEAD], "0.9 - 0.2 x 0.4"); near(1.3, b[LoadCategory.SEISMIC], "E")
++        // a non-seismic combination is untouched, and keeps the catalog's text
++        val nonSeismic = r.combinations.first { it.name == "1.2D + 1.6L + 0.5S" }
++        near(1.2, nonSeismic.factors[LoadCategory.DEAD], "D unchanged")
++        assertEquals("", nonSeismic.equationText)
++        assertTrue(r.combinations.first { it.name == "0.9D + E" }.equationText, r.combinations.first { it.name == "0.9D + E" }.equationText.startsWith("0.82DL + 1.3E"))
++    }
++
++    @Test
++    fun `ASD 7-22 coefficients 0_14 and 0_105 and rho on 0_7 and 0_525`() {
++        val r = adjust(AsceEdition.ASCE_7_22, DesignMethodology.ASD, SeismicCombinationInputs(sds = 0.5, rho = 1.3))
++        val e8 = f(r, "D + 0.7E")
++        near(1.07, e8[LoadCategory.DEAD], "1 + 0.14 x 0.5"); near(0.91, e8[LoadCategory.SEISMIC], "0.7 x 1.3")
++        val e9 = f(r, "D + 0.75L + 0.1S + 0.525E")
++        near(1.0525, e9[LoadCategory.DEAD], "1 + 0.105 x 0.5"); near(0.6825, e9[LoadCategory.SEISMIC], "0.525 x 1.3")
++        near(0.75, e9[LoadCategory.LIVE], "L"); near(0.1, e9[LoadCategory.SNOW], "S")
++        val e10 = f(r, "0.6D + 0.7E")
++        near(0.53, e10[LoadCategory.DEAD], "0.6 - 0.14 x 0.5"); near(0.91, e10[LoadCategory.SEISMIC], "E")
++    }
++
++    @Test
++    fun `7-10 puts the Ev coefficient in its own seismic combinations`() {
++        val r = adjust(AsceEdition.ASCE_7_10, DesignMethodology.ASD, SeismicCombinationInputs(sds = 0.4))
++        near(1.056, f(r, "D + 0.7E")[LoadCategory.DEAD], "1 + 0.14 x 0.4")
++        near(1.042, f(r, "D + 0.75L + 0.75S + 0.525E")[LoadCategory.DEAD], "1 + 0.105 x 0.4")
++        near(0.544, f(r, "0.6D + 0.7E")[LoadCategory.DEAD], "0.6 - 0.14 x 0.4")
++        near(0.7, f(r, "D + 0.7E")[LoadCategory.SEISMIC], "rho = 1 leaves E alone")
++    }
++
++    @Test
++    fun `the 0_5L exception applies only where the code allows it and only to strength design`() {
++        val r = adjust(AsceEdition.ASCE_7_16, DesignMethodology.LRFD, SeismicCombinationInputs(halfLive = true))
++        val halved = r.combinations.filter { it.factors[LoadCategory.LIVE] == 0.5 }.map { it.name }.toSet()
++        assertEquals(
++            setOf("1.2D + L + 1.6Lr", "1.2D + L + 1.6S", "1.2D + L + 1.6R", "1.2D + L + 0.5Lr + W",
++                "1.2D + L + 0.5S + W", "1.2D + L + 0.5R + W", "1.2D + L + 0.2S + E"), halved
++        )
++        near(1.6, f(r, "1.2D + 1.6L + 0.5S")[LoadCategory.LIVE], "Eq. 2 keeps 1.6L")
++        val asd = adjust(AsceEdition.ASCE_7_16, DesignMethodology.ASD, SeismicCombinationInputs(halfLive = true))
++        assertTrue(asd.combinations.none { it.factors[LoadCategory.LIVE] == 0.5 })
++        assertTrue(asd.notes.none { it.contains("0.5L") })
++    }
++
++    @Test
++    fun `with no inputs the combinations are unchanged and every assumption is stated`() {
++        val e = AsceEdition.ASCE_7_16
++        val r = adjust(e, DesignMethodology.LRFD, SeismicCombinationInputs())
++        assertEquals(combos(e, DesignMethodology.LRFD), r.combinations)
++        assertTrue(r.notes.toString(), r.notes.any { it.startsWith("ASSUMED: SDS not entered") })
++        assertTrue(r.notes.toString(), r.notes.any { it.startsWith("ASSUMED: \u03C1 not entered") })
++        assertTrue(r.notes.toString(), r.notes.any { it.contains("0.5L exception is not claimed") })
++        val entered = adjust(e, DesignMethodology.LRFD, SeismicCombinationInputs(sds = 0.4, rho = 1.0, halfLive = true))
++        assertTrue(entered.notes.toString(), entered.notes.none { it.startsWith("ASSUMED") })
++        assertTrue(entered.notes.toString(), entered.notes.any { it.contains("0.5L exception claimed") && it.contains("7 combinations") })
++    }
++
++    @Test
++    fun `source remarks and edition notes are carried`() {
++        val r10 = adjust(AsceEdition.ASCE_7_10, DesignMethodology.ASD, SeismicCombinationInputs())
++        assertTrue(r10.notes.toString(), r10.notes.any { it.contains("0.10 SDS") && it.contains("0.105") })
++        val r22 = adjust(AsceEdition.ASCE_7_22, DesignMethodology.LRFD, SeismicCombinationInputs())
++        assertTrue(r22.notes.toString(), r22.notes.any { it.contains("tornado") })
++        assertTrue(adjust(AsceEdition.ASCE_7_16, DesignMethodology.LRFD, SeismicCombinationInputs()).notes.none { it.contains("tornado") })
++    }
++
++    @Test
++    fun `invalid inputs are rejected and unknown sets are left alone`() {
++        assertNotNull(SeismicCombinationInputs(rho = 1.2).blockReason())
++        assertNotNull(SeismicCombinationInputs(sds = -0.1).blockReason())
++        assertNotNull(SeismicCombinationInputs(sds = Double.NaN).blockReason())
++        assertNull(SeismicCombinationInputs(sds = 0.0, rho = 1.3).blockReason())
++        var threw = false
++        try { adjust(AsceEdition.ASCE_7_16, DesignMethodology.LRFD, SeismicCombinationInputs(rho = 1.2)) }
++        catch (e: IllegalArgumentException) { threw = true }
++        assertTrue(threw)
++        val other = SeismicCombinationAdjuster.adjust("SOME_OTHER_SET", combos(AsceEdition.ASCE_7_16, DesignMethodology.LRFD),
++            SeismicCombinationInputs(sds = 0.4, rho = 1.3, halfLive = true))
++        assertEquals(combos(AsceEdition.ASCE_7_16, DesignMethodology.LRFD), other.combinations)
++        assertTrue(other.notes.isEmpty())
++    }
++}
