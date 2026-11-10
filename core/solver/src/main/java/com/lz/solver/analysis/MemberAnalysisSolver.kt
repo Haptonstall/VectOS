@@ -219,7 +219,7 @@ object MemberAnalysisSolver {
 
         if (config.combinations.isEmpty()) {
             // Legacy behavior if no combinations provided: Solve all loads as a single case
-            return solveInternal(config, config.allLoads, globalPois)
+            return solveWithShearReduction(config, config.allLoads, globalPois)
         }
 
         // 2. Identify all unique categories in the input loads
@@ -244,7 +244,7 @@ object MemberAnalysisSolver {
         // 3. Solve for each category independently (Unfactored/Service Pass)
         val resultsByCategory = activeCategories.associateWith { category ->
             val categoryLoads = config.allLoads.filter { it.category == category }
-            solveInternal(config, categoryLoads, globalPois)
+            solveWithShearReduction(config, categoryLoads, globalPois)
         }
 
         // 4. Resolve Envelopes using DemandEnvelopeResolver
@@ -501,11 +501,13 @@ object MemberAnalysisSolver {
         return (0 until stationCount).map { index ->
             var mX = 0.0; var vY = 0.0; var pZ = 0.0
             var mY = 0.0; var vX = 0.0; var tZ = 0.0; var delta = 0.0
+            var vYFull = 0.0
             val firstStation = demandsByCategory.values.first()[index]
             combo.factors.forEach { (category, factor) ->
                 demandsByCategory[category]?.get(index)?.let { demand ->
                     mX += factor * demand.moment.lbIn
                     vY += factor * demand.shear.pounds
+                    vYFull += factor * (demand.unreducedShear ?: demand.shear).pounds
                     pZ += factor * demand.axial.pounds
                     mY += factor * demand.momentY.lbIn
                     vX += factor * demand.shearY.pounds
@@ -522,7 +524,8 @@ object MemberAnalysisSolver {
                 combinationLoadFactors = actingLoads,
                 combinationMethodology = combo.methodology,
                 effectiveLengthCase = effectiveLengthCases[firstStation.spanId]
-                    ?: com.lz.model.structural.EffectiveLengthCase.UNSPECIFIED
+                    ?: com.lz.model.structural.EffectiveLengthCase.UNSPECIFIED,
+                unreducedShear = if (firstStation.shearReductionNote != null) Force(vYFull) else null
             )
         }
     }
@@ -573,6 +576,90 @@ object MemberAnalysisSolver {
         return acc.values.toList()
     }
 
+    // ------------------------------------------------------------------
+    // NDS 3.4.3.1(a): shear within d of a support
+    // ------------------------------------------------------------------
+
+    private fun solveWithShearReduction(config: AnalysisConfig, loads: List<Load>, pois: List<Double>): AnalysisResult {
+        val base = solveInternal(config, loads, pois)
+        val sr = config.shearReduction ?: return base
+        val d = sr.depth.inches
+        if (d <= 0.0 || loads.isEmpty()) return base
+        val half = (sr.bearingLength?.inches ?: 0.0) / 2.0
+
+        // Global x of every vertically restrained node (a support) and each span's start offset.
+        val spans = config.member.spans
+        val offsets = DoubleArray(spans.size + 1)
+        spans.forEachIndexed { i, s -> offsets[i + 1] = offsets[i] + s.length.inches }
+        val supports = ArrayList<Double>()
+        for (k in 0..spans.size) {
+            val nodeId = if (k < spans.size) spans[k].startNodeId else spans.last().endNodeId
+            val uy = config.member.nodes.firstOrNull { it.id == nodeId }?.boundaryCondition?.uy
+            val restrained = uy != null && (uy.type == ConstraintType.FIXED ||
+                (uy.type == ConstraintType.SPRING && (uy.stiffness ?: 0.0) > 0.0))
+            if (restrained) supports.add(offsets[k])
+        }
+        if (supports.isEmpty()) return base
+
+        fun distFromFace(xg: Double) = supports.minOf { abs(xg - it) - half }
+        val zones = supports.map { (it - half - d) to (it + half + d) }
+
+        val modified = ArrayList<Load>()
+        for (load in loads) {
+            val spanIdx = spans.indexOfFirst { it.id == load.spanId }
+            val vertical = load.direction == LoadDirection.VERTICAL_DOWN || load.direction == LoadDirection.VERTICAL_UP
+            if (spanIdx < 0 || !vertical) { modified.add(load); continue }
+            val off = offsets[spanIdx]
+            when (load) {
+                is Load.PointLoad -> {
+                    val dist = distFromFace(off + load.locationStart.inches)
+                    if (dist > d) modified.add(load)
+                    else {
+                        val factor = (dist / d).coerceIn(0.0, 1.0)
+                        if (factor > 0.0) modified.add(load.copy(value = Force(load.value.pounds * factor)))
+                    }
+                }
+                is Load.UniformDistributedLoad -> {
+                    // keep only the parts outside every support zone
+                    var pieces = listOf(off + load.locationStart.inches to off + load.locationEnd.inches)
+                    for ((zs, ze) in zones) {
+                        pieces = pieces.flatMap { (a, b) ->
+                            when {
+                                ze <= a || zs >= b -> listOf(a to b)
+                                else -> listOfNotNull(
+                                    if (zs > a) a to zs else null,
+                                    if (ze < b) ze to b else null
+                                )
+                            }
+                        }
+                    }
+                    pieces.filter { it.second - it.first > 1e-9 }.forEach { (a, b) ->
+                        modified.add(load.copy(locationStart = Length(a - off), locationEnd = Length(b - off)))
+                    }
+                }
+                else -> modified.add(load)
+            }
+        }
+
+        val reduced = solveInternal(config, modified, pois)
+        val note = "NDS 3.4.3.1(a) applied within d = ${"%.2f".format(d)} in of each support face: uniform loads there ignored, " +
+            "concentrated loads multiplied by x/d" +
+            (if (sr.bearingLength == null) "; ASSUMED: no bearing length entered, x measured from the support centerline"
+            else "; support face taken ${"%.2f".format(half)} in either side of the support centerline") +
+            ". Only uniform and concentrated vertical loads are reduced; other load types are used in full."
+
+        val spanResults = base.spanResults.mapIndexed { si, span ->
+            val redSpan = reduced.spanResults.getOrNull(si) ?: return@mapIndexed span
+            span.copy(stationDemands = span.stationDemands.mapIndexed { i, dem ->
+                val red = redSpan.stationDemands.getOrNull(i)
+                if (red != null && distFromFace(dem.x.inches) <= d + 1e-9) {
+                    dem.copy(shear = red.shear, unreducedShear = dem.shear, shearReductionNote = note)
+                } else dem
+            })
+        }
+        return base.copy(spanResults = spanResults)
+    }
+
     private fun collectGlobalPois(config: AnalysisConfig): List<Double> {
         val pois = mutableSetOf<Double>()
         var currentX = 0.0
@@ -596,6 +683,7 @@ object MemberAnalysisSolver {
         }
 
         config.braceState.forEach { pois.add(it.x.inches) }
+        config.extraStations.forEach { pois.add(it.inches) }
 
         // Grid
         val totalLength = config.member.spans.sumOf { it.length.inches }

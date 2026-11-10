@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -31,6 +32,7 @@ import com.lz.model.regulatory.nds.MoistureCondition
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
 import com.lz.model.regulatory.nds.NdsLoadDurationAssumptions
 import com.lz.model.regulatory.nds.NdsNetSection
+import com.lz.model.regulatory.nds.NdsShearNearSupport
 
 /**
  * One editable NDS adjustment factor. Description text is always visible
@@ -67,6 +69,11 @@ fun AdjustmentFactorsEditDialog(
     val temperatureValid = temperature.toDoubleOrNull()?.let { it.isFinite() && it >= -60.0 && it <= 150.0 } == true
     var netAreaRatio by remember(currentFactors) { mutableStateOf(currentFactors.netSection.areaRatio.toString()) }
     var netModulusRatio by remember(currentFactors) { mutableStateOf(currentFactors.netSection.modulusRatio.toString()) }
+    var shearNearSupport by remember(currentFactors) { mutableStateOf(currentFactors.shearNearSupport.enabled) }
+    var bearingLength by remember(currentFactors) {
+        mutableStateOf(currentFactors.shearNearSupport.bearingLengthIn?.toString() ?: "")
+    }
+    val bearingValid = bearingLength.isBlank() || bearingLength.toDoubleOrNull()?.let { it.isFinite() && it >= 0.0 } == true
     val netAreaValid = netAreaRatio.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 && it <= 1.0 } == true
     val netModulusValid = netModulusRatio.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 && it <= 1.0 } == true
     var cl by remember(currentFactors) { mutableStateOf(currentFactors.cl.toString()) }
@@ -287,6 +294,34 @@ fun AdjustmentFactorsEditDialog(
                 )
                 HorizontalDivider()
                 Text(
+                    "Shear near supports (NDS 3.4.3.1(a))",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = shearNearSupport, onCheckedChange = { shearNearSupport = it })
+                    Text("Full bearing on one face, loads on the opposite face", modifier = Modifier.weight(1f))
+                }
+                if (shearNearSupport) {
+                    OutlinedTextField(
+                        value = bearingLength,
+                        onValueChange = { bearingLength = it },
+                        label = { Text("Support bearing length (in), optional") },
+                        isError = !bearingValid,
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Text(
+                    "Ignores uniform loads and multiplies concentrated loads by x/d within d of every support face, " +
+                        "for design shear only. Use only when the member bears fully on one surface and the loads act on " +
+                        "the opposite surface (not hung, notched or side-loaded). With no bearing length, x is measured " +
+                        "from the support centerline, which gives less reduction. Off = full shear everywhere.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                HorizontalDivider()
+                Text(
                     "Net section (tension and tension + bending)",
                     style = MaterialTheme.typography.titleSmall
                 )
@@ -380,7 +415,7 @@ fun AdjustmentFactorsEditDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = assumptionsValid && temperatureValid && netAreaValid && netModulusValid, onClick = {
+            TextButton(enabled = assumptionsValid && temperatureValid && netAreaValid && netModulusValid && bearingValid, onClick = {
                 onConfirm(
                     NdsAdjustmentFactors(
                         cd = if (autoCd) 1.0 else (cd.toDoubleOrNull() ?: 1.0),
@@ -404,7 +439,8 @@ fun AdjustmentFactorsEditDialog(
                             liveKind = liveKind
                         ),
                         treatedMember = treated,
-                        netSection = NdsNetSection(netAreaRatio.toDouble(), netModulusRatio.toDouble())
+                        netSection = NdsNetSection(netAreaRatio.toDouble(), netModulusRatio.toDouble()),
+                        shearNearSupport = NdsShearNearSupport(shearNearSupport, bearingLength.toDoubleOrNull())
                     )
                 )
             }) {

@@ -64,6 +64,18 @@ data class StationDemand(
     // Table 3.3.3 loading row for this station's span (see EffectiveLengthCase); set by the solver.
     val effectiveLengthCase: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED,
 
+    // NDS 3.4.3.1(a): when the near-support shear reduction applies at this station, `shear` is the
+    // reduced design shear, [unreducedShear] the full shear (same combination) and the note says what was done.
+    val unreducedShear: Force? = null,
+    val shearReductionNote: String? = null,
+
+    // Physical length of the span that contains this station, set by BracingLogic.
+    // Strong-plane column buckling is not restrained by lateral bracing, so when
+    // [luStrongAxis] has no input the wood calculator assumes this length (Ke = 1.0)
+    // and flags the assumption in its output. Null = unknown (the calculator then
+    // falls back to the larger of lbTop / lbBottom, as before).
+    val spanLength: Length? = null,
+
     // Length of the member between the points of zero moment that bracket this
     // station (NDS 5.3.6, glulam volume factor CV). Where the moment diagram
     // doesn't have a zero on both sides (a cantilever, a fixed end) it is the

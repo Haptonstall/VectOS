@@ -43,6 +43,26 @@ data class NdsLoadDurationAssumptions(
 }
 
 /**
+ * NDS 3.4.3.1(a) shear near supports. Applies only to a member with full bearing on one
+ * surface and loads applied to the opposite surface: uniformly distributed loads within d of
+ * the support face may be ignored and concentrated loads there are multiplied by x/d (x = distance
+ * from the support face to the load). Off by default; when on it applies at every vertical support.
+ * [bearingLengthIn] is optional: with no entry x is measured from the support centerline,
+ * which gives less reduction (conservative) and is flagged in the output.
+ */
+@Serializable
+data class NdsShearNearSupport(
+    val enabled: Boolean = false,
+    val bearingLengthIn: Double? = null
+) {
+    val isValid: Boolean get() = bearingLengthIn == null || (bearingLengthIn.isFinite() && bearingLengthIn >= 0.0)
+
+    fun blockReason(): String? =
+        if (isValid) null
+        else "Support bearing length must be zero or more (entered $bearingLengthIn in): NDS 3.4.3.1(a) measures x from the support face."
+}
+
+/**
  * Net-section ratios for members with bolt holes, notches, split-ring grooves or other
  * removed material (NDS 3.1.2). [areaRatio] = An / Ag; [modulusRatio] = Sn / S. They are
  * applied to the tension check (NDS 3.8.1) and to the combined bending and axial tension
@@ -129,6 +149,8 @@ data class NdsAdjustmentFactors(
     val treatedMember: Boolean = false,
     /** Net-section ratios for tension and combined tension + bending (NDS 3.1.2, 3.8.1, 3.9.1). */
     val netSection: NdsNetSection = NdsNetSection(),
+    /** NDS 3.4.3.1(a) shear reduction near supports (opt-in; see [NdsShearNearSupport]). */
+    val shearNearSupport: NdsShearNearSupport = NdsShearNearSupport(),
     // --- LRFD only: set by the wood calculator, not by the user -------------
     // For LRFD the reference design values are multiplied by KF x phi x lambda
     // (Fb, Ft, Fv, Fc) and KF x phi-s (Emin) BEFORE the stability factors are

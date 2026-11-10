@@ -1,0 +1,666 @@
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
+index e8a6224..1d39945 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/nds/NdsAdjustmentFactors.kt
+@@ -42,6 +42,26 @@ data class NdsLoadDurationAssumptions(
+         get() = listOf(liveCd, roofLiveCd, snowCd, rainCd).all { it.isFinite() && it > 0.0 && it <= 2.0 }
+ }
+ 
++/**
++ * NDS 3.4.3.1(a) shear near supports. Applies only to a member with full bearing on one
++ * surface and loads applied to the opposite surface: uniformly distributed loads within d of
++ * the support face may be ignored and concentrated loads there are multiplied by x/d (x = distance
++ * from the support face to the load). Off by default; when on it applies at every vertical support.
++ * [bearingLengthIn] is optional: with no entry x is measured from the support centerline,
++ * which gives less reduction (conservative) and is flagged in the output.
++ */
++@Serializable
++data class NdsShearNearSupport(
++    val enabled: Boolean = false,
++    val bearingLengthIn: Double? = null
++) {
++    val isValid: Boolean get() = bearingLengthIn == null || (bearingLengthIn.isFinite() && bearingLengthIn >= 0.0)
++
++    fun blockReason(): String? =
++        if (isValid) null
++        else "Support bearing length must be zero or more (entered $bearingLengthIn in): NDS 3.4.3.1(a) measures x from the support face."
++}
++
+ /**
+  * Net-section ratios for members with bolt holes, notches, split-ring grooves or other
+  * removed material (NDS 3.1.2). [areaRatio] = An / Ag; [modulusRatio] = Sn / S. They are
+@@ -129,6 +149,8 @@ data class NdsAdjustmentFactors(
+     val treatedMember: Boolean = false,
+     /** Net-section ratios for tension and combined tension + bending (NDS 3.1.2, 3.8.1, 3.9.1). */
+     val netSection: NdsNetSection = NdsNetSection(),
++    /** NDS 3.4.3.1(a) shear reduction near supports (opt-in; see [NdsShearNearSupport]). */
++    val shearNearSupport: NdsShearNearSupport = NdsShearNearSupport(),
+     // --- LRFD only: set by the wood calculator, not by the user -------------
+     // For LRFD the reference design values are multiplied by KF x phi x lambda
+     // (Fb, Ft, Fv, Fc) and KF x phi-s (Emin) BEFORE the stability factors are
+diff --git a/core/model/src/main/java/com/lz/model/structural/StationDemand.kt b/core/model/src/main/java/com/lz/model/structural/StationDemand.kt
+index 8b4257c..c8d4f1d 100644
+--- a/core/model/src/main/java/com/lz/model/structural/StationDemand.kt
++++ b/core/model/src/main/java/com/lz/model/structural/StationDemand.kt
+@@ -64,6 +64,11 @@ data class StationDemand(
+     // Table 3.3.3 loading row for this station's span (see EffectiveLengthCase); set by the solver.
+     val effectiveLengthCase: EffectiveLengthCase = EffectiveLengthCase.UNSPECIFIED,
+ 
++    // NDS 3.4.3.1(a): when the near-support shear reduction applies at this station, `shear` is the
++    // reduced design shear, [unreducedShear] the full shear (same combination) and the note says what was done.
++    val unreducedShear: Force? = null,
++    val shearReductionNote: String? = null,
++
+     // Length of the member between the points of zero moment that bracket this
+     // station (NDS 5.3.6, glulam volume factor CV). Where the moment diagram
+     // doesn't have a zero on both sides (a cantilever, a fixed end) it is the
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/AnalysisConfig.kt b/core/solver/src/main/java/com/lz/solver/analysis/AnalysisConfig.kt
+index 9f1a68a..e228727 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/AnalysisConfig.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/AnalysisConfig.kt
+@@ -6,6 +6,7 @@ import com.lz.model.structural.LoadCase
+ import com.lz.model.structural.Load
+ 
+ import com.lz.model.units.Area
++import com.lz.model.units.Length
+ import com.lz.model.units.MomentOfInertia
+ import com.lz.model.units.Pressure
+ import com.lz.model.units.TorsionalConstant
+@@ -21,6 +22,16 @@ data class ShearDeflectionInput(
+     val effectiveShearArea: Area
+ )
+ 
++/**
++ * Input for the NDS 3.4.3.1(a) near-support shear reduction: [depth] is the member depth in the
++ * plane of bending; [bearingLength] (optional) places the support face half a bearing length either
++ * side of the support centerline. Without it x is measured from the centerline (less reduction).
++ */
++data class ShearReductionInput(
++    val depth: Length,
++    val bearingLength: Length? = null
++)
++
+ /**
+  * Generic configuration for a structural member analysis run.
+  * Contains only inputs required by the FEM solver — no design or
+@@ -43,7 +54,12 @@ data class AnalysisConfig(
+      * includes shear (NDS F.3.1, sawn lumber and glulam tables). Set it only together with
+      * a true (shear-free) E, otherwise shear is counted twice.
+      */
+-    val shearDeflection: ShearDeflectionInput? = null
++    val shearDeflection: ShearDeflectionInput? = null,
++    /**
++     * NDS 3.4.3.1(a): design shear within d of a support, with uniform loads there ignored and
++     * concentrated loads multiplied by x/d. Null = off (full shear everywhere). See [ShearReductionInput].
++     */
++    val shearReduction: ShearReductionInput? = null
+ ) {
+     val allLoads: List<Load> get() = loadCases.flatMap { it.loads }
+ }
+\ No newline at end of file
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+index 6707c68..8199352 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+@@ -219,7 +219,7 @@ object MemberAnalysisSolver {
+ 
+         if (config.combinations.isEmpty()) {
+             // Legacy behavior if no combinations provided: Solve all loads as a single case
+-            return solveInternal(config, config.allLoads, globalPois)
++            return solveWithShearReduction(config, config.allLoads, globalPois)
+         }
+ 
+         // 2. Identify all unique categories in the input loads
+@@ -244,7 +244,7 @@ object MemberAnalysisSolver {
+         // 3. Solve for each category independently (Unfactored/Service Pass)
+         val resultsByCategory = activeCategories.associateWith { category ->
+             val categoryLoads = config.allLoads.filter { it.category == category }
+-            solveInternal(config, categoryLoads, globalPois)
++            solveWithShearReduction(config, categoryLoads, globalPois)
+         }
+ 
+         // 4. Resolve Envelopes using DemandEnvelopeResolver
+@@ -501,11 +501,13 @@ object MemberAnalysisSolver {
+         return (0 until stationCount).map { index ->
+             var mX = 0.0; var vY = 0.0; var pZ = 0.0
+             var mY = 0.0; var vX = 0.0; var tZ = 0.0; var delta = 0.0
++            var vYFull = 0.0
+             val firstStation = demandsByCategory.values.first()[index]
+             combo.factors.forEach { (category, factor) ->
+                 demandsByCategory[category]?.get(index)?.let { demand ->
+                     mX += factor * demand.moment.lbIn
+                     vY += factor * demand.shear.pounds
++                    vYFull += factor * (demand.unreducedShear ?: demand.shear).pounds
+                     pZ += factor * demand.axial.pounds
+                     mY += factor * demand.momentY.lbIn
+                     vX += factor * demand.shearY.pounds
+@@ -522,7 +524,8 @@ object MemberAnalysisSolver {
+                 combinationLoadFactors = actingLoads,
+                 combinationMethodology = combo.methodology,
+                 effectiveLengthCase = effectiveLengthCases[firstStation.spanId]
+-                    ?: com.lz.model.structural.EffectiveLengthCase.UNSPECIFIED
++                    ?: com.lz.model.structural.EffectiveLengthCase.UNSPECIFIED,
++                unreducedShear = if (firstStation.shearReductionNote != null) Force(vYFull) else null
+             )
+         }
+     }
+@@ -573,6 +576,90 @@ object MemberAnalysisSolver {
+         return acc.values.toList()
+     }
+ 
++    // ------------------------------------------------------------------
++    // NDS 3.4.3.1(a): shear within d of a support
++    // ------------------------------------------------------------------
++
++    private fun solveWithShearReduction(config: AnalysisConfig, loads: List<Load>, pois: List<Double>): AnalysisResult {
++        val base = solveInternal(config, loads, pois)
++        val sr = config.shearReduction ?: return base
++        val d = sr.depth.inches
++        if (d <= 0.0 || loads.isEmpty()) return base
++        val half = (sr.bearingLength?.inches ?: 0.0) / 2.0
++
++        // Global x of every vertically restrained node (a support) and each span's start offset.
++        val spans = config.member.spans
++        val offsets = DoubleArray(spans.size + 1)
++        spans.forEachIndexed { i, s -> offsets[i + 1] = offsets[i] + s.length.inches }
++        val supports = ArrayList<Double>()
++        for (k in 0..spans.size) {
++            val nodeId = if (k < spans.size) spans[k].startNodeId else spans.last().endNodeId
++            val uy = config.member.nodes.firstOrNull { it.id == nodeId }?.boundaryCondition?.uy
++            val restrained = uy != null && (uy.type == ConstraintType.FIXED ||
++                (uy.type == ConstraintType.SPRING && (uy.stiffness ?: 0.0) > 0.0))
++            if (restrained) supports.add(offsets[k])
++        }
++        if (supports.isEmpty()) return base
++
++        fun distFromFace(xg: Double) = supports.minOf { abs(xg - it) - half }
++        val zones = supports.map { (it - half - d) to (it + half + d) }
++
++        val modified = ArrayList<Load>()
++        for (load in loads) {
++            val spanIdx = spans.indexOfFirst { it.id == load.spanId }
++            val vertical = load.direction == LoadDirection.VERTICAL_DOWN || load.direction == LoadDirection.VERTICAL_UP
++            if (spanIdx < 0 || !vertical) { modified.add(load); continue }
++            val off = offsets[spanIdx]
++            when (load) {
++                is Load.PointLoad -> {
++                    val dist = distFromFace(off + load.locationStart.inches)
++                    if (dist > d) modified.add(load)
++                    else {
++                        val factor = (dist / d).coerceIn(0.0, 1.0)
++                        if (factor > 0.0) modified.add(load.copy(value = Force(load.value.pounds * factor)))
++                    }
++                }
++                is Load.UniformDistributedLoad -> {
++                    // keep only the parts outside every support zone
++                    var pieces = listOf(off + load.locationStart.inches to off + load.locationEnd.inches)
++                    for ((zs, ze) in zones) {
++                        pieces = pieces.flatMap { (a, b) ->
++                            when {
++                                ze <= a || zs >= b -> listOf(a to b)
++                                else -> listOfNotNull(
++                                    if (zs > a) a to zs else null,
++                                    if (ze < b) ze to b else null
++                                )
++                            }
++                        }
++                    }
++                    pieces.filter { it.second - it.first > 1e-9 }.forEach { (a, b) ->
++                        modified.add(load.copy(locationStart = Length(a - off), locationEnd = Length(b - off)))
++                    }
++                }
++                else -> modified.add(load)
++            }
++        }
++
++        val reduced = solveInternal(config, modified, pois)
++        val note = "NDS 3.4.3.1(a) applied within d = ${"%.2f".format(d)} in of each support face: uniform loads there ignored, " +
++            "concentrated loads multiplied by x/d" +
++            (if (sr.bearingLength == null) "; ASSUMED: no bearing length entered, x measured from the support centerline"
++            else "; support face taken ${"%.2f".format(half)} in either side of the support centerline") +
++            ". Only uniform and concentrated vertical loads are reduced; other load types are used in full."
++
++        val spanResults = base.spanResults.mapIndexed { si, span ->
++            val redSpan = reduced.spanResults.getOrNull(si) ?: return@mapIndexed span
++            span.copy(stationDemands = span.stationDemands.mapIndexed { i, dem ->
++                val red = redSpan.stationDemands.getOrNull(i)
++                if (red != null && distFromFace(dem.x.inches) <= d + 1e-9) {
++                    dem.copy(shear = red.shear, unreducedShear = dem.shear, shearReductionNote = note)
++                } else dem
++            })
++        }
++        return base.copy(spanResults = spanResults)
++    }
++
+     private fun collectGlobalPois(config: AnalysisConfig): List<Double> {
+         val pois = mutableSetOf<Double>()
+         var currentX = 0.0
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+index 883fff7..173785e 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+@@ -80,6 +80,7 @@ object NdsCodeData {
+         factors: com.lz.model.regulatory.nds.NdsAdjustmentFactors
+     ): String? = blockReason(edition, material, factors.isWet) ?: NdsWetService.temperatureBlockReason(factors)
+         ?: factors.netSection.blockReason()
++        ?: factors.shearNearSupport.blockReason()
+ 
+     fun requireUsable(
+         edition: NdsEdition,
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWetService.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWetService.kt
+index 89fea33..cd4087f 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWetService.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWetService.kt
+@@ -97,6 +97,7 @@ private fun withTemperature(f: NdsAdjustmentFactors): NdsAdjustmentFactors {
+     if (f.ct != 1.0) return f.copy(ctFb = f.ct, ctFt = f.ct, ctFv = f.ct, ctFcPerp = f.ct, ctFc = f.ct, ctE = f.ct)
+     NdsWetService.temperatureBlockReason(f)?.let { throw CodeDataBlockedException(it) }
+     f.netSection.blockReason()?.let { throw CodeDataBlockedException(it) }
++    f.shearNearSupport.blockReason()?.let { throw CodeDataBlockedException(it) }
+     val range = when {
+         f.temperatureF <= 100.0 -> TemperatureRange.T_100_OR_LESS
+         f.temperatureF <= 125.0 -> TemperatureRange.T_101_TO_125
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+index 6929d6a..0f28438 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWoodCapacityCalculator.kt
+@@ -291,6 +291,18 @@ class NdsWoodCapacityCalculator(
+         lenRows += row("le2 (column, weak plane)", "Ke = 1.0" + if (u.weakIsDefault) " \u2014 default: larger of top/bottom bracing" else "",
+             "${fmt(u.colWeak, 1)} in  [le2/d2 = ${fmt(if (b > 0) u.colWeak / b else 0.0, 2)}]")
+         groups += DesignPropertyGroup("Unbraced and effective lengths", lenRows)
++        val sns = f.shearNearSupport
++        groups += DesignPropertyGroup("Shear near supports (NDS 3.4.3.1(a))", buildList {
++            add(row("Option", "Ignore uniform / reduce concentrated loads within d of a support",
++                if (sns.enabled) "On \u2014 applies at every vertical support" else "Off \u2014 full shear at every station"))
++            if (sns.enabled) {
++                add(row("d", "Member depth in the plane of bending",
++                    "${fmt(if (memberIsStrongAxis) profile.depth.inInches else (profile as? WoodProfile)?.dressedWidth?.inInches ?: profile.depth.inInches, 3)} in"))
++                add(row("Bearing", "Support bearing length",
++                    sns.bearingLengthIn?.let { "${fmt(it, 2)} in; x from the support face" }
++                        ?: "ASSUMED: none entered \u2014 x from the support centerline"))
++            }
++        })
+ 
+         return groups
+     }
+@@ -461,7 +473,25 @@ class NdsWoodCapacityCalculator(
+         val isAxialTension = demand.axial.pounds >= 0.0
+ 
+         val (nomMn, lsMn, tracesMn) = calculateBending(u)
+-        val (nomVn, lsVn, tracesVn) = calculateShear()
++        val (nomVn, lsVn, tracesVn0) = calculateShear()
++        // NDS 3.4.3.1(a): say so wherever the design shear was reduced near a support.
++        val tracesVn = demand.shearReductionNote?.let { note ->
++            val full = abs(demand.unreducedShear?.pounds ?: demand.shear.pounds)
++            listOf(
++                DesignEquationTrace(
++                    symbolicEquation = "V design = V with loads within d of the support face ignored / x/d",
++                    substitutedEquation = "V = ${fmt(full, 1)} lb (full) -> ${fmt(abs(demand.shear.pounds), 1)} lb (design)",
++                    result = fmt(abs(demand.shear.pounds), 1),
++                    units = "lb",
++                    codeReference = "NDS 3.4.3.1(a)",
++                    variables = mapOf("V full" to full, "V design" to abs(demand.shear.pounds))
++                ),
++                DesignEquationTrace(
++                    symbolicEquation = "Assumptions", substitutedEquation = note, result = "", units = "",
++                    codeReference = "NDS 3.4.3.1(a)", variables = emptyMap()
++                )
++            ) + tracesVn0
++        } ?: tracesVn0
+         val (nomPn, lsPn, tracesPn) = if (isAxialTension)
+             calculateTension()
+         else
+diff --git a/core/solver/src/test/java/com/lz/solver/analysis/ShearNearSupportTest.kt b/core/solver/src/test/java/com/lz/solver/analysis/ShearNearSupportTest.kt
+new file mode 100644
+index 0000000..d2aac61
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/analysis/ShearNearSupportTest.kt
+@@ -0,0 +1,185 @@
++package com.lz.solver.analysis
++
++import com.lz.model.regulatory.nds.NdsAdjustmentFactors
++import com.lz.model.regulatory.nds.NdsEdition
++import com.lz.model.regulatory.nds.NdsShearNearSupport
++import com.lz.model.structural.*
++import com.lz.model.units.*
++import com.lz.solver.material.NdsCodeData
++import com.lz.solver.material.NdsWoodCapacityCalculator
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.util.UUID
++
++/**
++ * NDS 3.4.3.1(a) near-support shear: uniform loads within d of a support face are ignored,
++ * concentrated loads there are multiplied by x/d; only the design shear at stations within d changes.
++ *
++ * Hand calcs. Simple span L = 100 in, d = 10 in, no bearing length (x from the support centerline):
++ *   UDL w = 10 lb/in: unreduced V(5) = 500 - 50 = 450; reduced = R' = 10 x 80 / 2 = 400
++ *   P = 1000 at x = 6 (factor 6/10 = 0.6, P' = 600): R'left = 600 x 94/100 = 564, R'right = 36
++ *     reduced V(3) = 564 (unreduced 940), V(8) = 564 - 600 = -36 (unreduced -60), V(95) = -36 (unreduced -60)
++ *   with a 4 in bearing (face 2 in from the centerline): x = 6 - 2 = 4, factor 0.4, P' = 400:
++ *     R'left = 376, R'right = 24
++ *   P at x = 1 over the bearing (x < 0): ignored entirely, reduced V(3) = 0
++ * Two equal spans of 100 in, w = 10 lb/in, loads within d of the three supports ignored (slope-deflection,
++ * done separately): R'A = 282, R'B = 1036, R'C = 282, so V(4) = 282, V(96) = -518, V(104) = 518, V(196) = -282
++ * (unreduced: V(4) = 375 - 40 = 335, ...).
++ */
++class ShearNearSupportTest {
++
++    private fun beam(lengths: List<Double>, bcs: List<NodeBoundaryCondition>): StructuralMember {
++        val nodes = bcs.map { StructuralNode(id = UUID.randomUUID(), boundaryCondition = it) }
++        val spans = lengths.mapIndexed { i, l ->
++            SpanGeometry(id = UUID.randomUUID(), length = l.inches, startNodeId = nodes[i].id, endNodeId = nodes[i + 1].id)
++        }
++        return StructuralMember(nodes = nodes, spans = spans)
++    }
++
++    private fun simple() = beam(listOf(100.0), listOf(NodeBoundaryCondition.pinned(), NodeBoundaryCondition.roller()))
++    private fun twoSpan() = beam(listOf(100.0, 100.0),
++        listOf(NodeBoundaryCondition.pinned(), NodeBoundaryCondition.roller(), NodeBoundaryCondition.roller()))
++
++    private fun solve(m: StructuralMember, loads: List<Load>, reduction: ShearReductionInput?) =
++        MemberAnalysisSolver.solve(
++            AnalysisConfig(
++                member = m,
++                loadCases = listOf(LoadCase("DL", "Dead", loads)),
++                modulusOfElasticity = ElasticModulus(1_600_000.0),
++                momentOfInertiaX = MomentOfInertia(100.0),
++                crossSectionalArea = Area(10.0),
++                shearReduction = reduction
++            )
++        )
++
++    private fun st(r: AnalysisResult, x: Double) =
++        r.spanResults.flatMap { it.stationDemands }.first { Math.abs(it.x.inches - x) < 1e-6 }
++
++    private fun udl(m: StructuralMember) = Load.UniformDistributedLoad(ForcePerLength(10.0), m.spans[0].id, 0.0.inches, 100.0.inches)
++    private fun pt(m: StructuralMember, x: Double) = Load.PointLoad(Force(1000.0), m.spans[0].id, x.inches)
++    private val d10 = ShearReductionInput(Length(10.0))
++
++    private fun near(expected: Double, actual: Double, what: String) = assertEquals(what, expected, actual, 1e-6)
++
++    @Test
++    fun `off leaves the shear unchanged and unflagged`() {
++        val m = simple()
++        val s = st(solve(m, listOf(udl(m)), null), 5.0)
++        near(450.0, Math.abs(s.shear.pounds), "V(5)")
++        assertNull(s.shearReductionNote); assertNull(s.unreducedShear)
++    }
++
++    @Test
++    fun `uniform load within d is ignored and only stations within d change`() {
++        val m = simple()
++        val r = solve(m, listOf(udl(m)), d10)
++        val a = st(r, 5.0)
++        near(400.0, Math.abs(a.shear.pounds), "V(5) reduced")
++        near(450.0, Math.abs(a.unreducedShear!!.pounds), "V(5) full")
++        assertNotNull(a.shearReductionNote)
++        near(400.0, Math.abs(st(r, 10.0).shear.pounds), "V(10) at the edge of the zone")
++        val out = st(r, 11.0)
++        near(390.0, Math.abs(out.shear.pounds), "V(11) outside the zone")
++        assertNull(out.shearReductionNote)
++        near(400.0, Math.abs(st(r, 95.0).shear.pounds), "V(95) at the far support")
++        near(0.0, Math.abs(st(r, 50.0).shear.pounds - 0.0) - Math.abs(st(r, 50.0).shear.pounds), "midspan untouched")
++    }
++
++    @Test
++    fun `concentrated load within d is multiplied by x over d, measured from the centerline without a bearing length`() {
++        val m = simple()
++        val r = solve(m, listOf(pt(m, 6.0)), d10)
++        near(564.0, Math.abs(st(r, 3.0).shear.pounds), "V(3)")
++        near(940.0, Math.abs(st(r, 3.0).unreducedShear!!.pounds), "V(3) full")
++        near(36.0, Math.abs(st(r, 8.0).shear.pounds), "V(8)")
++        near(36.0, Math.abs(st(r, 95.0).shear.pounds), "V(95)")
++        near(60.0, Math.abs(st(r, 50.0).shear.pounds), "V(50) outside every zone")
++        assertNull(st(r, 50.0).shearReductionNote)
++    }
++
++    @Test
++    fun `a bearing length moves the support face and a load over the bearing is ignored`() {
++        val m = simple()
++        val b4 = ShearReductionInput(Length(10.0), Length(4.0))
++        val r = solve(m, listOf(pt(m, 6.0)), b4)
++        near(376.0, Math.abs(st(r, 3.0).shear.pounds), "V(3), x from the face = 4")
++        near(24.0, Math.abs(st(r, 95.0).shear.pounds), "V(95)")
++        assertFalse(st(r, 3.0).shearReductionNote!!.contains("ASSUMED"))
++        val over = solve(m, listOf(pt(m, 1.0)), b4)
++        near(0.0, Math.abs(st(over, 3.0).shear.pounds), "load over the bearing is ignored")
++        assertTrue(st(solve(m, listOf(pt(m, 6.0)), d10), 3.0).shearReductionNote!!.contains("ASSUMED"))
++    }
++
++    @Test
++    fun `continuous spans re-solve with the near-support loads removed`() {
++        val m = twoSpan()
++        val load = Load.UniformDistributedLoad(ForcePerLength(10.0), m.spans[0].id, 0.0.inches, 100.0.inches)
++        val load2 = Load.UniformDistributedLoad(ForcePerLength(10.0), m.spans[1].id, 0.0.inches, 100.0.inches)
++        val r = solve(m, listOf(load, load2), d10)
++        near(282.0, Math.abs(st(r, 4.0).shear.pounds), "V(4)")
++        near(335.0, Math.abs(st(r, 4.0).unreducedShear!!.pounds), "V(4) full")
++        near(518.0, Math.abs(st(r, 96.0).shear.pounds), "V(96)")
++        near(518.0, Math.abs(st(r, 104.0).shear.pounds), "V(104)")
++        near(282.0, Math.abs(st(r, 196.0).shear.pounds), "V(196)")
++        near(125.0, Math.abs(st(r, 100.0 - 50.0).shear.pounds), "V(50) outside every zone is the full value")
++    }
++
++    @Test
++    fun `the diagram keeps the true shear`() {
++        val m = simple()
++        val r = solve(m, listOf(udl(m)), d10)
++        val d = r.spanResults.flatMap { it.shearDiagram }.first { Math.abs(it.x.inches - 5.0) < 1e-6 }
++        near(450.0, Math.abs(d.value), "diagram V(5) is the actual shear")
++    }
++
++    // ---------------- wood calculator output ----------------
++
++    private val profile = WoodProfile(
++        id = "2x10", designation = "2x10", nominalWidth = 2.0.inches, nominalDepth = 10.0.inches,
++        dressedWidth = 1.5.inches, dressedDepth = 9.25.inches
++    )
++    private val material = MaterialGrade.Wood(
++        id = "df-l-no2", name = "DF-L No.2", species = WoodSpecies.DF_L, grade = WoodGrade.NO_2,
++        referenceBending = 875.0.psi, referenceShear = 180.0.psi, referenceCompressionParallel = 1350.0.psi,
++        referenceCompressionPerp = 625.0.psi, referenceTensionParallel = 575.0.psi,
++        modulusOfElasticity = 1600000.0.psi, shearModulus = 100000.0.psi, densityPcf = 35.0
++    )
++
++    private fun detailed(note: String?, f: NdsAdjustmentFactors) = NdsWoodCapacityCalculator(profile, material, adjustmentFactors = f)
++        .evaluateDetailed(
++            StationDemand(
++                spanId = UUID.randomUUID(), x = 5.0.inches, moment = Moment(0.0), shear = Force(400.0),
++                momentY = Moment(0.0), axial = Force(0.0),
++                unreducedShear = note?.let { Force(450.0) }, shearReductionNote = note
++            ), DesignMethodology.ASD
++        )
++
++    @Test
++    fun `the shear check and the properties card say when the reduction was used`() {
++        val on = NdsAdjustmentFactors(shearNearSupport = NdsShearNearSupport(true, null))
++        val r = detailed("NOTE TEXT", on)
++        val t = r.shearCheck.traces.first { it.codeReference == "NDS 3.4.3.1(a)" && it.symbolicEquation.startsWith("V design") }
++        assertTrue(t.substitutedEquation, t.substitutedEquation.contains("450.0") && t.substitutedEquation.contains("400.0"))
++        assertTrue(r.shearCheck.traces.any { it.substitutedEquation == "NOTE TEXT" })
++        val g = r.selectedProperties.first { it.title.startsWith("Shear near supports") }
++        assertTrue(g.rows.first { it.symbol == "Option" }.value.startsWith("On"))
++        assertTrue(g.rows.first { it.symbol == "Bearing" }.value.contains("ASSUMED"))
++        val off = detailed(null, NdsAdjustmentFactors())
++        assertTrue(off.selectedProperties.first { it.title.startsWith("Shear near supports") }
++            .rows.first { it.symbol == "Option" }.value.startsWith("Off"))
++        assertFalse(off.shearCheck.traces.any { it.codeReference == "NDS 3.4.3.1(a)" })
++    }
++
++    @Test
++    fun `a negative bearing length is blocked`() {
++        fun reason(b: Double?) = NdsCodeData.blockReason(
++            NdsEdition.NDS_2018, material, NdsAdjustmentFactors(shearNearSupport = NdsShearNearSupport(true, b))
++        )
++        assertNull(reason(null)); assertNull(reason(0.0)); assertNull(reason(4.0))
++        assertNotNull(reason(-1.0)); assertNotNull(reason(Double.NaN))
++    }
++}
+diff --git a/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt b/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt
+index 8cd01fe..af53c5a 100644
+--- a/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt
++++ b/core/ui/src/main/java/com/lz/ui/material/AdjustmentFactorsEditDialog.kt
+@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.rememberScrollState
+ import androidx.compose.foundation.verticalScroll
+ import androidx.compose.material3.AlertDialog
++import androidx.compose.material3.Checkbox
+ import androidx.compose.material3.ExperimentalMaterial3Api
+ import androidx.compose.material3.FilterChip
+ import androidx.compose.material3.HorizontalDivider
+@@ -31,6 +32,7 @@ import com.lz.model.regulatory.nds.MoistureCondition
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.regulatory.nds.NdsLoadDurationAssumptions
+ import com.lz.model.regulatory.nds.NdsNetSection
++import com.lz.model.regulatory.nds.NdsShearNearSupport
+ 
+ /**
+  * One editable NDS adjustment factor. Description text is always visible
+@@ -67,6 +69,11 @@ fun AdjustmentFactorsEditDialog(
+     val temperatureValid = temperature.toDoubleOrNull()?.let { it.isFinite() && it >= -60.0 && it <= 150.0 } == true
+     var netAreaRatio by remember(currentFactors) { mutableStateOf(currentFactors.netSection.areaRatio.toString()) }
+     var netModulusRatio by remember(currentFactors) { mutableStateOf(currentFactors.netSection.modulusRatio.toString()) }
++    var shearNearSupport by remember(currentFactors) { mutableStateOf(currentFactors.shearNearSupport.enabled) }
++    var bearingLength by remember(currentFactors) {
++        mutableStateOf(currentFactors.shearNearSupport.bearingLengthIn?.toString() ?: "")
++    }
++    val bearingValid = bearingLength.isBlank() || bearingLength.toDoubleOrNull()?.let { it.isFinite() && it >= 0.0 } == true
+     val netAreaValid = netAreaRatio.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 && it <= 1.0 } == true
+     val netModulusValid = netModulusRatio.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 && it <= 1.0 } == true
+     var cl by remember(currentFactors) { mutableStateOf(currentFactors.cl.toString()) }
+@@ -286,6 +293,34 @@ fun AdjustmentFactorsEditDialog(
+                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                 )
+                 HorizontalDivider()
++                Text(
++                    "Shear near supports (NDS 3.4.3.1(a))",
++                    style = MaterialTheme.typography.titleSmall
++                )
++                Row(verticalAlignment = Alignment.CenterVertically) {
++                    Checkbox(checked = shearNearSupport, onCheckedChange = { shearNearSupport = it })
++                    Text("Full bearing on one face, loads on the opposite face", modifier = Modifier.weight(1f))
++                }
++                if (shearNearSupport) {
++                    OutlinedTextField(
++                        value = bearingLength,
++                        onValueChange = { bearingLength = it },
++                        label = { Text("Support bearing length (in), optional") },
++                        isError = !bearingValid,
++                        singleLine = true,
++                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
++                        modifier = Modifier.fillMaxWidth()
++                    )
++                }
++                Text(
++                    "Ignores uniform loads and multiplies concentrated loads by x/d within d of every support face, " +
++                        "for design shear only. Use only when the member bears fully on one surface and the loads act on " +
++                        "the opposite surface (not hung, notched or side-loaded). With no bearing length, x is measured " +
++                        "from the support centerline, which gives less reduction. Off = full shear everywhere.",
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant
++                )
++                HorizontalDivider()
+                 Text(
+                     "Net section (tension and tension + bending)",
+                     style = MaterialTheme.typography.titleSmall
+@@ -380,7 +415,7 @@ fun AdjustmentFactorsEditDialog(
+             }
+         },
+         confirmButton = {
+-            TextButton(enabled = assumptionsValid && temperatureValid && netAreaValid && netModulusValid, onClick = {
++            TextButton(enabled = assumptionsValid && temperatureValid && netAreaValid && netModulusValid && bearingValid, onClick = {
+                 onConfirm(
+                     NdsAdjustmentFactors(
+                         cd = if (autoCd) 1.0 else (cd.toDoubleOrNull() ?: 1.0),
+@@ -404,7 +439,8 @@ fun AdjustmentFactorsEditDialog(
+                             liveKind = liveKind
+                         ),
+                         treatedMember = treated,
+-                        netSection = NdsNetSection(netAreaRatio.toDouble(), netModulusRatio.toDouble())
++                        netSection = NdsNetSection(netAreaRatio.toDouble(), netModulusRatio.toDouble()),
++                        shearNearSupport = NdsShearNearSupport(shearNearSupport, bearingLength.toDoubleOrNull())
+                     )
+                 )
+             }) {
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 6760d70..8620f58 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -24,6 +24,7 @@ import com.lz.model.regulatory.codes.ServiceabilityCriterion
+ import com.lz.model.regulatory.codes.StandardEdition
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.regulatory.nds.NdsEdition
++import com.lz.model.structural.WoodProfile
+ import com.lz.model.structural.BracingInput
+ import com.lz.model.structural.BracingResolver
+ import com.lz.model.structural.DesignMethodology
+@@ -48,6 +49,7 @@ import com.lz.model.structural.StructuralNode
+ import com.lz.model.structural.NodeBoundaryCondition
+ import com.lz.model.structural.WoodGrade
+ import com.lz.model.structural.WoodSpecies
++import com.lz.solver.analysis.ShearReductionInput
+ import com.lz.solver.analysis.AnalysisResult
+ import com.lz.solver.analysis.UtilizationPoint
+ import com.lz.solver.capacity.CapacityCalculator
+@@ -284,6 +286,16 @@ class BeamViewModel @Inject constructor(
+             return calculator.evaluateDetailed(demand, methodology)
+         }
+ 
++    /** NDS 3.4.3.1(a) near-support shear reduction, only for wood and only when the user turned it on. */
++    private fun shearReductionInput(): ShearReductionInput? {
++        val sns = ndsAdjustmentFactors.shearNearSupport
++        if (!sns.enabled || activeMaterialGrade !is MaterialGrade.Wood) return null
++        val section = selectedSection ?: return null
++        val d = if (isStrongAxis) section.depth.inches
++        else (section as? WoodProfile)?.dressedWidth?.inches ?: section.depth.inches
++        return ShearReductionInput(Length(d), sns.bearingLengthIn?.let { Length(it) })
++    }
++
+     val detailedStrengthCombinationName: String?
+         get() = designPoint()?.combinationName
+ 
+@@ -849,6 +861,7 @@ class BeamViewModel @Inject constructor(
+                 member = memberSnapshot,
+                 loadCases = resolvedLoadCases,
+                 combinations = activeCombinations,
++                shearReduction = shearReductionInput(),
+                 // Wood: the edition's E for this member x CM x Ct x Ci (wet service lowers E).
+                 modulusOfElasticity = run {
+                     val grade = activeMaterialGrade
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt
+index 4fabcee..2b210d0 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt
+@@ -17,6 +17,7 @@ import com.lz.model.units.Pressure
+ import com.lz.model.units.TorsionalConstant
+ import com.lz.solver.analysis.AnalysisConfig
+ import com.lz.solver.analysis.ShearDeflectionInput
++import com.lz.solver.analysis.ShearReductionInput
+ 
+ /**
+  * Configuration for a beam analysis run.
+@@ -67,7 +68,9 @@ data class BeamAnalysisConfig(
+      * is then an apparent E that already includes shear (sawn lumber, glulam tables). Set
+      * only with a true (shear-free) E, e.g. engineered wood, to avoid counting shear twice.
+      */
+-    val shearDeflection: ShearDeflectionInput? = null
++    val shearDeflection: ShearDeflectionInput? = null,
++    /** NDS 3.4.3.1(a) near-support shear reduction (see AnalysisConfig.shearReduction). */
++    val shearReduction: ShearReductionInput? = null
+ ) {
+     /**
+      * All loads across all load cases.
+@@ -86,6 +89,7 @@ data class BeamAnalysisConfig(
+         shearModulus = shearModulus,
+         torsionalConstant = torsionalConstant,
+         braceState = braceState,
+-        shearDeflection = shearDeflection
++        shearDeflection = shearDeflection,
++        shearReduction = shearReduction
+     )
+ }
+\ No newline at end of file

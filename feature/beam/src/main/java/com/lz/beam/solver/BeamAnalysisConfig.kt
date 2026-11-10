@@ -12,11 +12,13 @@ import com.lz.model.structural.SectionProfile
 import com.lz.model.structural.StructuralMember
 import com.lz.model.units.Area
 import com.lz.model.units.ElasticModulus
+import com.lz.model.units.Length
 import com.lz.model.units.MomentOfInertia
 import com.lz.model.units.Pressure
 import com.lz.model.units.TorsionalConstant
 import com.lz.solver.analysis.AnalysisConfig
 import com.lz.solver.analysis.ShearDeflectionInput
+import com.lz.solver.analysis.ShearReductionInput
 
 /**
  * Configuration for a beam analysis run.
@@ -67,7 +69,11 @@ data class BeamAnalysisConfig(
      * is then an apparent E that already includes shear (sawn lumber, glulam tables). Set
      * only with a true (shear-free) E, e.g. engineered wood, to avoid counting shear twice.
      */
-    val shearDeflection: ShearDeflectionInput? = null
+    val shearDeflection: ShearDeflectionInput? = null,
+    /** Extra solver stations, e.g. the user's Design Location (see AnalysisConfig.extraStations). */
+    val extraStations: List<Length> = emptyList(),
+    /** NDS 3.4.3.1(a) near-support shear reduction (see AnalysisConfig.shearReduction). */
+    val shearReduction: ShearReductionInput? = null
 ) {
     /**
      * All loads across all load cases.
@@ -86,6 +92,8 @@ data class BeamAnalysisConfig(
         shearModulus = shearModulus,
         torsionalConstant = torsionalConstant,
         braceState = braceState,
-        shearDeflection = shearDeflection
+        shearDeflection = shearDeflection,
+        extraStations = extraStations,
+        shearReduction = shearReduction
     )
 }

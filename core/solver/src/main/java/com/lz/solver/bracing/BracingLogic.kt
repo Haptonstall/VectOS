@@ -84,7 +84,8 @@ object BracingLogic {
                 lbTop            = lbTop.inches,
                 lbBottom         = lbBottom.inches,
                 cb               = stabilityFactor,
-                compressionFlange = compressionFlange
+                compressionFlange = compressionFlange,
+                spanLength       = (span?.length?.inches ?: totalLength).inches
             )
         }
     }

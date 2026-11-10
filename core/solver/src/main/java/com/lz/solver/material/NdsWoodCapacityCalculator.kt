@@ -286,11 +286,23 @@ class NdsWoodCapacityCalculator(
             lenRows += row("RB (weak axis)", if (it.exemptByShape) "d \u2264 b: CL = 1.0 (NDS 3.3.3.1)" else "Slenderness, \u221a(le\u00b7d/b\u00b2)",
                 fmt(it.rb, 2))
         }
-        lenRows += row("le1 (column, strong plane)", "Ke = 1.0" + if (u.strongIsDefault) " \u2014 default: larger of top/bottom bracing" else "",
+        lenRows += row("le1 (column, strong plane)", "Ke = 1.0" + if (u.strongIsDefault) (if (u.strongFromSpan) " \u2014 ASSUMED default: span length (no input)" else " \u2014 ASSUMED default: larger of top/bottom bracing") else "",
             "${fmt(u.colStrong, 1)} in  [le1/d1 = ${fmt(if (d > 0) u.colStrong / d else 0.0, 2)}]")
-        lenRows += row("le2 (column, weak plane)", "Ke = 1.0" + if (u.weakIsDefault) " \u2014 default: larger of top/bottom bracing" else "",
+        lenRows += row("le2 (column, weak plane)", "Ke = 1.0" + if (u.weakIsDefault) " \u2014 ASSUMED default: larger of top/bottom bracing" else "",
             "${fmt(u.colWeak, 1)} in  [le2/d2 = ${fmt(if (b > 0) u.colWeak / b else 0.0, 2)}]")
         groups += DesignPropertyGroup("Unbraced and effective lengths", lenRows)
+        val sns = f.shearNearSupport
+        groups += DesignPropertyGroup("Shear near supports (NDS 3.4.3.1(a))", buildList {
+            add(row("Option", "Ignore uniform / reduce concentrated loads within d of a support",
+                if (sns.enabled) "On \u2014 applies at every vertical support" else "Off \u2014 full shear at every station"))
+            if (sns.enabled) {
+                add(row("d", "Member depth in the plane of bending",
+                    "${fmt(if (memberIsStrongAxis) profile.depth.inInches else (profile as? WoodProfile)?.dressedWidth?.inInches ?: profile.depth.inInches, 3)} in"))
+                add(row("Bearing", "Support bearing length",
+                    sns.bearingLengthIn?.let { "${fmt(it, 2)} in; x from the support face" }
+                        ?: "ASSUMED: none entered \u2014 x from the support centerline"))
+            }
+        })
 
         return groups
     }
@@ -331,6 +343,10 @@ class NdsWoodCapacityCalculator(
         val colWeak: Double,
         val weakIsDefault: Boolean,
         val strongIsDefault: Boolean,
+        /** Where [colStrong] came from: an input, the span length (assumed), or the bracing envelope. */
+        val strongFromSpan: Boolean,
+        /** Plain-language statement of every assumed column length; empty when both were entered. */
+        val lengthNote: String,
         /** Table 3.3.3 loading row for the primary bending plane (UNSPECIFIED when the member is oriented about its weak axis). */
         val strongCase: EffectiveLengthCase,
         /** Length for the glulam volume factor CV (NDS 5.3.6): between points of zero moment. */
@@ -341,12 +357,24 @@ class NdsWoodCapacityCalculator(
         val flangeLb = if (demand.compressionFlange == Flange.TOP)
             demand.lbTop.inInches else demand.lbBottom.inInches
         val envelope = maxOf(demand.lbTop.inInches, demand.lbBottom.inInches)
-        val strongPlane = demand.luStrongAxis?.inInches ?: envelope
+        // Strong-plane column buckling is in the plane of bending: lateral bracing does not
+        // restrain it, so with no input the span length (Ke = 1.0) is assumed.
+        val spanLen = demand.spanLength?.inInches?.takeIf { it > 0.0 }
+        val strongFromSpan = demand.luStrongAxis == null && spanLen != null
+        val strongPlane = demand.luStrongAxis?.inInches ?: spanLen ?: envelope
         val weakPlane = demand.luWeakAxis?.inInches ?: envelope
+        val notes = mutableListOf<String>()
+        if (demand.luStrongAxis == null) notes += if (strongFromSpan)
+            "le1 (strong plane) assumed = span length ${"%.1f".format(strongPlane)} in (no strong-plane input; lateral bracing does not restrain buckling in the plane of bending)"
+        else "le1 (strong plane) assumed = larger of top/bottom bracing ${"%.1f".format(strongPlane)} in (span length not available)"
+        if (demand.luWeakAxis == null) notes +=
+            "le2 (weak plane) assumed = larger of top/bottom bracing ${"%.1f".format(weakPlane)} in (no weak-plane input)"
+        val lengthNote = if (notes.isEmpty()) "" else notes.joinToString("; ") + "; Ke = 1.0"
         return Unbraced(
             strongBend = flangeLb, weakBend = weakPlane,
             colStrong = strongPlane, colWeak = weakPlane,
             weakIsDefault = demand.luWeakAxis == null, strongIsDefault = demand.luStrongAxis == null,
+            strongFromSpan = strongFromSpan, lengthNote = lengthNote,
             strongCase = if (memberIsStrongAxis) demand.effectiveLengthCase else EffectiveLengthCase.UNSPECIFIED,
             // CV uses the length between points of zero moment (5.3.6), NOT the
             // unbraced length; the solver supplies it (the whole member where
@@ -426,7 +454,7 @@ class NdsWoodCapacityCalculator(
         val (nomPn, lsPn) = if (isAxialTension)
             calculateTension()
         else
-            calculateCompression(u.colStrong, u.colWeak)
+            calculateCompression(u.colStrong, u.colWeak, u.lengthNote)
 
         // The capacity about the *other* principal axis, checked against
         // StationDemand.momentY. (It used to be a flat "N/A — weak axis not
@@ -461,11 +489,29 @@ class NdsWoodCapacityCalculator(
         val isAxialTension = demand.axial.pounds >= 0.0
 
         val (nomMn, lsMn, tracesMn) = calculateBending(u)
-        val (nomVn, lsVn, tracesVn) = calculateShear()
+        val (nomVn, lsVn, tracesVn0) = calculateShear()
+        // NDS 3.4.3.1(a): say so wherever the design shear was reduced near a support.
+        val tracesVn = demand.shearReductionNote?.let { note ->
+            val full = abs(demand.unreducedShear?.pounds ?: demand.shear.pounds)
+            listOf(
+                DesignEquationTrace(
+                    symbolicEquation = "V design = V with loads within d of the support face ignored / x/d",
+                    substitutedEquation = "V = ${fmt(full, 1)} lb (full) -> ${fmt(abs(demand.shear.pounds), 1)} lb (design)",
+                    result = fmt(abs(demand.shear.pounds), 1),
+                    units = "lb",
+                    codeReference = "NDS 3.4.3.1(a)",
+                    variables = mapOf("V full" to full, "V design" to abs(demand.shear.pounds))
+                ),
+                DesignEquationTrace(
+                    symbolicEquation = "Assumptions", substitutedEquation = note, result = "", units = "",
+                    codeReference = "NDS 3.4.3.1(a)", variables = emptyMap()
+                )
+            ) + tracesVn0
+        } ?: tracesVn0
         val (nomPn, lsPn, tracesPn) = if (isAxialTension)
             calculateTension()
         else
-            calculateCompression(u.colStrong, u.colWeak)
+            calculateCompression(u.colStrong, u.colWeak, u.lengthNote)
 
         // The nominal capacities above ARE the design capacities, for both
         // methodologies. ASD: adjusted design values (CD per combination).
@@ -1182,11 +1228,11 @@ class NdsWoodCapacityCalculator(
         val traces: List<DesignEquationTrace>
     )
 
-    private fun compressionParts(luStrong: Double, luWeak: Double): CompressionParts {
+    private fun compressionParts(luStrong: Double, luWeak: Double, lengthNote: String = ""): CompressionParts {
         val fc = designMaterial.referenceCompressionParallel.inPsi
         val f = adjustmentFactors
 
-        val cpResult = computeCPTraced(luStrong, luWeak)
+        val cpResult = computeCPTraced(luStrong, luWeak, lengthNote)
         val fStarC = fc * f.cdCompression * f.cmFc * f.ctFc * computeSawnCF(NdsCfProperty.COMPRESSION) * f.ci
         val fcAdj = fStarC * cpResult.cp
 
@@ -1206,9 +1252,9 @@ class NdsWoodCapacityCalculator(
      * F'c = Fc * CD * CM * Ct * CF * Ci * CP
      * CP computed from NDS 3.7.1 using slenderness ratio le/d.
      */
-    private fun calculateCompression(luStrong: Double, luWeak: Double): LimitStateResult {
+    private fun calculateCompression(luStrong: Double, luWeak: Double, lengthNote: String = ""): LimitStateResult {
         val area = profile.area.inIn2
-        val parts = compressionParts(luStrong, luWeak)
+        val parts = compressionParts(luStrong, luWeak, lengthNote)
 
         val pn = parts.fcAdj * area
         val pnTrace = DesignEquationTrace(
@@ -1235,7 +1281,7 @@ class NdsWoodCapacityCalculator(
      * CP = (1 + ratio) / (2c) - sqrt(((1 + ratio) / (2c))^2 - ratio/c)
      * where ratio = FcE / F*c, c = 0.8 (sawn) or 0.9 (glulam/SCL)
      */
-    private fun computeCPTraced(luStrong: Double, luWeak: Double): CpResult {
+    private fun computeCPTraced(luStrong: Double, luWeak: Double, lengthNote: String = ""): CpResult {
         if (luStrong <= 0.0 && luWeak <= 0.0) return CpResult(1.0, emptyList())
 
         val d = profile.depth.inInches
@@ -1267,7 +1313,8 @@ class NdsWoodCapacityCalculator(
             symbolicEquation = "le/d = max(le1/d1, le2/d2)   (Ke = 1.0)",
             substitutedEquation = "le1/d1 = ${fmt(luStrong)}/${fmt(d)} = ${fmt(slenderStrong, 2)};  " +
                 "le2/d2 = ${fmt(luWeak)}/${fmt(b)} = ${fmt(slenderWeak, 2)}  ->  " +
-                (if (weakGoverns) "weak axis governs" else "strong axis governs"),
+                (if (weakGoverns) "weak axis governs" else "strong axis governs") +
+                (if (lengthNote.isNotEmpty()) "  [ASSUMED: $lengthNote]" else ""),
             result = fmt(slenderness, 2),
             units = "",
             codeReference = "NDS 3.7.1.2, 3.7.1.4",
@@ -1416,7 +1463,8 @@ class NdsWoodCapacityCalculator(
             )
             axial < 0.0 || (fb1 > 0.0 && fb2 > 0.0) -> listOf(
                 combinedCompression(
-                    axial, area, u, mStrong, mWeak, fb1, fb2, strongAx, weakAx, kBend, kComp, notes
+                    axial, area, u, mStrong, mWeak, fb1, fb2, strongAx, weakAx, kBend, kComp,
+                    if (u.lengthNote.isEmpty()) notes else notes + "ASSUMED column lengths: ${u.lengthNote}."
                 )
             )
             else -> emptyList()
@@ -1571,7 +1619,7 @@ class NdsWoodCapacityCalculator(
         val equations = mutableListOf<InteractionEquationResult>()
         val problems = mutableListOf<String>()
 
-        val parts = compressionParts(u.colStrong, u.colWeak)
+        val parts = compressionParts(u.colStrong, u.colWeak, u.lengthNote)
         val fcAdj = parts.fcAdj * kComp
 
         // d1 = wide face dimension (edgewise bending), d2 = narrow face (flatwise) — NDS Fig. 3H.

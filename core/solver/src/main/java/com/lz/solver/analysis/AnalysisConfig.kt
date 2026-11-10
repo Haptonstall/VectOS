@@ -6,6 +6,7 @@ import com.lz.model.structural.LoadCase
 import com.lz.model.structural.Load
 
 import com.lz.model.units.Area
+import com.lz.model.units.Length
 import com.lz.model.units.MomentOfInertia
 import com.lz.model.units.Pressure
 import com.lz.model.units.TorsionalConstant
@@ -19,6 +20,16 @@ import com.lz.model.units.ElasticModulus
 data class ShearDeflectionInput(
     val shearModulus: Pressure,
     val effectiveShearArea: Area
+)
+
+/**
+ * Input for the NDS 3.4.3.1(a) near-support shear reduction: [depth] is the member depth in the
+ * plane of bending; [bearingLength] (optional) places the support face half a bearing length either
+ * side of the support centerline. Without it x is measured from the centerline (less reduction).
+ */
+data class ShearReductionInput(
+    val depth: Length,
+    val bearingLength: Length? = null
 )
 
 /**
@@ -43,7 +54,18 @@ data class AnalysisConfig(
      * includes shear (NDS F.3.1, sawn lumber and glulam tables). Set it only together with
      * a true (shear-free) E, otherwise shear is counted twice.
      */
-    val shearDeflection: ShearDeflectionInput? = null
+    val shearDeflection: ShearDeflectionInput? = null,
+    /**
+     * Extra stations (inches from the member start) added to the solver's station list,
+     * e.g. a Design Location the user typed in, so checks are evaluated exactly there
+     * instead of at the nearest grid station. Values outside the member are ignored.
+     */
+    val extraStations: List<Length> = emptyList(),
+    /**
+     * NDS 3.4.3.1(a): design shear within d of a support, with uniform loads there ignored and
+     * concentrated loads multiplied by x/d. Null = off (full shear everywhere). See [ShearReductionInput].
+     */
+    val shearReduction: ShearReductionInput? = null
 ) {
     val allLoads: List<Load> get() = loadCases.flatMap { it.loads }
 }

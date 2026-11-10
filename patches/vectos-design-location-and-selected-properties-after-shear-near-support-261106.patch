@@ -1,0 +1,513 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/AnalysisConfig.kt b/core/solver/src/main/java/com/lz/solver/analysis/AnalysisConfig.kt
+index e228727..e112327 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/AnalysisConfig.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/AnalysisConfig.kt
+@@ -55,6 +55,12 @@ data class AnalysisConfig(
+      * a true (shear-free) E, otherwise shear is counted twice.
+      */
+     val shearDeflection: ShearDeflectionInput? = null,
++    /**
++     * Extra stations (inches from the member start) added to the solver's station list,
++     * e.g. a Design Location the user typed in, so checks are evaluated exactly there
++     * instead of at the nearest grid station. Values outside the member are ignored.
++     */
++    val extraStations: List<Length> = emptyList(),
+     /**
+      * NDS 3.4.3.1(a): design shear within d of a support, with uniform loads there ignored and
+      * concentrated loads multiplied by x/d. Null = off (full shear everywhere). See [ShearReductionInput].
+diff --git a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+index 8199352..675fec1 100644
+--- a/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
++++ b/core/solver/src/main/java/com/lz/solver/analysis/MemberAnalysisSolver.kt
+@@ -683,6 +683,7 @@ object MemberAnalysisSolver {
+         }
+ 
+         config.braceState.forEach { pois.add(it.x.inches) }
++        config.extraStations.forEach { pois.add(it.inches) }
+ 
+         // Grid
+         val totalLength = config.member.spans.sumOf { it.length.inches }
+diff --git a/core/solver/src/main/java/com/lz/solver/capacity/SelectedPropertiesBuilder.kt b/core/solver/src/main/java/com/lz/solver/capacity/SelectedPropertiesBuilder.kt
+new file mode 100644
+index 0000000..f3e9246
+--- /dev/null
++++ b/core/solver/src/main/java/com/lz/solver/capacity/SelectedPropertiesBuilder.kt
+@@ -0,0 +1,87 @@
++package com.lz.solver.capacity
++
++import com.lz.model.structural.DesignPropertyGroup
++import com.lz.model.structural.DesignPropertyRow
++import com.lz.model.structural.MaterialGrade
++import com.lz.model.structural.SectionProfile
++import com.lz.model.structural.SteelProfile
++import com.lz.model.units.inIn2
++import com.lz.model.units.inIn3
++import com.lz.model.units.inIn4
++import com.lz.model.units.inInches
++import com.lz.model.units.inPsi
++import java.util.Locale
++
++/**
++ * "Selected Properties" groups (material and section) for any material, so the properties the
++ * code checks use are at hand whether or not a material-specific design calculator exists.
++ * Values are the profile's and the grade's own; nothing is looked up or filled in here.
++ */
++object SelectedPropertiesBuilder {
++
++    private fun f(v: Double, d: Int) = String.format(Locale.US, "%.${d}f", v)
++
++    private fun row(symbol: String, description: String, value: String) =
++        DesignPropertyRow(symbol, description, value)
++
++    fun forSection(profile: SectionProfile?, material: MaterialGrade?): List<DesignPropertyGroup> {
++        val groups = mutableListOf<DesignPropertyGroup>()
++        if (material != null) groups += materialGroup(material)
++        if (profile != null) groups += sectionGroup(profile, material)
++        return groups
++    }
++
++    private fun materialGroup(m: MaterialGrade): DesignPropertyGroup {
++        val rows = mutableListOf(
++            row("Grade", "Material grade", m.name),
++            row("Type", "Material type", m.type.name)
++        )
++        when (m) {
++            is MaterialGrade.Steel -> {
++                rows += row("Fy", "Yield strength", "${f(m.yieldStrength.inPsi / 1000.0, 1)} ksi")
++                rows += row("Fu", "Tensile strength", "${f(m.ultimateStrength.inPsi / 1000.0, 1)} ksi")
++            }
++            is MaterialGrade.Aluminum -> {
++                rows += row("Fy", "Yield strength", "${f(m.yieldStrength.inPsi / 1000.0, 1)} ksi")
++                rows += row("Fu", "Tensile strength", "${f(m.ultimateStrength.inPsi / 1000.0, 1)} ksi")
++            }
++            is MaterialGrade.Wood -> {
++                rows += row("Species", "Species / combination", m.species.name)
++            }
++            else -> Unit
++        }
++        rows += row("E", "Modulus of elasticity", "${f(m.modulusOfElasticity.inPsi / 1000.0, 0)} ksi")
++        rows += row("G", "Shear modulus", "${f(m.shearModulus.inPsi / 1000.0, 0)} ksi")
++        rows += row("\u03C1", "Density", "${f(m.densityPcf, 1)} pcf")
++        return DesignPropertyGroup("Material", rows)
++    }
++
++    private fun sectionGroup(p: SectionProfile, m: MaterialGrade?): DesignPropertyGroup {
++        val s = p.propertiesStrongAxis
++        val w = p.propertiesWeakAxis
++        val rows = mutableListOf(
++            row("Size", "Section", p.designation),
++            row("d", "Overall depth", "${f(p.depth.inInches, 3)} in"),
++            row("A", "Gross area", "${f(p.area.inIn2, 3)} in\u00B2")
++        )
++        if (p is SteelProfile) {
++            rows += row("bf", "Flange width", "${f(p.flangeWidth.inInches, 3)} in")
++            rows += row("tf", "Flange thickness", "${f(p.flangeThickness.inInches, 3)} in")
++            rows += row("tw", "Web thickness", "${f(p.webThickness.inInches, 3)} in")
++        }
++        rows += row("Ix", "Moment of inertia, strong axis", "${f(s.i.inIn4, 2)} in\u2074")
++        rows += row("Sx", "Elastic section modulus, strong axis", "${f(s.s.inIn3, 2)} in\u00B3")
++        rows += row("Zx", "Plastic section modulus, strong axis", "${f(s.z.inIn3, 2)} in\u00B3")
++        rows += row("rx", "Radius of gyration, strong axis", "${f(s.r.inInches, 3)} in")
++        rows += row("Iy", "Moment of inertia, weak axis", "${f(w.i.inIn4, 2)} in\u2074")
++        rows += row("Sy", "Elastic section modulus, weak axis", "${f(w.s.inIn3, 2)} in\u00B3")
++        rows += row("Zy", "Plastic section modulus, weak axis", "${f(w.z.inIn3, 2)} in\u00B3")
++        rows += row("ry", "Radius of gyration, weak axis", "${f(w.r.inInches, 3)} in")
++        if (p is SteelProfile) {
++            rows += row("J", "Torsional constant", "${f(p.torsionalConstantJ, 3)} in\u2074")
++            rows += row("Cw", "Warping constant", "${f(p.warpingConstantCw, 0)} in\u2076")
++        }
++        rows += row("w", "Weight per foot", "${f(p.getWeightLbFt(m?.densityPcf ?: p.materialType.defaultDensityPcf), 2)} lb/ft")
++        return DesignPropertyGroup("Section", rows)
++    }
++}
+diff --git a/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt b/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
+index a9c681c..6e0c78c 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/AiscSteelCapacityCalculator.kt
+@@ -3,6 +3,8 @@ package com.lz.solver.material
+ import com.lz.model.regulatory.AiscEdition
+ import com.lz.model.regulatory.aisc.AiscDesignFactors
+ import com.lz.model.structural.DesignMethodology
++import com.lz.model.structural.DesignPropertyGroup
++import com.lz.model.structural.DesignPropertyRow
+ import com.lz.model.structural.Flange
+ import com.lz.model.structural.MaterialGrade
+ import com.lz.model.structural.SectionProfile
+@@ -22,6 +24,7 @@ import com.lz.model.units.inPsi
+ import com.lz.solver.capacity.CapacityCalculator
+ import com.lz.solver.capacity.DesignFactorSet
+ import com.lz.solver.capacity.RawCapacityResult
++import com.lz.solver.capacity.SelectedPropertiesBuilder
+ import java.util.Locale
+ import kotlin.math.PI
+ import kotlin.math.abs
+@@ -104,6 +107,7 @@ class AiscSteelCapacityCalculator(
+     )
+ 
+     private fun fmt(v: Double, d: Int = 2): String = String.format(Locale.US, "%.${d}f", v)
++    private fun factorSymbol(m: DesignMethodology) = if (m == DesignMethodology.LRFD) "\u03C6" else "\u03A9"
+     private fun kipFt(lbIn: Double): String = fmt(lbIn / 12000.0, 1)
+     private fun kips(lb: Double): String = fmt(lb / 1000.0, 1)
+ 
+@@ -227,6 +231,21 @@ class AiscSteelCapacityCalculator(
+                 traces               = torsionResult.traces
+             ),
+             methodology      = methodology,
++            selectedProperties = SelectedPropertiesBuilder.forSection(profile, material) + DesignPropertyGroup(
++                "Design",
++                listOf(
++                    DesignPropertyRow("Edition", "AISC 360 edition", f.edition.name),
++                    DesignPropertyRow("Method", "Design methodology", methodology.name),
++                    DesignPropertyRow("Axis", "Bending axis used", if (memberIsStrongAxis) "Strong (x)" else "Weak (y)"),
++                    DesignPropertyRow("Lb", "Unbraced length, compression flange", String.format(Locale.US, "%.1f in", lb)),
++                    DesignPropertyRow("Cb", "Lateral-torsional buckling modifier", String.format(Locale.US, "%.2f", cb)),
++                    DesignPropertyRow(factorSymbol(methodology), "Flexure (" + f.flexure.citation + ")", fmt(f.flexure.value, 2)),
++                    DesignPropertyRow(factorSymbol(methodology), "Shear (" + f.shear.citation + ")", fmt(f.shear.value, 2)),
++                    DesignPropertyRow(factorSymbol(methodology), "Tension yielding (" + f.tensionYield.citation + ")", fmt(f.tensionYield.value, 2)),
++                    DesignPropertyRow(factorSymbol(methodology), "Compression (" + f.compression.citation + ")", fmt(f.compression.value, 2)),
++                    DesignPropertyRow(factorSymbol(methodology), "Torsion (" + f.torsion.citation + ")", fmt(f.torsion.value, 2))
++                )
++            ),
+             designParameters = mapOf(
+                 "Lb" to String.format(Locale.US, "%.1f in", lb),
+                 "Cb" to String.format(Locale.US, "%.2f",    cb),
+diff --git a/core/solver/src/test/java/com/lz/solver/analysis/ExtraStationsTest.kt b/core/solver/src/test/java/com/lz/solver/analysis/ExtraStationsTest.kt
+new file mode 100644
+index 0000000..86837b6
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/analysis/ExtraStationsTest.kt
+@@ -0,0 +1,69 @@
++package com.lz.solver.analysis
++
++import com.lz.model.structural.Load
++import com.lz.model.structural.LoadCase
++import com.lz.model.structural.NodeBoundaryCondition
++import com.lz.model.structural.SpanGeometry
++import com.lz.model.structural.StructuralMember
++import com.lz.model.structural.StructuralNode
++import com.lz.model.units.Area
++import com.lz.model.units.ElasticModulus
++import com.lz.model.units.ForcePerLength
++import com.lz.model.units.MomentOfInertia
++import com.lz.model.units.inches
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Test
++import java.util.UUID
++
++/**
++ * An extra station (the user's Design Location) is evaluated exactly, not at the nearest grid
++ * station. Simple span L = 100 in, UDL w = 10 lb/in, hand calcs at x = 37.3 in:
++ *   |M| = w x (L - x) / 2 = 10 * 37.3 * 62.7 / 2 = 11693.55 lb-in
++ *   |V| = w (L/2 - x)     = 10 * (50 - 37.3)      = 127 lb
++ * The default grid has stations every 1.0 in, so 37.3 is not on it.
++ */
++class ExtraStationsTest {
++
++    private fun solve(extra: List<Double>): AnalysisResult {
++        val nodes = listOf(NodeBoundaryCondition.pinned(), NodeBoundaryCondition.roller())
++            .map { StructuralNode(id = UUID.randomUUID(), boundaryCondition = it) }
++        val span = SpanGeometry(id = UUID.randomUUID(), length = 100.0.inches, startNodeId = nodes[0].id, endNodeId = nodes[1].id)
++        val member = StructuralMember(nodes = nodes, spans = listOf(span))
++        return MemberAnalysisSolver.solve(
++            AnalysisConfig(
++                member = member,
++                loadCases = listOf(LoadCase("DL", "Dead", listOf<Load>(
++                    Load.UniformDistributedLoad(ForcePerLength(10.0), span.id, 0.0.inches, 100.0.inches)))),
++                modulusOfElasticity = ElasticModulus(1_000_000.0),
++                momentOfInertiaX = MomentOfInertia(100.0),
++                crossSectionalArea = Area(10.0),
++                extraStations = extra.map { it.inches }
++            )
++        )
++    }
++
++    private fun station(r: AnalysisResult, x: Double) =
++        r.spanResults.flatMap { it.stationDemands }.firstOrNull { Math.abs(it.x.inches - x) < 1e-9 }
++
++    @Test
++    fun `a typed location becomes an exact station with the closed-form moment and shear`() {
++        val d = station(solve(listOf(37.3)), 37.3)
++        assertNotNull(d)
++        assertEquals(11693.55, Math.abs(d!!.moment.lbIn), 1e-6)
++        assertEquals(127.0, Math.abs(d.shear.pounds), 1e-6)
++    }
++
++    @Test
++    fun `without an extra station the location is not on the grid`() {
++        assertNull(station(solve(emptyList()), 37.3))
++    }
++
++    @Test
++    fun `locations outside the member are ignored`() {
++        val r = solve(listOf(-5.0, 150.0))
++        assertNull(station(r, -5.0)); assertNull(station(r, 150.0))
++        assertNotNull(station(r, 50.0))
++    }
++}
+diff --git a/core/solver/src/test/java/com/lz/solver/capacity/SelectedPropertiesBuilderTest.kt b/core/solver/src/test/java/com/lz/solver/capacity/SelectedPropertiesBuilderTest.kt
+new file mode 100644
+index 0000000..23ab9ad
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/capacity/SelectedPropertiesBuilderTest.kt
+@@ -0,0 +1,98 @@
++package com.lz.solver.capacity
++
++import com.lz.model.structural.DesignMethodology
++import com.lz.model.structural.DesignPropertyGroup
++import com.lz.model.structural.MaterialGrade
++import com.lz.model.structural.SectionAxisProperties
++import com.lz.model.structural.ShapeType
++import com.lz.model.structural.StationDemand
++import com.lz.model.structural.SteelProfile
++import com.lz.model.units.*
++import com.lz.solver.material.AiscSteelCapacityCalculator
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/**
++ * Selected Properties for every material. The inputs below are the test's own numbers
++ * (W12x26-like shape, A992-like grade); each expected string is the same number formatted
++ * by hand: 3 decimals for lengths and areas, 2 for I, S and Z, ksi for stresses and moduli.
++ */
++class SelectedPropertiesBuilderTest {
++
++    private val w12 = SteelProfile(
++        id = "W12X26", designation = "W12X26", shapeType = ShapeType.WIDE_FLANGE,
++        area = 7.65.in2, depth = 12.2.inches, webThickness = 0.230.inches,
++        flangeWidth = 6.49.inches, flangeThickness = 0.380.inches,
++        torsionalConstantJ = 0.300, warpingConstantCw = 576.0,
++        propertiesStrongAxis = SectionAxisProperties(204.0.in4, 33.4.in3, 37.2.in3, 5.17.inches),
++        propertiesWeakAxis = SectionAxisProperties(17.3.in4, 5.34.in3, 8.17.in3, 1.51.inches)
++    )
++    private val a992 = MaterialGrade.Steel("A992", "A992", yieldStrength = 50000.0.psi, ultimateStrength = 65000.0.psi)
++
++    private fun v(g: List<DesignPropertyGroup>, group: String, symbol: String) =
++        g.first { it.title == group }.rows.first { it.symbol == symbol }.value
++
++    @Test
++    fun `steel material and section groups carry the shape and grade values`() {
++        val g = SelectedPropertiesBuilder.forSection(w12, a992)
++        assertEquals("A992", v(g, "Material", "Grade"))
++        assertEquals("50.0 ksi", v(g, "Material", "Fy"))
++        assertEquals("65.0 ksi", v(g, "Material", "Fu"))
++        assertEquals("29000 ksi", v(g, "Material", "E"))
++        assertEquals("W12X26", v(g, "Section", "Size"))
++        assertEquals("12.200 in", v(g, "Section", "d"))
++        assertEquals("7.650 in\u00B2", v(g, "Section", "A"))
++        assertEquals("6.490 in", v(g, "Section", "bf"))
++        assertEquals("204.00 in\u2074", v(g, "Section", "Ix"))
++        assertEquals("33.40 in\u00B3", v(g, "Section", "Sx"))
++        assertEquals("37.20 in\u00B3", v(g, "Section", "Zx"))
++        assertEquals("5.170 in", v(g, "Section", "rx"))
++        assertEquals("1.510 in", v(g, "Section", "ry"))
++        assertEquals("0.300 in\u2074", v(g, "Section", "J"))
++        assertEquals("576 in\u2076", v(g, "Section", "Cw"))
++        // weight = A / 144 x 490 pcf = 26.0312 lb/ft
++        assertEquals("26.03 lb/ft", v(g, "Section", "w"))
++    }
++
++    @Test
++    fun `a material with no calculator still gets material and section groups`() {
++        val concrete = MaterialGrade.Generic("C4000", "Concrete 4000 psi", com.lz.model.structural.MaterialType.CONCRETE,
++            modulusOfElasticity = 3605.0.ksi, shearModulus = 1500.0.ksi, densityPcf = 150.0)
++        val g = SelectedPropertiesBuilder.forSection(w12, concrete)
++        assertEquals("CONCRETE", v(g, "Material", "Type"))
++        assertEquals("3605 ksi", v(g, "Material", "E"))
++        assertEquals("150.0 pcf", v(g, "Material", "\u03C1"))
++        assertEquals("Concrete 4000 psi", v(g, "Material", "Grade"))
++        assertEquals("W12X26", v(g, "Section", "Size"))
++        // weight uses the grade's own density: 7.65 / 144 x 150 = 7.96875
++        assertEquals("7.97 lb/ft", v(g, "Section", "w"))
++    }
++
++    @Test
++    fun `missing material or section just omits that group`() {
++        assertTrue(SelectedPropertiesBuilder.forSection(null, null).isEmpty())
++        assertEquals(listOf("Section"), SelectedPropertiesBuilder.forSection(w12, null).map { it.title })
++        assertEquals(listOf("Material"), SelectedPropertiesBuilder.forSection(null, a992).map { it.title })
++    }
++
++    @Test
++    fun `the steel calculator's detailed result populates Selected Properties with design inputs`() {
++        val calc = AiscSteelCapacityCalculator(w12, a992)
++        val demand = StationDemand(
++            spanId = java.util.UUID.randomUUID(), x = 60.0.inches, moment = Moment(100000.0), shear = Force(5000.0),
++            momentY = Moment(0.0), axial = Force(0.0)
++        )
++        val g = calc.evaluateDetailed(demand, DesignMethodology.LRFD).selectedProperties
++        assertEquals(listOf("Material", "Section", "Design"), g.map { it.title })
++        assertEquals("33.40 in\u00B3", v(g, "Section", "Sx"))
++        assertEquals("Strong (x)", v(g, "Design", "Axis"))
++        assertEquals("LRFD", v(g, "Design", "Method"))
++        val phis = g.first { it.title == "Design" }.rows.filter { it.symbol == "\u03C6" }
++        assertEquals(5, phis.size)
++        assertFalse(g.first { it.title == "Design" }.rows.any { it.symbol == "\u03A9" })
++        val asd = calc.evaluateDetailed(demand, DesignMethodology.ASD).selectedProperties
++        assertEquals(5, asd.first { it.title == "Design" }.rows.count { it.symbol == "\u03A9" })
++    }
++}
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 8620f58..9f92863 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -25,6 +25,7 @@ import com.lz.model.regulatory.codes.StandardEdition
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.regulatory.nds.NdsEdition
+ import com.lz.model.structural.WoodProfile
++import com.lz.model.structural.DesignPropertyGroup
+ import com.lz.model.structural.BracingInput
+ import com.lz.model.structural.BracingResolver
+ import com.lz.model.structural.DesignMethodology
+@@ -50,6 +51,7 @@ import com.lz.model.structural.NodeBoundaryCondition
+ import com.lz.model.structural.WoodGrade
+ import com.lz.model.structural.WoodSpecies
+ import com.lz.solver.analysis.ShearReductionInput
++import com.lz.solver.capacity.SelectedPropertiesBuilder
+ import com.lz.solver.analysis.AnalysisResult
+ import com.lz.solver.analysis.UtilizationPoint
+ import com.lz.solver.capacity.CapacityCalculator
+@@ -240,7 +242,8 @@ class BeamViewModel @Inject constructor(
+      * Analysis tab's station picker uses) the user asked the Design tab to
+      * show the calculation. Null means "worst case": the governing point for
+      * bending / axial / combined checks, and the largest-shear station for
+-     * shear. Pure view state — changing it doesn't recalculate anything.
++     * shear. The typed location is added to the solver's station list, so changing it
++     * recalculates and every check is evaluated exactly there (not at the nearest grid station).
+      */
+     var designLocationInches by mutableStateOf<Double?>(null)
+         private set
+@@ -286,6 +289,10 @@ class BeamViewModel @Inject constructor(
+             return calculator.evaluateDetailed(demand, methodology)
+         }
+ 
++    /**
++     * Selected Properties for the card: the calculator's own groups when there is one (steel, wood), otherwise the
++     * shape's and grade's properties for any other material, so the properties the checks use are always at hand.
++     */
+     /** NDS 3.4.3.1(a) near-support shear reduction, only for wood and only when the user turned it on. */
+     private fun shearReductionInput(): ShearReductionInput? {
+         val sns = ndsAdjustmentFactors.shearNearSupport
+@@ -296,6 +303,10 @@ class BeamViewModel @Inject constructor(
+         return ShearReductionInput(Length(d), sns.bearingLengthIn?.let { Length(it) })
+     }
+ 
++    val selectedPropertiesForCard: List<DesignPropertyGroup>
++        get() = detailedStrengthResult?.selectedProperties?.takeIf { it.isNotEmpty() }
++            ?: SelectedPropertiesBuilder.forSection(selectedSection, activeMaterialGrade)
++
+     val detailedStrengthCombinationName: String?
+         get() = designPoint()?.combinationName
+ 
+@@ -509,7 +520,9 @@ class BeamViewModel @Inject constructor(
+                 withContext(Dispatchers.Main) {
+                     calculationResult = result
+                     calculationError = null
+-                    hasUnsavedChanges = inputsAtResult != savedInputsSnapshot
++                    // The Design Location is a view choice, not part of what is saved.
++                    hasUnsavedChanges = inputsAtResult.copy(designLocationInches = null) !=
++                        savedInputsSnapshot?.copy(designLocationInches = null)
+                 }
+             } catch (e: CodeDataBlockedException) {
+                 // Hard block: show no result at all rather than a stale one.
+@@ -861,6 +874,8 @@ class BeamViewModel @Inject constructor(
+                 member = memberSnapshot,
+                 loadCases = resolvedLoadCases,
+                 combinations = activeCombinations,
++                // The Design Location the user typed is an exact solver station.
++                extraStations = listOfNotNull(designLocationInches?.let { Length(it) }),
+                 shearReduction = shearReductionInput(),
+                 // Wood: the edition's E for this member x CM x Ct x Ci (wet service lowers E).
+                 modulusOfElasticity = run {
+@@ -1037,7 +1052,8 @@ class BeamViewModel @Inject constructor(
+         enabledCombinations = enabledCombinations,
+         methodology = methodology,
+         activeBuildingCode = activeBuildingCode,
+-        ndsAdjustmentFactors = ndsAdjustmentFactors
++        ndsAdjustmentFactors = ndsAdjustmentFactors,
++        designLocationInches = designLocationInches
+     )
+ 
+     /**
+@@ -1058,6 +1074,7 @@ class BeamViewModel @Inject constructor(
+         val enabledCombinations: Set<String>,
+         val methodology: DesignMethodology,
+         val activeBuildingCode: BuildingCode?,
+-        val ndsAdjustmentFactors: NdsAdjustmentFactors
++        val ndsAdjustmentFactors: NdsAdjustmentFactors,
++        val designLocationInches: Double?
+     )
+ }
+diff --git a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt
+index 2b210d0..1174041 100644
+--- a/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt
++++ b/feature/beam/src/main/java/com/lz/beam/solver/BeamAnalysisConfig.kt
+@@ -12,6 +12,7 @@ import com.lz.model.structural.SectionProfile
+ import com.lz.model.structural.StructuralMember
+ import com.lz.model.units.Area
+ import com.lz.model.units.ElasticModulus
++import com.lz.model.units.Length
+ import com.lz.model.units.MomentOfInertia
+ import com.lz.model.units.Pressure
+ import com.lz.model.units.TorsionalConstant
+@@ -69,6 +70,8 @@ data class BeamAnalysisConfig(
+      * only with a true (shear-free) E, e.g. engineered wood, to avoid counting shear twice.
+      */
+     val shearDeflection: ShearDeflectionInput? = null,
++    /** Extra solver stations, e.g. the user's Design Location (see AnalysisConfig.extraStations). */
++    val extraStations: List<Length> = emptyList(),
+     /** NDS 3.4.3.1(a) near-support shear reduction (see AnalysisConfig.shearReduction). */
+     val shearReduction: ShearReductionInput? = null
+ ) {
+@@ -90,6 +93,7 @@ data class BeamAnalysisConfig(
+         torsionalConstant = torsionalConstant,
+         braceState = braceState,
+         shearDeflection = shearDeflection,
++        extraStations = extraStations,
+         shearReduction = shearReduction
+     )
+ }
+\ No newline at end of file
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index b8b4efd..2af4cc2 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -1065,7 +1065,8 @@ fun DesignTab(viewModel: BeamViewModel) {
+             onDesignLocationChanged = viewModel::onDesignLocationChanged,
+             isWoodMaterial = viewModel.activeMaterialGrade is MaterialGrade.Wood,
+             ndsAdjustmentFactors = viewModel.ndsAdjustmentFactors,
+-            onAdjustmentFactorsChanged = viewModel::onAdjustmentFactorsChanged
++            onAdjustmentFactorsChanged = viewModel::onAdjustmentFactorsChanged,
++            selectedProperties = viewModel.selectedPropertiesForCard
+         )
+     }
+ }
+@@ -1738,9 +1739,15 @@ fun DesignSummary(
+     // shown next to the read-only Design Parameters summary below.
+     isWoodMaterial: Boolean = false,
+     ndsAdjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors(),
+-    onAdjustmentFactorsChanged: ((NdsAdjustmentFactors) -> Unit)? = null
++    onAdjustmentFactorsChanged: ((NdsAdjustmentFactors) -> Unit)? = null,
++    // Selected Properties for materials that have no detailed design calculator (the calculator's own
++    // groups are used when there is a detailed result).
++    selectedProperties: List<DesignPropertyGroup> = emptyList()
+ ) {
+     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
++        if (detailedResult == null && selectedProperties.isNotEmpty()) {
++            SelectedPropertiesCard(selectedProperties)
++        }
+         // 1. Critical Strength Check (Governing)
+         if (detailedResult != null) {
+             detailedResult.standardLabel?.let { label ->
+@@ -2257,7 +2264,7 @@ private fun DesignLocationControl(
+             }
+             Text(
+                 if (userLocationInches != null && strengthLocationInches != null)
+-                    "All checks are shown at the nearest solver station, x = ${formatLocation(strengthLocationInches, unitSystem)}."
++                    "All checks are evaluated at exactly x = ${formatLocation(strengthLocationInches, unitSystem)}."
+                 else
+                     "Leave blank for worst case: bending, axial and combined checks at the governing point" +
+                         (strengthLocationInches?.let { " (x = ${formatLocation(it, unitSystem)})" } ?: "") +

@@ -1065,7 +1065,8 @@ fun DesignTab(viewModel: BeamViewModel) {
             onDesignLocationChanged = viewModel::onDesignLocationChanged,
             isWoodMaterial = viewModel.activeMaterialGrade is MaterialGrade.Wood,
             ndsAdjustmentFactors = viewModel.ndsAdjustmentFactors,
-            onAdjustmentFactorsChanged = viewModel::onAdjustmentFactorsChanged
+            onAdjustmentFactorsChanged = viewModel::onAdjustmentFactorsChanged,
+            selectedProperties = viewModel.selectedPropertiesForCard
         )
     }
 }
@@ -1738,9 +1739,15 @@ fun DesignSummary(
     // shown next to the read-only Design Parameters summary below.
     isWoodMaterial: Boolean = false,
     ndsAdjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors(),
-    onAdjustmentFactorsChanged: ((NdsAdjustmentFactors) -> Unit)? = null
+    onAdjustmentFactorsChanged: ((NdsAdjustmentFactors) -> Unit)? = null,
+    // Selected Properties for materials that have no detailed design calculator (the calculator's own
+    // groups are used when there is a detailed result).
+    selectedProperties: List<DesignPropertyGroup> = emptyList()
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        if (detailedResult == null && selectedProperties.isNotEmpty()) {
+            SelectedPropertiesCard(selectedProperties)
+        }
         // 1. Critical Strength Check (Governing)
         if (detailedResult != null) {
             detailedResult.standardLabel?.let { label ->
@@ -2257,7 +2264,7 @@ private fun DesignLocationControl(
             }
             Text(
                 if (userLocationInches != null && strengthLocationInches != null)
-                    "All checks are shown at the nearest solver station, x = ${formatLocation(strengthLocationInches, unitSystem)}."
+                    "All checks are evaluated at exactly x = ${formatLocation(strengthLocationInches, unitSystem)}."
                 else
                     "Leave blank for worst case: bending, axial and combined checks at the governing point" +
                         (strengthLocationInches?.let { " (x = ${formatLocation(it, unitSystem)})" } ?: "") +

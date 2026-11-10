@@ -3,6 +3,8 @@ package com.lz.solver.material
 import com.lz.model.regulatory.AiscEdition
 import com.lz.model.regulatory.aisc.AiscDesignFactors
 import com.lz.model.structural.DesignMethodology
+import com.lz.model.structural.DesignPropertyGroup
+import com.lz.model.structural.DesignPropertyRow
 import com.lz.model.structural.Flange
 import com.lz.model.structural.MaterialGrade
 import com.lz.model.structural.SectionProfile
@@ -22,6 +24,7 @@ import com.lz.model.units.inPsi
 import com.lz.solver.capacity.CapacityCalculator
 import com.lz.solver.capacity.DesignFactorSet
 import com.lz.solver.capacity.RawCapacityResult
+import com.lz.solver.capacity.SelectedPropertiesBuilder
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.abs
@@ -104,6 +107,7 @@ class AiscSteelCapacityCalculator(
     )
 
     private fun fmt(v: Double, d: Int = 2): String = String.format(Locale.US, "%.${d}f", v)
+    private fun factorSymbol(m: DesignMethodology) = if (m == DesignMethodology.LRFD) "\u03C6" else "\u03A9"
     private fun kipFt(lbIn: Double): String = fmt(lbIn / 12000.0, 1)
     private fun kips(lb: Double): String = fmt(lb / 1000.0, 1)
 
@@ -227,6 +231,21 @@ class AiscSteelCapacityCalculator(
                 traces               = torsionResult.traces
             ),
             methodology      = methodology,
+            selectedProperties = SelectedPropertiesBuilder.forSection(profile, material) + DesignPropertyGroup(
+                "Design",
+                listOf(
+                    DesignPropertyRow("Edition", "AISC 360 edition", f.edition.name),
+                    DesignPropertyRow("Method", "Design methodology", methodology.name),
+                    DesignPropertyRow("Axis", "Bending axis used", if (memberIsStrongAxis) "Strong (x)" else "Weak (y)"),
+                    DesignPropertyRow("Lb", "Unbraced length, compression flange", String.format(Locale.US, "%.1f in", lb)),
+                    DesignPropertyRow("Cb", "Lateral-torsional buckling modifier", String.format(Locale.US, "%.2f", cb)),
+                    DesignPropertyRow(factorSymbol(methodology), "Flexure (" + f.flexure.citation + ")", fmt(f.flexure.value, 2)),
+                    DesignPropertyRow(factorSymbol(methodology), "Shear (" + f.shear.citation + ")", fmt(f.shear.value, 2)),
+                    DesignPropertyRow(factorSymbol(methodology), "Tension yielding (" + f.tensionYield.citation + ")", fmt(f.tensionYield.value, 2)),
+                    DesignPropertyRow(factorSymbol(methodology), "Compression (" + f.compression.citation + ")", fmt(f.compression.value, 2)),
+                    DesignPropertyRow(factorSymbol(methodology), "Torsion (" + f.torsion.citation + ")", fmt(f.torsion.value, 2))
+                )
+            ),
             designParameters = mapOf(
                 "Lb" to String.format(Locale.US, "%.1f in", lb),
                 "Cb" to String.format(Locale.US, "%.2f",    cb),

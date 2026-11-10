@@ -24,6 +24,8 @@ import com.lz.model.regulatory.codes.ServiceabilityCriterion
 import com.lz.model.regulatory.codes.StandardEdition
 import com.lz.model.regulatory.nds.NdsAdjustmentFactors
 import com.lz.model.regulatory.nds.NdsEdition
+import com.lz.model.structural.WoodProfile
+import com.lz.model.structural.DesignPropertyGroup
 import com.lz.model.structural.BracingInput
 import com.lz.model.structural.BracingResolver
 import com.lz.model.structural.DesignMethodology
@@ -48,6 +50,8 @@ import com.lz.model.structural.StructuralNode
 import com.lz.model.structural.NodeBoundaryCondition
 import com.lz.model.structural.WoodGrade
 import com.lz.model.structural.WoodSpecies
+import com.lz.solver.analysis.ShearReductionInput
+import com.lz.solver.capacity.SelectedPropertiesBuilder
 import com.lz.solver.analysis.AnalysisResult
 import com.lz.solver.analysis.UtilizationPoint
 import com.lz.solver.capacity.CapacityCalculator
@@ -238,7 +242,8 @@ class BeamViewModel @Inject constructor(
      * Analysis tab's station picker uses) the user asked the Design tab to
      * show the calculation. Null means "worst case": the governing point for
      * bending / axial / combined checks, and the largest-shear station for
-     * shear. Pure view state — changing it doesn't recalculate anything.
+     * shear. The typed location is added to the solver's station list, so changing it
+     * recalculates and every check is evaluated exactly there (not at the nearest grid station).
      */
     var designLocationInches by mutableStateOf<Double?>(null)
         private set
@@ -283,6 +288,24 @@ class BeamViewModel @Inject constructor(
             val calculator = detailCalculator(section) ?: return null
             return calculator.evaluateDetailed(demand, methodology)
         }
+
+    /**
+     * Selected Properties for the card: the calculator's own groups when there is one (steel, wood), otherwise the
+     * shape's and grade's properties for any other material, so the properties the checks use are always at hand.
+     */
+    /** NDS 3.4.3.1(a) near-support shear reduction, only for wood and only when the user turned it on. */
+    private fun shearReductionInput(): ShearReductionInput? {
+        val sns = ndsAdjustmentFactors.shearNearSupport
+        if (!sns.enabled || activeMaterialGrade !is MaterialGrade.Wood) return null
+        val section = selectedSection ?: return null
+        val d = if (isStrongAxis) section.depth.inches
+        else (section as? WoodProfile)?.dressedWidth?.inches ?: section.depth.inches
+        return ShearReductionInput(Length(d), sns.bearingLengthIn?.let { Length(it) })
+    }
+
+    val selectedPropertiesForCard: List<DesignPropertyGroup>
+        get() = detailedStrengthResult?.selectedProperties?.takeIf { it.isNotEmpty() }
+            ?: SelectedPropertiesBuilder.forSection(selectedSection, activeMaterialGrade)
 
     val detailedStrengthCombinationName: String?
         get() = designPoint()?.combinationName
@@ -497,7 +520,9 @@ class BeamViewModel @Inject constructor(
                 withContext(Dispatchers.Main) {
                     calculationResult = result
                     calculationError = null
-                    hasUnsavedChanges = inputsAtResult != savedInputsSnapshot
+                    // The Design Location is a view choice, not part of what is saved.
+                    hasUnsavedChanges = inputsAtResult.copy(designLocationInches = null) !=
+                        savedInputsSnapshot?.copy(designLocationInches = null)
                 }
             } catch (e: CodeDataBlockedException) {
                 // Hard block: show no result at all rather than a stale one.
@@ -849,6 +874,9 @@ class BeamViewModel @Inject constructor(
                 member = memberSnapshot,
                 loadCases = resolvedLoadCases,
                 combinations = activeCombinations,
+                // The Design Location the user typed is an exact solver station.
+                extraStations = listOfNotNull(designLocationInches?.let { Length(it) }),
+                shearReduction = shearReductionInput(),
                 // Wood: the edition's E for this member x CM x Ct x Ci (wet service lowers E).
                 modulusOfElasticity = run {
                     val grade = activeMaterialGrade
@@ -1024,7 +1052,8 @@ class BeamViewModel @Inject constructor(
         enabledCombinations = enabledCombinations,
         methodology = methodology,
         activeBuildingCode = activeBuildingCode,
-        ndsAdjustmentFactors = ndsAdjustmentFactors
+        ndsAdjustmentFactors = ndsAdjustmentFactors,
+        designLocationInches = designLocationInches
     )
 
     /**
@@ -1045,6 +1074,7 @@ class BeamViewModel @Inject constructor(
         val enabledCombinations: Set<String>,
         val methodology: DesignMethodology,
         val activeBuildingCode: BuildingCode?,
-        val ndsAdjustmentFactors: NdsAdjustmentFactors
+        val ndsAdjustmentFactors: NdsAdjustmentFactors,
+        val designLocationInches: Double?
     )
 }
