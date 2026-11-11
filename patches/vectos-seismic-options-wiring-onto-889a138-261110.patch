@@ -1,0 +1,246 @@
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/loads/SeismicCombinationAdjuster.kt b/core/model/src/main/java/com/lz/model/regulatory/loads/SeismicCombinationAdjuster.kt
+index 11dbdd7..07ab950 100644
+--- a/core/model/src/main/java/com/lz/model/regulatory/loads/SeismicCombinationAdjuster.kt
++++ b/core/model/src/main/java/com/lz/model/regulatory/loads/SeismicCombinationAdjuster.kt
+@@ -3,6 +3,7 @@ package com.lz.model.regulatory.loads
+ import com.lz.model.regulatory.LoadCategory
+ import com.lz.model.regulatory.LoadCombination
+ import com.lz.model.structural.DesignMethodology
++import kotlinx.serialization.Serializable
+ import kotlin.math.abs
+ 
+ /**
+@@ -19,6 +20,7 @@ import kotlin.math.abs
+  * With none of them the seismic load is used exactly as entered (Ev = 0, rho = 1.0) and L at its full factor,
+  * and the notes say so.
+  */
++@Serializable
+ data class SeismicCombinationInputs(
+     val sds: Double? = null,
+     val rho: Double? = null,
+diff --git a/feature/beam/src/main/java/com/lz/beam/model/BeamModels.kt b/feature/beam/src/main/java/com/lz/beam/model/BeamModels.kt
+index 743a303..e3ca593 100644
+--- a/feature/beam/src/main/java/com/lz/beam/model/BeamModels.kt
++++ b/feature/beam/src/main/java/com/lz/beam/model/BeamModels.kt
+@@ -2,6 +2,7 @@ package com.lz.beam.model
+ 
+ import com.lz.domain.calculation.CalculationMetadata
+ import com.lz.domain.project.Project
++import com.lz.model.regulatory.loads.SeismicCombinationInputs
+ import com.lz.model.regulatory.codes.ServiceabilityCriterion
+ import com.lz.model.regulatory.nds.NdsAdjustmentFactors
+ import com.lz.model.structural.BracingInput
+@@ -56,7 +57,9 @@ data class BeamCalculationInputs(
+     val isStrongAxis: Boolean = true,
+     val spanBracingInputs: List<SpanBracingInput> = emptyList(),
+     val spanDeflectionOverrides: List<SpanDeflectionOverride> = emptyList(),
+-    val ndsAdjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors()
++    val ndsAdjustmentFactors: NdsAdjustmentFactors = NdsAdjustmentFactors(),
++    /** Optional seismic (SDS, rho) and 0.5L-exception inputs applied to the ASCE combinations. */
++    val seismicInputs: SeismicCombinationInputs = SeismicCombinationInputs()
+ )
+ 
+ @Serializable
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index 9f92863..c22ac67 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -16,6 +16,8 @@ import com.lz.data.repository.CodeNotFoundException
+ import com.lz.data.repository.IStructuralCodeRepository
+ import com.lz.domain.calculation.CalculationMetadata
+ import com.lz.domain.material.MaterialRepository
++import com.lz.model.regulatory.loads.SeismicCombinationInputs
++import com.lz.model.regulatory.loads.SeismicCombinationAdjuster
+ import com.lz.model.regulatory.LoadCategory
+ import com.lz.model.regulatory.LoadCombination
+ import com.lz.model.regulatory.LoadCombinationSet
+@@ -142,6 +144,32 @@ class BeamViewModel @Inject constructor(
+     // Only meaningful for wood materials — steel/aluminum/masonry calculators
+     // never read this.
+     var ndsAdjustmentFactors by mutableStateOf(NdsAdjustmentFactors())
++
++    /** Optional SDS, rho and 0.5L-exception inputs for the ASCE combinations (see SeismicCombinationAdjuster). */
++    var seismicInputs by mutableStateOf(SeismicCombinationInputs())
++        private set
++
++    fun onSeismicInputsChanged(inputs: SeismicCombinationInputs) {
++        combinationNotices = emptyList()
++        seismicInputs = inputs
++    }
++
++    private fun adjustedResult(): SeismicCombinationAdjuster.Result? {
++        val set = selectedCombinationSet ?: return null
++        if (seismicInputs.blockReason() != null) return null
++        return SeismicCombinationAdjuster.adjust(set.id, set.combinations, seismicInputs)
++    }
++
++    /** The set's combinations with the seismic and 0.5L inputs applied (what is actually analysed and shown). */
++    val adjustedCombinations: List<LoadCombination>
++        get() = adjustedResult()?.combinations ?: selectedCombinationSet?.combinations ?: emptyList()
++
++    /** Every assumption and source remark that applies to the combinations (ASSUMED SDS / rho, 0.5L, edition notes). */
++    val combinationAssumptions: List<String>
++        get() = adjustedResult()?.notes ?: emptyList()
++
++    val adjustedSelectedAnalysisCombination: LoadCombination?
++        get() = selectedAnalysisCombination?.let { sel -> adjustedCombinations.firstOrNull { it.name == sel.name } ?: sel }
+         private set
+ 
+     fun onAdjustmentFactorsChanged(factors: NdsAdjustmentFactors) {
+@@ -817,6 +845,7 @@ class BeamViewModel @Inject constructor(
+             selectedSectionId = selectedSection?.id,
+             selectedCombinationSetId = selectedCombinationSet?.id,
+             enabledCombinationNames = enabledCombinations,
++            seismicInputs = seismicInputs,
+             selectedAnalysisCombinationName = selectedAnalysisCombination?.name,
+             includeSelfWeight = includeSelfWeight,
+             methodology = methodology,
+@@ -857,9 +886,10 @@ class BeamViewModel @Inject constructor(
+         } else {
+             loadCases
+         }
+-        val activeCombinations = combinationSet.combinations.filter {
+-            enabledCombinations.contains(it.name)
+-        }
++        seismicInputs.blockReason()?.let { throw CodeDataBlockedException(it) }
++        val activeCombinations = SeismicCombinationAdjuster
++            .adjust(combinationSet.id, combinationSet.combinations, seismicInputs).combinations
++            .filter { enabledCombinations.contains(it.name) }
+         // With no combinations the solver runs every load unfactored (its legacy path), which
+         // would look like a normal design check. Block instead.
+         if (activeCombinations.isEmpty()) {
+@@ -964,6 +994,7 @@ class BeamViewModel @Inject constructor(
+             .filter { override -> member.spans.any { it.id == override.spanId } }
+             .associate { it.spanId to it.criteria }
+         ndsAdjustmentFactors = inputs.ndsAdjustmentFactors
++        seismicInputs = inputs.seismicInputs
+ 
+         selectedMaterial = inputs.selectedMaterial
+         availableGrades = materialRepository.getMaterialsByType(selectedMaterial)
+@@ -1053,7 +1084,8 @@ class BeamViewModel @Inject constructor(
+         methodology = methodology,
+         activeBuildingCode = activeBuildingCode,
+         ndsAdjustmentFactors = ndsAdjustmentFactors,
+-        designLocationInches = designLocationInches
++        designLocationInches = designLocationInches,
++        seismicInputs = seismicInputs
+     )
+ 
+     /**
+@@ -1075,6 +1107,7 @@ class BeamViewModel @Inject constructor(
+         val methodology: DesignMethodology,
+         val activeBuildingCode: BuildingCode?,
+         val ndsAdjustmentFactors: NdsAdjustmentFactors,
+-        val designLocationInches: Double?
++        val designLocationInches: Double?,
++        val seismicInputs: SeismicCombinationInputs
+     )
+ }
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index 2af4cc2..a940a58 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -92,6 +92,7 @@ import com.lz.beam.presentation.BeamViewModel
+ import com.lz.domain.project.Project
+ import com.lz.model.regulatory.LoadCombination
+ import com.lz.model.regulatory.codes.ServiceabilityCriterion
++import com.lz.model.regulatory.loads.SeismicCombinationInputs
+ import com.lz.model.structural.BracingInput
+ import com.lz.model.structural.BracingMode
+ import com.lz.model.structural.CodeDataNotice
+@@ -993,7 +994,7 @@ fun LoadsTab(viewModel: BeamViewModel) {
+     LoadsConfiguration(
+         loadCases = viewModel.loadCases,
+         combinations = selectedCombinationSet?.combinations ?: emptyList(),
+-        selectedCombination = viewModel.selectedAnalysisCombination,
++        selectedCombination = viewModel.adjustedSelectedAnalysisCombination,
+         includeSelfWeight = viewModel.includeSelfWeight,
+         onAddLoad = viewModel::onAddLoad,
+         onRemoveLoad = viewModel::onRemoveLoad,
+@@ -1017,7 +1018,7 @@ fun AnalysisTab(viewModel: BeamViewModel) {
+             results = results,
+             member = viewModel.structuralMember,
+             unitSystem = viewModel.unitSystem,
+-            selectedCombination = viewModel.selectedAnalysisCombination
++            selectedCombination = viewModel.adjustedSelectedAnalysisCombination
+         )
+     }
+ }
+@@ -1105,7 +1106,13 @@ fun LoadCombinationsTab(viewModel: BeamViewModel) {
+             Text("Load Combinations", style = MaterialTheme.typography.titleMedium)
+             Text(set.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+ 
+-            set.combinations.forEach { combo ->
++            SeismicOptionsCard(
++                inputs = viewModel.seismicInputs,
++                onChange = viewModel::onSeismicInputsChanged,
++                notes = viewModel.combinationAssumptions
++            )
++
++            viewModel.adjustedCombinations.forEach { combo ->
+                 Row(
+                     modifier = Modifier
+                         .fillMaxWidth()
+@@ -1126,6 +1133,62 @@ fun LoadCombinationsTab(viewModel: BeamViewModel) {
+     }
+ }
+ 
++/**
++ * Optional seismic and live-load inputs for the ASCE combinations. SDS adds the vertical seismic effect
++ * Ev = 0.2 SDS D; rho multiplies the seismic load (which is then QE); the checkbox claims the 0.5L exception.
++ * Leaving them empty uses E as entered, and the notes below say so.
++ */
++@Composable
++private fun SeismicOptionsCard(
++    inputs: SeismicCombinationInputs,
++    onChange: (SeismicCombinationInputs) -> Unit,
++    notes: List<String>
++) {
++    var sds by remember { mutableStateOf(inputs.sds?.toString() ?: "") }
++    val sdsValid = sds.isBlank() || sds.toDoubleOrNull()?.let { it.isFinite() && it >= 0.0 } == true
++    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
++        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
++            Text("Seismic and live load options", style = MaterialTheme.typography.titleSmall)
++            OutlinedTextField(
++                value = sds,
++                onValueChange = {
++                    sds = it
++                    val v = it.toDoubleOrNull()
++                    if (it.isBlank()) onChange(inputs.copy(sds = null))
++                    else if (v != null && v.isFinite() && v >= 0.0) onChange(inputs.copy(sds = v))
++                },
++                label = { Text("SDS (optional)") },
++                isError = !sdsValid,
++                singleLine = true,
++                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
++                modifier = Modifier.fillMaxWidth()
++            )
++            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                Text("\u03C1", style = MaterialTheme.typography.bodyMedium)
++                FilterChip(selected = inputs.rho == null, onClick = { onChange(inputs.copy(rho = null)) }, label = { Text("Not entered") })
++                FilterChip(selected = inputs.rho == 1.0, onClick = { onChange(inputs.copy(rho = 1.0)) }, label = { Text("1.0") })
++                FilterChip(selected = inputs.rho == 1.3, onClick = { onChange(inputs.copy(rho = 1.3)) }, label = { Text("1.3") })
++            }
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                Checkbox(checked = inputs.halfLive, onCheckedChange = { onChange(inputs.copy(halfLive = it)) })
++                Text(
++                    "0.5L exception: Lo \u2264 100 psf and not a garage or place of public assembly (strength design only)",
++                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f)
++                )
++            }
++            Text(
++                "The seismic load entered is taken as QE. SDS adds Ev = 0.2 SDS D to the dead-load factor of the seismic " +
++                    "combinations; \u03C1 (1.0 or 1.3, ASCE 7 \u00a712.3.4) multiplies the seismic load. To use a total effect " +
++                    "that already includes Ev and \u03C1, leave both empty.",
++                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
++            )
++            notes.forEach {
++                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
++            }
++        }
++    }
++}
++
+ @Composable
+ fun RevisionsTab(viewModel: BeamViewModel) {
+     // To be implemented with versioning service integration

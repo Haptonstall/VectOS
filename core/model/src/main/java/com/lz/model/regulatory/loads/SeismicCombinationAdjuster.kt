@@ -3,6 +3,7 @@ package com.lz.model.regulatory.loads
 import com.lz.model.regulatory.LoadCategory
 import com.lz.model.regulatory.LoadCombination
 import com.lz.model.structural.DesignMethodology
+import kotlinx.serialization.Serializable
 import kotlin.math.abs
 
 /**
@@ -19,6 +20,7 @@ import kotlin.math.abs
  * With none of them the seismic load is used exactly as entered (Ev = 0, rho = 1.0) and L at its full factor,
  * and the notes say so.
  */
+@Serializable
 data class SeismicCombinationInputs(
     val sds: Double? = null,
     val rho: Double? = null,

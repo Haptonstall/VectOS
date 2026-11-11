@@ -16,6 +16,8 @@ import com.lz.data.repository.CodeNotFoundException
 import com.lz.data.repository.IStructuralCodeRepository
 import com.lz.domain.calculation.CalculationMetadata
 import com.lz.domain.material.MaterialRepository
+import com.lz.model.regulatory.loads.SeismicCombinationInputs
+import com.lz.model.regulatory.loads.SeismicCombinationAdjuster
 import com.lz.model.regulatory.LoadCategory
 import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.LoadCombinationSet
@@ -142,6 +144,32 @@ class BeamViewModel @Inject constructor(
     // Only meaningful for wood materials — steel/aluminum/masonry calculators
     // never read this.
     var ndsAdjustmentFactors by mutableStateOf(NdsAdjustmentFactors())
+
+    /** Optional SDS, rho and 0.5L-exception inputs for the ASCE combinations (see SeismicCombinationAdjuster). */
+    var seismicInputs by mutableStateOf(SeismicCombinationInputs())
+        private set
+
+    fun onSeismicInputsChanged(inputs: SeismicCombinationInputs) {
+        combinationNotices = emptyList()
+        seismicInputs = inputs
+    }
+
+    private fun adjustedResult(): SeismicCombinationAdjuster.Result? {
+        val set = selectedCombinationSet ?: return null
+        if (seismicInputs.blockReason() != null) return null
+        return SeismicCombinationAdjuster.adjust(set.id, set.combinations, seismicInputs)
+    }
+
+    /** The set's combinations with the seismic and 0.5L inputs applied (what is actually analysed and shown). */
+    val adjustedCombinations: List<LoadCombination>
+        get() = adjustedResult()?.combinations ?: selectedCombinationSet?.combinations ?: emptyList()
+
+    /** Every assumption and source remark that applies to the combinations (ASSUMED SDS / rho, 0.5L, edition notes). */
+    val combinationAssumptions: List<String>
+        get() = adjustedResult()?.notes ?: emptyList()
+
+    val adjustedSelectedAnalysisCombination: LoadCombination?
+        get() = selectedAnalysisCombination?.let { sel -> adjustedCombinations.firstOrNull { it.name == sel.name } ?: sel }
         private set
 
     fun onAdjustmentFactorsChanged(factors: NdsAdjustmentFactors) {
@@ -817,6 +845,7 @@ class BeamViewModel @Inject constructor(
             selectedSectionId = selectedSection?.id,
             selectedCombinationSetId = selectedCombinationSet?.id,
             enabledCombinationNames = enabledCombinations,
+            seismicInputs = seismicInputs,
             selectedAnalysisCombinationName = selectedAnalysisCombination?.name,
             includeSelfWeight = includeSelfWeight,
             methodology = methodology,
@@ -857,9 +886,10 @@ class BeamViewModel @Inject constructor(
         } else {
             loadCases
         }
-        val activeCombinations = combinationSet.combinations.filter {
-            enabledCombinations.contains(it.name)
-        }
+        seismicInputs.blockReason()?.let { throw CodeDataBlockedException(it) }
+        val activeCombinations = SeismicCombinationAdjuster
+            .adjust(combinationSet.id, combinationSet.combinations, seismicInputs).combinations
+            .filter { enabledCombinations.contains(it.name) }
         // With no combinations the solver runs every load unfactored (its legacy path), which
         // would look like a normal design check. Block instead.
         if (activeCombinations.isEmpty()) {
@@ -964,6 +994,7 @@ class BeamViewModel @Inject constructor(
             .filter { override -> member.spans.any { it.id == override.spanId } }
             .associate { it.spanId to it.criteria }
         ndsAdjustmentFactors = inputs.ndsAdjustmentFactors
+        seismicInputs = inputs.seismicInputs
 
         selectedMaterial = inputs.selectedMaterial
         availableGrades = materialRepository.getMaterialsByType(selectedMaterial)
@@ -1053,7 +1084,8 @@ class BeamViewModel @Inject constructor(
         methodology = methodology,
         activeBuildingCode = activeBuildingCode,
         ndsAdjustmentFactors = ndsAdjustmentFactors,
-        designLocationInches = designLocationInches
+        designLocationInches = designLocationInches,
+        seismicInputs = seismicInputs
     )
 
     /**
@@ -1075,6 +1107,7 @@ class BeamViewModel @Inject constructor(
         val methodology: DesignMethodology,
         val activeBuildingCode: BuildingCode?,
         val ndsAdjustmentFactors: NdsAdjustmentFactors,
-        val designLocationInches: Double?
+        val designLocationInches: Double?,
+        val seismicInputs: SeismicCombinationInputs
     )
 }

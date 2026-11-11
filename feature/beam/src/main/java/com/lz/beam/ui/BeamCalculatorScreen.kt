@@ -92,6 +92,7 @@ import com.lz.beam.presentation.BeamViewModel
 import com.lz.domain.project.Project
 import com.lz.model.regulatory.LoadCombination
 import com.lz.model.regulatory.codes.ServiceabilityCriterion
+import com.lz.model.regulatory.loads.SeismicCombinationInputs
 import com.lz.model.structural.BracingInput
 import com.lz.model.structural.BracingMode
 import com.lz.model.structural.CodeDataNotice
@@ -993,7 +994,7 @@ fun LoadsTab(viewModel: BeamViewModel) {
     LoadsConfiguration(
         loadCases = viewModel.loadCases,
         combinations = selectedCombinationSet?.combinations ?: emptyList(),
-        selectedCombination = viewModel.selectedAnalysisCombination,
+        selectedCombination = viewModel.adjustedSelectedAnalysisCombination,
         includeSelfWeight = viewModel.includeSelfWeight,
         onAddLoad = viewModel::onAddLoad,
         onRemoveLoad = viewModel::onRemoveLoad,
@@ -1017,7 +1018,7 @@ fun AnalysisTab(viewModel: BeamViewModel) {
             results = results,
             member = viewModel.structuralMember,
             unitSystem = viewModel.unitSystem,
-            selectedCombination = viewModel.selectedAnalysisCombination
+            selectedCombination = viewModel.adjustedSelectedAnalysisCombination
         )
     }
 }
@@ -1105,7 +1106,13 @@ fun LoadCombinationsTab(viewModel: BeamViewModel) {
             Text("Load Combinations", style = MaterialTheme.typography.titleMedium)
             Text(set.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-            set.combinations.forEach { combo ->
+            SeismicOptionsCard(
+                inputs = viewModel.seismicInputs,
+                onChange = viewModel::onSeismicInputsChanged,
+                notes = viewModel.combinationAssumptions
+            )
+
+            viewModel.adjustedCombinations.forEach { combo ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1121,6 +1128,62 @@ fun LoadCombinationsTab(viewModel: BeamViewModel) {
                         Text(combo.equationText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Optional seismic and live-load inputs for the ASCE combinations. SDS adds the vertical seismic effect
+ * Ev = 0.2 SDS D; rho multiplies the seismic load (which is then QE); the checkbox claims the 0.5L exception.
+ * Leaving them empty uses E as entered, and the notes below say so.
+ */
+@Composable
+private fun SeismicOptionsCard(
+    inputs: SeismicCombinationInputs,
+    onChange: (SeismicCombinationInputs) -> Unit,
+    notes: List<String>
+) {
+    var sds by remember { mutableStateOf(inputs.sds?.toString() ?: "") }
+    val sdsValid = sds.isBlank() || sds.toDoubleOrNull()?.let { it.isFinite() && it >= 0.0 } == true
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Seismic and live load options", style = MaterialTheme.typography.titleSmall)
+            OutlinedTextField(
+                value = sds,
+                onValueChange = {
+                    sds = it
+                    val v = it.toDoubleOrNull()
+                    if (it.isBlank()) onChange(inputs.copy(sds = null))
+                    else if (v != null && v.isFinite() && v >= 0.0) onChange(inputs.copy(sds = v))
+                },
+                label = { Text("SDS (optional)") },
+                isError = !sdsValid,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("\u03C1", style = MaterialTheme.typography.bodyMedium)
+                FilterChip(selected = inputs.rho == null, onClick = { onChange(inputs.copy(rho = null)) }, label = { Text("Not entered") })
+                FilterChip(selected = inputs.rho == 1.0, onClick = { onChange(inputs.copy(rho = 1.0)) }, label = { Text("1.0") })
+                FilterChip(selected = inputs.rho == 1.3, onClick = { onChange(inputs.copy(rho = 1.3)) }, label = { Text("1.3") })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = inputs.halfLive, onCheckedChange = { onChange(inputs.copy(halfLive = it)) })
+                Text(
+                    "0.5L exception: Lo \u2264 100 psf and not a garage or place of public assembly (strength design only)",
+                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f)
+                )
+            }
+            Text(
+                "The seismic load entered is taken as QE. SDS adds Ev = 0.2 SDS D to the dead-load factor of the seismic " +
+                    "combinations; \u03C1 (1.0 or 1.3, ASCE 7 \u00a712.3.4) multiplies the seismic load. To use a total effect " +
+                    "that already includes Ev and \u03C1, leave both empty.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            notes.forEach {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
