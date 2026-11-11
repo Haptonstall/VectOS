@@ -144,6 +144,7 @@ class BeamViewModel @Inject constructor(
     // Only meaningful for wood materials — steel/aluminum/masonry calculators
     // never read this.
     var ndsAdjustmentFactors by mutableStateOf(NdsAdjustmentFactors())
+        private set
 
     /** Optional SDS, rho and 0.5L-exception inputs for the ASCE combinations (see SeismicCombinationAdjuster). */
     var seismicInputs by mutableStateOf(SeismicCombinationInputs())
@@ -170,7 +171,6 @@ class BeamViewModel @Inject constructor(
 
     val adjustedSelectedAnalysisCombination: LoadCombination?
         get() = selectedAnalysisCombination?.let { sel -> adjustedCombinations.firstOrNull { it.name == sel.name } ?: sel }
-        private set
 
     fun onAdjustmentFactorsChanged(factors: NdsAdjustmentFactors) {
         ndsAdjustmentFactors = factors
