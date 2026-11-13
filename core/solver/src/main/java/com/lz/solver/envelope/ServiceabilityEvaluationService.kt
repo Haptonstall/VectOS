@@ -3,6 +3,7 @@ package com.lz.solver.envelope
 import com.lz.model.regulatory.LoadCategory
 import com.lz.model.regulatory.codes.BuildingCode
 import com.lz.model.regulatory.codes.ServiceabilityCriterion
+import com.lz.model.regulatory.loads.ServiceabilityCombinations
 import com.lz.model.structural.ServiceabilityResult
 import com.lz.model.structural.StationDemand
 import com.lz.model.structural.StructuralMember
@@ -35,7 +36,9 @@ object ServiceabilityEvaluationService {
         member: StructuralMember,
         analysisResult: AnalysisResult,
         buildingCode: BuildingCode,
-        spanOverrides: Map<UUID, List<ServiceabilityCriterion>> = emptyMap()
+        spanOverrides: Map<UUID, List<ServiceabilityCriterion>> = emptyMap(),
+        /** Unfactored service combinations for the "Total Load" check (see [ServiceabilityCombinations]). */
+        serviceCombinations: ServiceabilityCombinations.Result = ServiceabilityCombinations.forCombinationSet(null)
     ): List<ServiceabilityResult> {
         val nodesById = member.nodes.associateBy { it.id }
 
@@ -59,13 +62,15 @@ object ServiceabilityEvaluationService {
             val spanLengthInches = span.length.inches * if (isCantilever) 2.0 else 1.0
 
             criteria.map { criterion ->
-                val governingStationResult = if (criterion.loadCategory == null) {
-                    findMaxDeflectionForGoverningCombination(analysisResult, span.id)
+                var basis: String? = null
+                val actualDeflection: Length
+                if (criterion.loadCategory == null) {
+                    val total = findMaxServiceDeflection(analysisResult, span.id, serviceCombinations)
+                    actualDeflection = total.deflection
+                    basis = total.basis
                 } else {
-                    findMaxDeflectionForCategory(analysisResult, criterion.loadCategory!!, span.id)
+                    actualDeflection = findMaxDeflectionForCategory(analysisResult, criterion.loadCategory!!, span.id).deflection
                 }
-
-                val actualDeflection = governingStationResult.deflection
                 val allowableDeflectionInches = if (criterion.spanDenominator > 0) spanLengthInches / criterion.spanDenominator else 0.0
 
                 ServiceabilityResult(
@@ -73,10 +78,48 @@ object ServiceabilityEvaluationService {
                     allowableDeflection = Length(allowableDeflectionInches),
                     utilization = if (allowableDeflectionInches > 0) abs(actualDeflection.inInches) / allowableDeflectionInches else 0.0,
                     criterion = criterion,
-                    spanId = span.id
+                    spanId = span.id,
+                    basis = basis
                 )
             }
         }
+    }
+
+    private data class ServiceTotal(val deflection: Length, val basis: String)
+
+    /**
+     * "Total Load" deflection: the worst deflection over the unfactored service combinations, built by superposing the
+     * unfactored per-category results station by station (the analysis is linear). Falls back to the governing
+     * strength combination only when no category results exist, and says so.
+     */
+    private fun findMaxServiceDeflection(
+        result: AnalysisResult,
+        spanId: UUID,
+        service: ServiceabilityCombinations.Result
+    ): ServiceTotal {
+        val byCategory: Map<LoadCategory, List<StationDemand>> = result.categoryResults.mapNotNull { (name, r) ->
+            val cat = LoadCategory.values().firstOrNull { it.name == name } ?: return@mapNotNull null
+            cat to r.spanResults.flatMap { it.stationDemands }.filter { it.spanId == spanId }
+        }.toMap()
+        if (byCategory.isEmpty()) {
+            val fallback = findMaxDeflectionForGoverningCombination(result, spanId)
+            return ServiceTotal(
+                fallback.deflection,
+                "ASSUMED: no unfactored category results were available, so the deflection under the governing " +
+                    "strength combination is shown instead of a service combination."
+            )
+        }
+        val stationCount = byCategory.values.maxOf { it.size }
+        var best = 0.0
+        var bestName = service.combinations.firstOrNull()?.name ?: "none"
+        for (c in service.combinations) {
+            for (i in 0 until stationCount) {
+                var d = 0.0
+                for ((cat, factor) in c.factors) d += factor * (byCategory[cat]?.getOrNull(i)?.deflection?.inInches ?: 0.0)
+                if (abs(d) > abs(best)) { best = d; bestName = c.name }
+            }
+        }
+        return ServiceTotal(best.inches, "Governing service combination: $bestName. ${service.basis}")
     }
 
     private fun findMaxDeflectionForGoverningCombination(

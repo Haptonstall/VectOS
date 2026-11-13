@@ -16,6 +16,7 @@ import com.lz.data.repository.CodeNotFoundException
 import com.lz.data.repository.IStructuralCodeRepository
 import com.lz.domain.calculation.CalculationMetadata
 import com.lz.domain.material.MaterialRepository
+import com.lz.model.regulatory.loads.ServiceabilityCombinations
 import com.lz.model.regulatory.loads.SeismicCombinationInputs
 import com.lz.model.regulatory.loads.SeismicCombinationAdjuster
 import com.lz.model.regulatory.LoadCategory
@@ -952,7 +953,8 @@ class BeamViewModel @Inject constructor(
             member = memberSnapshot,
             analysisResult = analysisResult,
             buildingCode = code,
-            spanOverrides = spanDeflectionOverrides
+            spanOverrides = spanDeflectionOverrides,
+            serviceCombinations = ServiceabilityCombinations.forCombinationSet(combinationSet.id)
         )
 
         val results = BeamCalculationResults(

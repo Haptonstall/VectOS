@@ -1,0 +1,344 @@
+diff --git a/core/model/src/main/java/com/lz/model/regulatory/loads/ServiceabilityCombinations.kt b/core/model/src/main/java/com/lz/model/regulatory/loads/ServiceabilityCombinations.kt
+new file mode 100644
+index 0000000..91405e9
+--- /dev/null
++++ b/core/model/src/main/java/com/lz/model/regulatory/loads/ServiceabilityCombinations.kt
+@@ -0,0 +1,48 @@
++package com.lz.model.regulatory.loads
++
++import com.lz.model.regulatory.LoadCategory
++import com.lz.model.structural.DesignMethodology
++
++/** An unfactored (service-level) load combination used for deflection: factors on the load categories. */
++data class ServiceCombination(val name: String, val factors: Map<LoadCategory, Double>)
++
++/**
++ * The service combinations behind the "Total Load" deflection check.
++ *
++ * Deflection is a service-level response, so it is evaluated under unfactored combinations, not under the
++ * factored strength combination that governs the member's strength. For an ASCE 7 combination set the service
++ * combinations are the allowable-stress gravity combinations of the same edition (no wind or seismic): ASCE 7-10
++ * and 7-16 §2.4.1 Eq. 1 to 4 (D; D + L; D + (Lr or S or R); D + 0.75L + 0.75(Lr or S or R)) and ASCE 7-22
++ * §2.4.1 Eq. 1a to 4a, where snow is 0.7S. Wind has its own single-category check and is not included here.
++ * Without a recognised ASCE set, D alone and D plus each of L, Lr, S and R at 1.0 are used, and the basis says so.
++ *
++ * Creep (NDS 3.5.2 / the IBC Table 1604.3 long-term footnote) is not applied: these are immediate deflections.
++ */
++object ServiceabilityCombinations {
++
++    data class Result(val combinations: List<ServiceCombination>, val basis: String)
++
++    private val genericCategories = listOf(LoadCategory.LIVE, LoadCategory.ROOF_LIVE, LoadCategory.SNOW, LoadCategory.RAIN)
++
++    fun forCombinationSet(setId: String?): Result {
++        for (e in AsceEdition.values()) {
++            if (setId == null) break
++            val matches = DesignMethodology.values().any { setId == AsceLoadCombinationCatalog.setId(e, it) }
++            if (!matches) continue
++            val asd = AsceLoadCombinationCatalog.combinations(e, DesignMethodology.ASD)
++                .filter { LoadCategory.WIND !in it.factors && LoadCategory.SEISMIC !in it.factors }
++            return Result(
++                asd.map { ServiceCombination(it.name, it.factors) },
++                "Unfactored service combinations of ${e.sourceName} (${e.asdSection} gravity combinations, no wind or " +
++                    "seismic); creep not applied (immediate deflection)."
++            )
++        }
++        val generic = listOf(ServiceCombination("D", mapOf(LoadCategory.DEAD to 1.0))) +
++            genericCategories.map { ServiceCombination("D + ${it.shortLabel}", mapOf(LoadCategory.DEAD to 1.0, it to 1.0)) }
++        return Result(
++            generic,
++            "ASSUMED: no ASCE 7 combination set recognised, so D alone and D plus each of L, Lr, S and R at 1.0 are " +
++                "used as the unfactored service combinations; creep not applied (immediate deflection)."
++        )
++    }
++}
+diff --git a/core/model/src/main/java/com/lz/model/structural/ServiceabilityModels.kt b/core/model/src/main/java/com/lz/model/structural/ServiceabilityModels.kt
+index d37b093..47d9a63 100644
+--- a/core/model/src/main/java/com/lz/model/structural/ServiceabilityModels.kt
++++ b/core/model/src/main/java/com/lz/model/structural/ServiceabilityModels.kt
+@@ -20,5 +20,10 @@ data class ServiceabilityResult(
+     val utilization: Double,
+     val criterion: ServiceabilityCriterion,
+     @Serializable(with = UUIDSerializer::class)
+-    val spanId: UUID? = null
++    val spanId: UUID? = null,
++    /**
++     * What produced the deflection when it is a combined ("Total Load") check: the governing unfactored service
++     * combination and every assumption behind it. Null for single-category checks.
++     */
++    val basis: String? = null
+ )
+\ No newline at end of file
+diff --git a/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt b/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
+index a8d8c11..690b32c 100644
+--- a/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
++++ b/core/solver/src/main/java/com/lz/solver/envelope/ServiceabilityEvaluationService.kt
+@@ -3,6 +3,7 @@ package com.lz.solver.envelope
+ import com.lz.model.regulatory.LoadCategory
+ import com.lz.model.regulatory.codes.BuildingCode
+ import com.lz.model.regulatory.codes.ServiceabilityCriterion
++import com.lz.model.regulatory.loads.ServiceabilityCombinations
+ import com.lz.model.structural.ServiceabilityResult
+ import com.lz.model.structural.StationDemand
+ import com.lz.model.structural.StructuralMember
+@@ -35,7 +36,9 @@ object ServiceabilityEvaluationService {
+         member: StructuralMember,
+         analysisResult: AnalysisResult,
+         buildingCode: BuildingCode,
+-        spanOverrides: Map<UUID, List<ServiceabilityCriterion>> = emptyMap()
++        spanOverrides: Map<UUID, List<ServiceabilityCriterion>> = emptyMap(),
++        /** Unfactored service combinations for the "Total Load" check (see [ServiceabilityCombinations]). */
++        serviceCombinations: ServiceabilityCombinations.Result = ServiceabilityCombinations.forCombinationSet(null)
+     ): List<ServiceabilityResult> {
+         val nodesById = member.nodes.associateBy { it.id }
+ 
+@@ -59,13 +62,15 @@ object ServiceabilityEvaluationService {
+             val spanLengthInches = span.length.inches * if (isCantilever) 2.0 else 1.0
+ 
+             criteria.map { criterion ->
+-                val governingStationResult = if (criterion.loadCategory == null) {
+-                    findMaxDeflectionForGoverningCombination(analysisResult, span.id)
++                var basis: String? = null
++                val actualDeflection: Length
++                if (criterion.loadCategory == null) {
++                    val total = findMaxServiceDeflection(analysisResult, span.id, serviceCombinations)
++                    actualDeflection = total.deflection
++                    basis = total.basis
+                 } else {
+-                    findMaxDeflectionForCategory(analysisResult, criterion.loadCategory!!, span.id)
++                    actualDeflection = findMaxDeflectionForCategory(analysisResult, criterion.loadCategory!!, span.id).deflection
+                 }
+-
+-                val actualDeflection = governingStationResult.deflection
+                 val allowableDeflectionInches = if (criterion.spanDenominator > 0) spanLengthInches / criterion.spanDenominator else 0.0
+ 
+                 ServiceabilityResult(
+@@ -73,12 +78,50 @@ object ServiceabilityEvaluationService {
+                     allowableDeflection = Length(allowableDeflectionInches),
+                     utilization = if (allowableDeflectionInches > 0) abs(actualDeflection.inInches) / allowableDeflectionInches else 0.0,
+                     criterion = criterion,
+-                    spanId = span.id
++                    spanId = span.id,
++                    basis = basis
+                 )
+             }
+         }
+     }
+ 
++    private data class ServiceTotal(val deflection: Length, val basis: String)
++
++    /**
++     * "Total Load" deflection: the worst deflection over the unfactored service combinations, built by superposing the
++     * unfactored per-category results station by station (the analysis is linear). Falls back to the governing
++     * strength combination only when no category results exist, and says so.
++     */
++    private fun findMaxServiceDeflection(
++        result: AnalysisResult,
++        spanId: UUID,
++        service: ServiceabilityCombinations.Result
++    ): ServiceTotal {
++        val byCategory: Map<LoadCategory, List<StationDemand>> = result.categoryResults.mapNotNull { (name, r) ->
++            val cat = LoadCategory.values().firstOrNull { it.name == name } ?: return@mapNotNull null
++            cat to r.spanResults.flatMap { it.stationDemands }.filter { it.spanId == spanId }
++        }.toMap()
++        if (byCategory.isEmpty()) {
++            val fallback = findMaxDeflectionForGoverningCombination(result, spanId)
++            return ServiceTotal(
++                fallback.deflection,
++                "ASSUMED: no unfactored category results were available, so the deflection under the governing " +
++                    "strength combination is shown instead of a service combination."
++            )
++        }
++        val stationCount = byCategory.values.maxOf { it.size }
++        var best = 0.0
++        var bestName = service.combinations.firstOrNull()?.name ?: "none"
++        for (c in service.combinations) {
++            for (i in 0 until stationCount) {
++                var d = 0.0
++                for ((cat, factor) in c.factors) d += factor * (byCategory[cat]?.getOrNull(i)?.deflection?.inInches ?: 0.0)
++                if (abs(d) > abs(best)) { best = d; bestName = c.name }
++            }
++        }
++        return ServiceTotal(best.inches, "Governing service combination: $bestName. ${service.basis}")
++    }
++
+     private fun findMaxDeflectionForGoverningCombination(
+         result: AnalysisResult,
+         spanId: UUID
+diff --git a/core/solver/src/test/java/com/lz/solver/envelope/ServiceabilityTotalLoadTest.kt b/core/solver/src/test/java/com/lz/solver/envelope/ServiceabilityTotalLoadTest.kt
+new file mode 100644
+index 0000000..f558bdb
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/envelope/ServiceabilityTotalLoadTest.kt
+@@ -0,0 +1,135 @@
++package com.lz.solver.envelope
++
++import com.lz.model.regulatory.LoadCategory
++import com.lz.model.regulatory.codes.BuildingCode
++import com.lz.model.regulatory.codes.ServiceabilityCriterion
++import com.lz.model.regulatory.codes.ServiceabilityLimitType
++import com.lz.model.regulatory.loads.AsceEdition
++import com.lz.model.regulatory.loads.AsceLoadCombinationCatalog
++import com.lz.model.regulatory.loads.ServiceabilityCombinations
++import com.lz.model.structural.DesignMethodology
++import com.lz.model.structural.Load
++import com.lz.model.structural.LoadCase
++import com.lz.model.structural.NodeBoundaryCondition
++import com.lz.model.structural.SpanGeometry
++import com.lz.model.structural.StructuralMember
++import com.lz.model.structural.StructuralNode
++import com.lz.model.regulatory.LoadCombination
++import com.lz.model.regulatory.loads.CombinationType
++import com.lz.model.units.Area
++import com.lz.model.units.ElasticModulus
++import com.lz.model.units.ForcePerLength
++import com.lz.model.units.MomentOfInertia
++import com.lz.model.units.inInches
++import com.lz.model.units.inches
++import com.lz.solver.analysis.AnalysisConfig
++import com.lz.solver.analysis.MemberAnalysisSolver
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.util.UUID
++
++/**
++ * "Total Load" deflection uses the unfactored service combinations (not the factored strength combination).
++ * Simple span L = 100 in, E = 1,000,000 psi, I = 100 in^4, uniform loads in lb/in: delta = 5 w L^4 / (384 E I)
++ * = 0.0130208333 in per lb/in. Hand calcs: D = 10 -> 0.130208333; L = 20 -> 0.260416667; S = 15 -> 0.1953125.
++ *   D + L                = 0.390625
++ *   D + 0.75L (+ 0.75S)  = smaller than D + L
++ *   strength 1.2D + 1.6L = 0.572916667 (what the old check reported)
++ *   snow only: 7-16 D + S = 0.325520833; 7-22 D + 0.7S = 0.130208333 + 0.13671875 = 0.266927083
++ */
++class ServiceabilityTotalLoadTest {
++
++    private val perLbIn = 5.0 * 1e8 / (384.0 * 1_000_000.0 * 100.0)   // 0.0130208333
++
++    private fun member(): StructuralMember {
++        val nodes = listOf(NodeBoundaryCondition.pinned(), NodeBoundaryCondition.roller())
++            .map { StructuralNode(id = UUID.randomUUID(), boundaryCondition = it) }
++        val span = SpanGeometry(id = UUID.randomUUID(), length = 100.0.inches, startNodeId = nodes[0].id, endNodeId = nodes[1].id)
++        return StructuralMember(nodes = nodes, spans = listOf(span))
++    }
++
++    private fun solve(m: StructuralMember, loads: Map<LoadCategory, Double>): com.lz.solver.analysis.AnalysisResult {
++        val cases = loads.map { (cat, w) ->
++            LoadCase(cat.name, cat.label, listOf<Load>(
++                Load.UniformDistributedLoad(ForcePerLength(w), m.spans[0].id, 0.0.inches, 100.0.inches, category = cat)))
++        }
++        // one strength combination so the analysis has combination results and category results
++        val strength = LoadCombination(
++            id = "s", name = "1.2D + 1.6L", methodology = DesignMethodology.LRFD, type = CombinationType.STRENGTH,
++            equationText = "", factors = mapOf(LoadCategory.DEAD to 1.2, LoadCategory.LIVE to 1.6), codeReference = "test"
++        )
++        return MemberAnalysisSolver.solve(
++            AnalysisConfig(
++                member = m, loadCases = cases, combinations = listOf(strength),
++                modulusOfElasticity = ElasticModulus(1_000_000.0), momentOfInertiaX = MomentOfInertia(100.0),
++                crossSectionalArea = Area(10.0)
++            )
++        )
++    }
++
++    private val total = ServiceabilityCriterion(
++        limitType = ServiceabilityLimitType.TOTAL_LOAD_DEFLECTION, name = "Total", loadCategory = null,
++        spanDenominator = 240.0, description = "Total load"
++    )
++    private val live = ServiceabilityCriterion(
++        limitType = ServiceabilityLimitType.LIVE_LOAD_DEFLECTION, name = "Live", loadCategory = LoadCategory.LIVE,
++        spanDenominator = 360.0, description = "Live load"
++    )
++    private val code = BuildingCode(id = "t", shortName = "t", longName = "t", serviceabilityCriteria = listOf(total, live))
++
++    private fun evaluate(m: StructuralMember, r: com.lz.solver.analysis.AnalysisResult, setId: String?) =
++        ServiceabilityEvaluationService.evaluate(m, r, code, serviceCombinations = ServiceabilityCombinations.forCombinationSet(setId))
++
++    private fun near(expected: Double, actual: Double, what: String) = assertEquals(what, expected, actual, 1e-6)
++
++    @Test
++    fun `total deflection is D plus L unfactored, not the factored strength combination`() {
++        val m = member()
++        val r = solve(m, mapOf(LoadCategory.DEAD to 10.0, LoadCategory.LIVE to 20.0))
++        val res = evaluate(m, r, AsceLoadCombinationCatalog.setId(AsceEdition.ASCE_7_16, DesignMethodology.LRFD))
++        val t = res.first { it.criterion.name == "Total" }
++        near(0.390625, Math.abs(t.actualDeflection.inInches), "D + L")
++        assertTrue(Math.abs(t.actualDeflection.inInches) < 0.572916667 - 0.1)
++        assertTrue(t.basis!!, t.basis!!.contains("Governing service combination: D + L") && t.basis!!.contains("ASCE 7-16"))
++        assertTrue(t.basis!!, t.basis!!.contains("creep not applied"))
++        // the live-only check stays the unfactored live deflection and carries no basis
++        val l = res.first { it.criterion.name == "Live" }
++        near(0.260416667, Math.abs(l.actualDeflection.inInches), "L alone")
++        assertNull(l.basis)
++    }
++
++    @Test
++    fun `the service combinations follow the edition - snow is 1_0S in 7-16 and 0_7S in 7-22`() {
++        val m = member()
++        val r = solve(m, mapOf(LoadCategory.DEAD to 10.0, LoadCategory.SNOW to 15.0))
++        near(0.325520833, Math.abs(evaluate(m, r, "ASCE_7_16_ASD").first { it.criterion.name == "Total" }.actualDeflection.inInches), "7-16 D + S")
++        val t22 = evaluate(m, r, "ASCE_7_22_LRFD").first { it.criterion.name == "Total" }
++        near(0.266927083, Math.abs(t22.actualDeflection.inInches), "7-22 D + 0.7S")
++        assertTrue(t22.basis!!, t22.basis!!.contains("D + 0.7S"))
++    }
++
++    @Test
++    fun `the 0_75 combination governs when it is larger and wind or seismic are never in the total`() {
++        val m = member()
++        // L and S together: D + 0.75L + 0.75S = 0.130208 + 0.75 x 0.260417 + 0.75 x 0.1953125 = 0.471680; D + L = 0.390625
++        val r = solve(m, mapOf(LoadCategory.DEAD to 10.0, LoadCategory.LIVE to 20.0, LoadCategory.SNOW to 15.0, LoadCategory.WIND to 100.0))
++        val t = evaluate(m, r, "ASCE_7_16_LRFD").first { it.criterion.name == "Total" }
++        near(0.130208333 + 0.75 * 0.260416667 + 0.75 * 0.1953125, Math.abs(t.actualDeflection.inInches), "D + 0.75L + 0.75S")
++        assertTrue(t.basis!!, t.basis!!.contains("D + 0.75L + 0.75S"))
++        val combos = ServiceabilityCombinations.forCombinationSet("ASCE_7_16_LRFD").combinations
++        assertEquals(8, combos.size)
++        assertTrue(combos.none { LoadCategory.WIND in it.factors || LoadCategory.SEISMIC in it.factors })
++    }
++
++    @Test
++    fun `without a recognised ASCE set a generic unfactored list is used and flagged`() {
++        val g = ServiceabilityCombinations.forCombinationSet("SOME_OTHER_SET")
++        assertEquals(listOf("D", "D + LL", "D + RLL", "D + S", "D + R").size, g.combinations.size)
++        assertTrue(g.basis, g.basis.startsWith("ASSUMED"))
++        val m = member()
++        val r = solve(m, mapOf(LoadCategory.DEAD to 10.0, LoadCategory.LIVE to 20.0))
++        near(0.390625, Math.abs(evaluate(m, r, null).first { it.criterion.name == "Total" }.actualDeflection.inInches), "generic D + L")
++    }
++}
+diff --git a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+index d9fe4bd..3c46332 100644
+--- a/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
++++ b/feature/beam/src/main/java/com/lz/beam/presentation/BeamViewModel.kt
+@@ -16,6 +16,7 @@ import com.lz.data.repository.CodeNotFoundException
+ import com.lz.data.repository.IStructuralCodeRepository
+ import com.lz.domain.calculation.CalculationMetadata
+ import com.lz.domain.material.MaterialRepository
++import com.lz.model.regulatory.loads.ServiceabilityCombinations
+ import com.lz.model.regulatory.loads.SeismicCombinationInputs
+ import com.lz.model.regulatory.loads.SeismicCombinationAdjuster
+ import com.lz.model.regulatory.LoadCategory
+@@ -952,7 +953,8 @@ class BeamViewModel @Inject constructor(
+             member = memberSnapshot,
+             analysisResult = analysisResult,
+             buildingCode = code,
+-            spanOverrides = spanDeflectionOverrides
++            spanOverrides = spanDeflectionOverrides,
++            serviceCombinations = ServiceabilityCombinations.forCombinationSet(combinationSet.id)
+         )
+ 
+         val results = BeamCalculationResults(
+diff --git a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+index a940a58..3112eeb 100644
+--- a/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
++++ b/feature/beam/src/main/java/com/lz/beam/ui/BeamCalculatorScreen.kt
+@@ -2074,6 +2074,9 @@ fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem, spa
+             }
+ 
+             Text(result.criterion.description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 2.dp))
++            result.basis?.let {
++                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 2.dp))
++            }
+         }
+     }
+ }

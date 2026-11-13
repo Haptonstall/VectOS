@@ -2074,6 +2074,9 @@ fun ServiceabilityCard(result: ServiceabilityResult, unitSystem: UnitSystem, spa
             }
 
             Text(result.criterion.description, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 2.dp))
+            result.basis?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(top = 2.dp))
+            }
         }
     }
 }

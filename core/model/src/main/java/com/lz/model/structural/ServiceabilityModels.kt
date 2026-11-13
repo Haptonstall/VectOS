@@ -20,5 +20,10 @@ data class ServiceabilityResult(
     val utilization: Double,
     val criterion: ServiceabilityCriterion,
     @Serializable(with = UUIDSerializer::class)
-    val spanId: UUID? = null
+    val spanId: UUID? = null,
+    /**
+     * What produced the deflection when it is a combined ("Total Load") check: the governing unfactored service
+     * combination and every assumption behind it. Null for single-category checks.
+     */
+    val basis: String? = null
 )
