@@ -1,0 +1,423 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/material/Nds2024Table4D.kt b/core/solver/src/main/java/com/lz/solver/material/Nds2024Table4D.kt
+new file mode 100644
+index 0000000..ba786fa
+--- /dev/null
++++ b/core/solver/src/main/java/com/lz/solver/material/Nds2024Table4D.kt
+@@ -0,0 +1,323 @@
++package com.lz.solver.material
++
++/**
++ * NDS 2024 Supplement, Table 4D: Reference Design Values for Visually Graded Timbers (5" x 5" and larger).
++ * Values are in psi, exactly as printed, for normal load duration; dry service unless [Row.wetServiceValues] (see
++ * below). Checked by two independent extractions of the PDF (a coordinate-based parse and a text-layout parse) that
++ * agree on all 250 rows: species, grade name and all seven values. Size classification, specific gravity and agency
++ * come from the merged cells of the printed table and were attributed by matching each label to the rows it spans
++ * (each attribution was uniquely determined).
++ *
++ * Column order is as printed: Fb, Ft, Fv, Fc-perp, Fc, E, Emin. Species names and grade names are kept as printed,
++ * including the printed inconsistencies ("No.1" in most species but "No. 1" in Douglas Fir-Larch, Redwood and Southern
++ * Pine). Agency attribution:
++ *  - Douglas Fir-Larch is printed as two separate row sets, one for PLIB (5 grades per size class) and one for WWPA
++ *    (6 grades per size class, with Dense and non-Dense No. 2), so rows are looked up by agency as well.
++ *  - Sitka Spruce is printed as two separate row sets (PLIB, WWPA) that differ in the No. 2 E and Emin.
++ *  - Where one printed block lists several agencies (for example Hem-Fir "PLIB / WWPA"), the rows carry all of them.
++ *
++ * "Mixed Southern Pine" and "Southern Pine" carry the printed note "(Wet Service Conditons)" [sic]: their tabulated
++ * values are for wet service already, and the Table 4D adjustment page says to use them without further wet service
++ * adjustment ([Row.wetServiceValues] = true). Southern Pine also lists three extra grades printed as "Dense Select
++ * Structural 86", "... 72" and "... 65".
++ *
++ * Footnote 3: when species are combined, use the lowest value of each property (a design rule, not data).
++ * Footnote 2 (Spruce Pine from Mixed Southern Pine) gives only [sprucePineConversion]; no Spruce Pine rows are
++ * generated here, and the printed rounding text for E and Emin is garbled in the source ("E; ... E"), so the
++ * rounding rules are not encoded.
++ *
++ * The Table 4D Adjustment Factors page (size factor CF, flat use Cfu for Beams and Stringers, wet service CM) is NOT
++ * part of this data and is applied by the design code.
++ *
++ * This is source data only: NDS 2024 stays blocked for design (see [NdsCodeData]) until the design-value lookup,
++ * the 2024 adjustment-factor pages and the species mapping are connected and verified.
++ */
++object Nds2024Table4D {
++
++    data class Row(
++        val species: String,
++        val grade: String,
++        /** "Beams and Stringers", "Posts and Timbers" or "5"x5" and Larger" (spacing as printed). */
++        val sizeClassification: String,
++        val fb: Int,
++        val ft: Int,
++        val fv: Int,
++        val fcPerp: Int,
++        val fc: Int,
++        val e: Int,
++        val eMin: Int,
++        val specificGravity: Double,
++        val gradingRulesAgencies: List<String>,
++        /** True for the species printed with "(Wet Service Conditons)": values are already wet service values. */
++        val wetServiceValues: Boolean
++    )
++
++    /** Footnote 2 conversion factors (Mixed Southern Pine to Spruce Pine). E and Emin share one factor. */
++    data class SprucePineConversion(
++        val fb: Double, val ft: Double, val fv: Double, val fcPerp: Double, val fc: Double, val eAndEMin: Double
++    )
++
++    val sprucePineConversion = SprucePineConversion(fb = 0.78, ft = 0.78, fv = 0.98, fcPerp = 0.73, fc = 0.78, eAndEMin = 0.82)
++
++    val rows: List<Row> = listOf(
++        Row("ALASKA CEDAR", "Select Structural", "Beams and Stringers", 1400, 675, 155, 525, 925, 1200000, 440000, 0.47, listOf("PLIB"), false),
++        Row("ALASKA CEDAR", "No.1", "Beams and Stringers", 1150, 475, 155, 525, 775, 1200000, 440000, 0.47, listOf("PLIB"), false),
++        Row("ALASKA CEDAR", "No.2", "Beams and Stringers", 750, 300, 155, 525, 500, 1000000, 370000, 0.47, listOf("PLIB"), false),
++        Row("ALASKA CEDAR", "Select Structural", "Posts and Timbers", 1300, 700, 155, 525, 975, 1200000, 440000, 0.47, listOf("PLIB"), false),
++        Row("ALASKA CEDAR", "No.1", "Posts and Timbers", 1050, 575, 155, 525, 850, 1200000, 440000, 0.47, listOf("PLIB"), false),
++        Row("ALASKA CEDAR", "No.2", "Posts and Timbers", 625, 350, 155, 525, 600, 1000000, 370000, 0.47, listOf("PLIB"), false),
++        Row("BALDCYPRESS", "Select Structural", "5\"x5\" and Larger", 1150, 750, 200, 615, 1050, 1300000, 470000, 0.43, listOf("SPIB"), false),
++        Row("BALDCYPRESS", "No.1", "5\"x5\" and Larger", 1000, 675, 200, 615, 925, 1300000, 470000, 0.43, listOf("SPIB"), false),
++        Row("BALDCYPRESS", "No.2", "5\"x5\" and Larger", 625, 425, 175, 615, 600, 1000000, 370000, 0.43, listOf("SPIB"), false),
++        Row("BALSAM FIR", "Select Structural", "Beams and Stringers", 1350, 900, 125, 305, 950, 1400000, 510000, 0.36, listOf("NELMA"), false),
++        Row("BALSAM FIR", "No.1", "Beams and Stringers", 1100, 750, 125, 305, 800, 1400000, 510000, 0.36, listOf("NELMA"), false),
++        Row("BALSAM FIR", "No.2", "Beams and Stringers", 725, 350, 125, 305, 500, 1100000, 400000, 0.36, listOf("NELMA"), false),
++        Row("BALSAM FIR", "Select Structural", "Posts and Timbers", 1250, 825, 125, 305, 1000, 1400000, 510000, 0.36, listOf("NELMA"), false),
++        Row("BALSAM FIR", "No.1", "Posts and Timbers", 1000, 675, 125, 305, 875, 1400000, 510000, 0.36, listOf("NELMA"), false),
++        Row("BALSAM FIR", "No.2", "Posts and Timbers", 575, 375, 125, 305, 400, 1100000, 400000, 0.36, listOf("NELMA"), false),
++        Row("BEECH-BIRCH-HICKORY", "Select Structural", "Beams and Stringers", 1650, 975, 180, 715, 975, 1500000, 550000, 0.71, listOf("NELMA"), false),
++        Row("BEECH-BIRCH-HICKORY", "No.1", "Beams and Stringers", 1400, 700, 180, 715, 825, 1500000, 550000, 0.71, listOf("NELMA"), false),
++        Row("BEECH-BIRCH-HICKORY", "No.2", "Beams and Stringers", 900, 450, 180, 715, 525, 1200000, 440000, 0.71, listOf("NELMA"), false),
++        Row("BEECH-BIRCH-HICKORY", "Select Structural", "Posts and Timbers", 1550, 1050, 180, 715, 1050, 1500000, 550000, 0.71, listOf("NELMA"), false),
++        Row("BEECH-BIRCH-HICKORY", "No.1", "Posts and Timbers", 1250, 850, 180, 715, 900, 1500000, 550000, 0.71, listOf("NELMA"), false),
++        Row("BEECH-BIRCH-HICKORY", "No.2", "Posts and Timbers", 725, 475, 180, 715, 425, 1200000, 440000, 0.71, listOf("NELMA"), false),
++        Row("COAST SITKA SPRUCE", "Select Structural", "Beams and Stringers", 1150, 675, 115, 455, 775, 1500000, 550000, 0.43, listOf("NLGA"), false),
++        Row("COAST SITKA SPRUCE", "No.1", "Beams and Stringers", 950, 475, 115, 455, 650, 1500000, 550000, 0.43, listOf("NLGA"), false),
++        Row("COAST SITKA SPRUCE", "No.2", "Beams and Stringers", 625, 325, 115, 455, 425, 1200000, 440000, 0.43, listOf("NLGA"), false),
++        Row("COAST SITKA SPRUCE", "Select Structural", "Posts and Timbers", 1100, 725, 115, 455, 825, 1500000, 550000, 0.43, listOf("NLGA"), false),
++        Row("COAST SITKA SPRUCE", "No.1", "Posts and Timbers", 875, 575, 115, 455, 725, 1500000, 550000, 0.43, listOf("NLGA"), false),
++        Row("COAST SITKA SPRUCE", "No.2", "Posts and Timbers", 525, 350, 115, 455, 500, 1200000, 440000, 0.43, listOf("NLGA"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Dense Select Structural", "Beams and Stringers", 1900, 1100, 170, 730, 1300, 1700000, 620000, 0.5, listOf("PLIB"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Select Structural", "Beams and Stringers", 1600, 950, 170, 625, 1100, 1600000, 580000, 0.5, listOf("PLIB"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Dense No. 1", "Beams and Stringers", 1550, 775, 170, 730, 1100, 1700000, 620000, 0.5, listOf("PLIB"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "No. 1", "Beams and Stringers", 1350, 675, 170, 625, 925, 1600000, 580000, 0.5, listOf("PLIB"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "No. 2", "Beams and Stringers", 875, 425, 170, 625, 600, 1300000, 470000, 0.5, listOf("PLIB"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Dense Select Structural", "Posts and Timbers", 1750, 1150, 170, 730, 1350, 1700000, 620000, 0.5, listOf("PLIB"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Select Structural", "Posts and Timbers", 1500, 1000, 170, 625, 1150, 1600000, 580000, 0.5, listOf("PLIB"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Dense No. 1", "Posts and Timbers", 1400, 950, 170, 730, 1200, 1700000, 620000, 0.5, listOf("PLIB"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "No. 1", "Posts and Timbers", 1200, 825, 170, 625, 1000, 1600000, 580000, 0.5, listOf("PLIB"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "No. 2", "Posts and Timbers", 750, 475, 170, 625, 700, 1300000, 470000, 0.5, listOf("PLIB"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Dense Select Structural", "Beams and Stringers", 1900, 1100, 170, 730, 1300, 1700000, 620000, 0.5, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Select Structural", "Beams and Stringers", 1600, 950, 170, 625, 1100, 1600000, 580000, 0.5, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Dense No. 1", "Beams and Stringers", 1550, 775, 170, 730, 1100, 1700000, 620000, 0.5, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "No. 1", "Beams and Stringers", 1350, 675, 170, 625, 925, 1600000, 580000, 0.5, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "No. 2 Dense", "Beams and Stringers", 1000, 500, 170, 730, 700, 1400000, 510000, 0.5, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "No. 2", "Beams and Stringers", 875, 425, 170, 625, 600, 1300000, 470000, 0.5, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Dense Select Structural", "Posts and Timbers", 1750, 1150, 170, 730, 1350, 1700000, 620000, 0.5, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Select Structural", "Posts and Timbers", 1500, 1000, 170, 625, 1150, 1600000, 580000, 0.5, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Dense No. 1", "Posts and Timbers", 1400, 950, 170, 730, 1200, 1700000, 620000, 0.5, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "No. 1", "Posts and Timbers", 1200, 825, 170, 625, 1000, 1600000, 580000, 0.5, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "No. 2 Dense", "Posts and Timbers", 850, 550, 170, 730, 825, 1400000, 510000, 0.5, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "No. 2", "Posts and Timbers", 750, 475, 170, 625, 700, 1300000, 470000, 0.5, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-LARCH (NORTH), DOUGLAS FIR (NORTH), WESTERN LARCH (NORTH)", "Select Structural", "Beams and Stringers", 1600, 950, 170, 625, 1100, 1600000, 580000, 0.49, listOf("NLGA"), false),
++        Row("DOUGLAS FIR-LARCH (NORTH), DOUGLAS FIR (NORTH), WESTERN LARCH (NORTH)", "No.1", "Beams and Stringers", 1300, 675, 170, 625, 925, 1600000, 580000, 0.49, listOf("NLGA"), false),
++        Row("DOUGLAS FIR-LARCH (NORTH), DOUGLAS FIR (NORTH), WESTERN LARCH (NORTH)", "No.2", "Beams and Stringers", 875, 425, 170, 625, 600, 1300000, 470000, 0.49, listOf("NLGA"), false),
++        Row("DOUGLAS FIR-LARCH (NORTH), DOUGLAS FIR (NORTH), WESTERN LARCH (NORTH)", "Select Structural", "Posts and Timbers", 1500, 1000, 170, 625, 1150, 1600000, 580000, 0.49, listOf("NLGA"), false),
++        Row("DOUGLAS FIR-LARCH (NORTH), DOUGLAS FIR (NORTH), WESTERN LARCH (NORTH)", "No.1", "Posts and Timbers", 1200, 825, 170, 625, 1000, 1600000, 580000, 0.49, listOf("NLGA"), false),
++        Row("DOUGLAS FIR-LARCH (NORTH), DOUGLAS FIR (NORTH), WESTERN LARCH (NORTH)", "No.2", "Posts and Timbers", 725, 475, 170, 625, 700, 1300000, 470000, 0.49, listOf("NLGA"), false),
++        Row("DOUGLAS FIR-SOUTH", "Select Structural", "Beams and Stringers", 1550, 900, 165, 520, 1000, 1200000, 440000, 0.46, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-SOUTH", "No.1", "Beams and Stringers", 1300, 625, 165, 520, 850, 1200000, 440000, 0.46, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-SOUTH", "No.2", "Beams and Stringers", 825, 425, 165, 520, 550, 1000000, 370000, 0.46, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-SOUTH", "Select Structural", "Posts and Timbers", 1450, 950, 165, 520, 1050, 1200000, 440000, 0.46, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-SOUTH", "No.1", "Posts and Timbers", 1150, 775, 165, 520, 925, 1200000, 440000, 0.46, listOf("WWPA"), false),
++        Row("DOUGLAS FIR-SOUTH", "No.2", "Posts and Timbers", 675, 450, 165, 520, 650, 1000000, 370000, 0.46, listOf("WWPA"), false),
++        Row("EASTERN HEMLOCK", "Select Structural", "Beams and Stringers", 1350, 925, 155, 550, 950, 1200000, 440000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN HEMLOCK", "No.1", "Beams and Stringers", 1150, 775, 155, 550, 800, 1200000, 440000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN HEMLOCK", "No.2", "Beams and Stringers", 750, 375, 155, 550, 550, 900000, 330000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN HEMLOCK", "Select Structural", "Posts and Timbers", 1250, 850, 155, 550, 1000, 1200000, 440000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN HEMLOCK", "No.1", "Posts and Timbers", 1050, 700, 155, 550, 875, 1200000, 440000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN HEMLOCK", "No.2", "Posts and Timbers", 600, 400, 155, 550, 400, 900000, 330000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN HEMLOCK-TAMARACK", "Select Structural", "Beams and Stringers", 1400, 925, 155, 555, 950, 1200000, 440000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN HEMLOCK-TAMARACK", "No.1", "Beams and Stringers", 1150, 775, 155, 555, 800, 1200000, 440000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN HEMLOCK-TAMARACK", "No.2", "Beams and Stringers", 750, 375, 155, 555, 500, 900000, 330000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN HEMLOCK-TAMARACK", "Select Structural", "Posts and Timbers", 1300, 875, 155, 555, 1000, 1200000, 440000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN HEMLOCK-TAMARACK", "No.1", "Posts and Timbers", 1050, 700, 155, 555, 875, 1200000, 440000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN HEMLOCK-TAMARACK", "No.2", "Posts and Timbers", 600, 400, 155, 555, 400, 900000, 330000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN HEMLOCK-TAMARACK (N)", "Select Structural", "Beams and Stringers", 1450, 850, 165, 555, 950, 1300000, 470000, 0.47, listOf("NLGA"), false),
++        Row("EASTERN HEMLOCK-TAMARACK (N)", "No.1", "Beams and Stringers", 1200, 600, 165, 555, 800, 1300000, 470000, 0.47, listOf("NLGA"), false),
++        Row("EASTERN HEMLOCK-TAMARACK (N)", "No.2", "Beams and Stringers", 775, 400, 165, 555, 500, 1100000, 400000, 0.47, listOf("NLGA"), false),
++        Row("EASTERN HEMLOCK-TAMARACK (N)", "Select Structural", "Posts and Timbers", 1350, 900, 165, 555, 1000, 1300000, 470000, 0.47, listOf("NLGA"), false),
++        Row("EASTERN HEMLOCK-TAMARACK (N)", "No.1", "Posts and Timbers", 1100, 725, 165, 555, 875, 1300000, 470000, 0.47, listOf("NLGA"), false),
++        Row("EASTERN HEMLOCK-TAMARACK (N)", "No.2", "Posts and Timbers", 650, 425, 165, 555, 600, 1100000, 400000, 0.47, listOf("NLGA"), false),
++        Row("EASTERN SPRUCE", "Select Structural", "Beams and Stringers", 1050, 725, 135, 390, 750, 1400000, 510000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN SPRUCE", "No.1", "Beams and Stringers", 900, 600, 135, 390, 625, 1400000, 510000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN SPRUCE", "No.2", "Beams and Stringers", 575, 275, 135, 390, 375, 1000000, 370000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN SPRUCE", "Select Structural", "Posts and Timbers", 1000, 675, 135, 390, 775, 1400000, 510000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN SPRUCE", "No.1", "Posts and Timbers", 800, 550, 135, 390, 675, 1400000, 510000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN SPRUCE", "No.2", "Posts and Timbers", 450, 300, 135, 390, 300, 1000000, 370000, 0.41, listOf("NELMA"), false),
++        Row("EASTERN WHITE PINE", "Select Structural", "Beams and Stringers", 1050, 700, 125, 350, 675, 1100000, 400000, 0.36, listOf("NELMA"), false),
++        Row("EASTERN WHITE PINE", "No.1", "Beams and Stringers", 875, 600, 125, 350, 575, 1100000, 400000, 0.36, listOf("NELMA"), false),
++        Row("EASTERN WHITE PINE", "No.2", "Beams and Stringers", 575, 275, 125, 350, 400, 900000, 330000, 0.36, listOf("NELMA"), false),
++        Row("EASTERN WHITE PINE", "Select Structural", "Posts and Timbers", 975, 650, 125, 350, 725, 1100000, 400000, 0.36, listOf("NELMA"), false),
++        Row("EASTERN WHITE PINE", "No.1", "Posts and Timbers", 800, 525, 125, 350, 625, 1100000, 400000, 0.36, listOf("NELMA"), false),
++        Row("EASTERN WHITE PINE", "No.2", "Posts and Timbers", 450, 300, 125, 350, 325, 900000, 330000, 0.36, listOf("NELMA"), false),
++        Row("HEM-FIR", "Select Structural", "Beams and Stringers", 1300, 750, 140, 405, 925, 1300000, 470000, 0.43, listOf("PLIB", "WWPA"), false),
++        Row("HEM-FIR", "No.1", "Beams and Stringers", 1050, 525, 140, 405, 750, 1300000, 470000, 0.43, listOf("PLIB", "WWPA"), false),
++        Row("HEM-FIR", "No.2", "Beams and Stringers", 675, 350, 140, 405, 500, 1100000, 400000, 0.43, listOf("PLIB", "WWPA"), false),
++        Row("HEM-FIR", "Select Structural", "Posts and Timbers", 1200, 800, 140, 405, 975, 1300000, 470000, 0.43, listOf("PLIB", "WWPA"), false),
++        Row("HEM-FIR", "No.1", "Posts and Timbers", 975, 650, 140, 405, 850, 1300000, 470000, 0.43, listOf("PLIB", "WWPA"), false),
++        Row("HEM-FIR", "No.2", "Posts and Timbers", 575, 375, 140, 405, 575, 1100000, 400000, 0.43, listOf("PLIB", "WWPA"), false),
++        Row("HEM-FIR (NORTH)", "Select Structural", "Beams and Stringers", 1250, 725, 135, 405, 900, 1300000, 470000, 0.46, listOf("NLGA"), false),
++        Row("HEM-FIR (NORTH)", "No.1", "Beams and Stringers", 1000, 500, 135, 405, 750, 1300000, 470000, 0.46, listOf("NLGA"), false),
++        Row("HEM-FIR (NORTH)", "No.2", "Beams and Stringers", 675, 325, 135, 405, 475, 1100000, 400000, 0.46, listOf("NLGA"), false),
++        Row("HEM-FIR (NORTH)", "Select Structural", "Posts and Timbers", 1150, 775, 135, 405, 950, 1300000, 470000, 0.46, listOf("NLGA"), false),
++        Row("HEM-FIR (NORTH)", "No.1", "Posts and Timbers", 925, 625, 135, 405, 850, 1300000, 470000, 0.46, listOf("NLGA"), false),
++        Row("HEM-FIR (NORTH)", "No.2", "Posts and Timbers", 550, 375, 135, 405, 575, 1100000, 400000, 0.46, listOf("NLGA"), false),
++        Row("MIXED MAPLE", "Select Structural", "Beams and Stringers", 1150, 700, 180, 620, 725, 1100000, 400000, 0.55, listOf("NELMA"), false),
++        Row("MIXED MAPLE", "No.1", "Beams and Stringers", 975, 500, 180, 620, 600, 1100000, 400000, 0.55, listOf("NELMA"), false),
++        Row("MIXED MAPLE", "No.2", "Beams and Stringers", 625, 325, 180, 620, 375, 900000, 330000, 0.55, listOf("NELMA"), false),
++        Row("MIXED MAPLE", "Select Structural", "Posts and Timbers", 1100, 725, 180, 620, 750, 1100000, 400000, 0.55, listOf("NELMA"), false),
++        Row("MIXED MAPLE", "No.1", "Posts and Timbers", 875, 600, 180, 620, 650, 1100000, 400000, 0.55, listOf("NELMA"), false),
++        Row("MIXED MAPLE", "No.2", "Posts and Timbers", 500, 350, 180, 620, 300, 900000, 330000, 0.55, listOf("NELMA"), false),
++        Row("MIXED OAK", "Select Structural", "Beams and Stringers", 1350, 800, 155, 800, 825, 1000000, 370000, 0.68, listOf("NELMA"), false),
++        Row("MIXED OAK", "No.1", "Beams and Stringers", 1150, 550, 155, 800, 700, 1000000, 370000, 0.68, listOf("NELMA"), false),
++        Row("MIXED OAK", "No.2", "Beams and Stringers", 725, 375, 155, 800, 450, 800000, 290000, 0.68, listOf("NELMA"), false),
++        Row("MIXED OAK", "Select Structural", "Posts and Timbers", 1250, 850, 155, 800, 875, 1000000, 370000, 0.68, listOf("NELMA"), false),
++        Row("MIXED OAK", "No.1", "Posts and Timbers", 1000, 675, 155, 800, 775, 1000000, 370000, 0.68, listOf("NELMA"), false),
++        Row("MIXED OAK", "No.2", "Posts and Timbers", 575, 400, 155, 800, 350, 800000, 290000, 0.68, listOf("NELMA"), false),
++        Row("MIXED SOUTHERN PINE", "Select Structural", "5\"x5\" and Larger", 1500, 1000, 165, 375, 900, 1300000, 470000, 0.51, listOf("SPIB"), true),
++        Row("MIXED SOUTHERN PINE", "No.1", "5\"x5\" and Larger", 1350, 900, 165, 375, 800, 1300000, 470000, 0.51, listOf("SPIB"), true),
++        Row("MIXED SOUTHERN PINE", "No.2", "5\"x5\" and Larger", 850, 550, 165, 375, 525, 1000000, 370000, 0.51, listOf("SPIB"), true),
++        Row("MOUNTAIN HEMLOCK", "Select Structural", "Beams and Stringers", 1350, 775, 170, 570, 875, 1100000, 400000, 0.47, listOf("PLIB", "WWPA"), false),
++        Row("MOUNTAIN HEMLOCK", "No.1", "Beams and Stringers", 1100, 550, 170, 570, 725, 1100000, 400000, 0.47, listOf("PLIB", "WWPA"), false),
++        Row("MOUNTAIN HEMLOCK", "No.2", "Beams and Stringers", 725, 375, 170, 570, 475, 900000, 330000, 0.47, listOf("PLIB", "WWPA"), false),
++        Row("MOUNTAIN HEMLOCK", "Select Structural", "Posts and Timbers", 1250, 825, 170, 570, 925, 1100000, 400000, 0.47, listOf("PLIB", "WWPA"), false),
++        Row("MOUNTAIN HEMLOCK", "No.1", "Posts and Timbers", 1000, 675, 170, 570, 800, 1100000, 400000, 0.47, listOf("PLIB", "WWPA"), false),
++        Row("MOUNTAIN HEMLOCK", "No.2", "Posts and Timbers", 625, 400, 170, 570, 550, 900000, 330000, 0.47, listOf("PLIB", "WWPA"), false),
++        Row("NORTHERN PINE", "Select Structural", "Beams and Stringers", 1250, 850, 135, 435, 850, 1300000, 470000, 0.42, listOf("NELMA"), false),
++        Row("NORTHERN PINE", "No.1", "Beams and Stringers", 1050, 700, 135, 435, 725, 1300000, 470000, 0.42, listOf("NELMA"), false),
++        Row("NORTHERN PINE", "No.2", "Beams and Stringers", 675, 350, 135, 435, 450, 1000000, 370000, 0.42, listOf("NELMA"), false),
++        Row("NORTHERN PINE", "Select Structural", "Posts and Timbers", 1150, 800, 135, 435, 900, 1300000, 470000, 0.42, listOf("NELMA"), false),
++        Row("NORTHERN PINE", "No.1", "Posts and Timbers", 950, 650, 135, 435, 800, 1300000, 470000, 0.42, listOf("NELMA"), false),
++        Row("NORTHERN PINE", "No.2", "Posts and Timbers", 550, 375, 135, 435, 375, 1000000, 370000, 0.42, listOf("NELMA"), false),
++        Row("NORTHERN RED OAK", "Select Structural", "Beams and Stringers", 1600, 950, 205, 885, 950, 1300000, 470000, 0.68, listOf("NELMA"), false),
++        Row("NORTHERN RED OAK", "No.1", "Beams and Stringers", 1350, 675, 205, 885, 800, 1300000, 470000, 0.68, listOf("NELMA"), false),
++        Row("NORTHERN RED OAK", "No.2", "Beams and Stringers", 875, 425, 205, 885, 500, 1000000, 370000, 0.68, listOf("NELMA"), false),
++        Row("NORTHERN RED OAK", "Select Structural", "Posts and Timbers", 1500, 1000, 205, 885, 1000, 1300000, 470000, 0.68, listOf("NELMA"), false),
++        Row("NORTHERN RED OAK", "No.1", "Posts and Timbers", 1200, 800, 205, 885, 875, 1300000, 470000, 0.68, listOf("NELMA"), false),
++        Row("NORTHERN RED OAK", "No.2", "Posts and Timbers", 700, 475, 205, 885, 400, 1000000, 370000, 0.68, listOf("NELMA"), false),
++        Row("NORTHERN WHITE CEDAR", "Select Structural", "Beams and Stringers", 900, 600, 115, 370, 600, 700000, 260000, 0.31, listOf("NELMA"), false),
++        Row("NORTHERN WHITE CEDAR", "No.1", "Beams and Stringers", 750, 500, 115, 370, 500, 700000, 260000, 0.31, listOf("NELMA"), false),
++        Row("NORTHERN WHITE CEDAR", "No.2", "Beams and Stringers", 500, 250, 115, 370, 325, 600000, 220000, 0.31, listOf("NELMA"), false),
++        Row("NORTHERN WHITE CEDAR", "Select Structural", "Posts and Timbers", 850, 575, 115, 370, 650, 700000, 260000, 0.31, listOf("NELMA"), false),
++        Row("NORTHERN WHITE CEDAR", "No.1", "Posts and Timbers", 675, 450, 115, 370, 550, 700000, 260000, 0.31, listOf("NELMA"), false),
++        Row("NORTHERN WHITE CEDAR", "No.2", "Posts and Timbers", 400, 250, 115, 370, 250, 600000, 220000, 0.31, listOf("NELMA"), false),
++        Row("PONDEROSA PINE", "Select Structural", "Beams and Stringers", 1100, 725, 130, 535, 750, 1100000, 400000, 0.43, listOf("NLGA"), false),
++        Row("PONDEROSA PINE", "No.1", "Beams and Stringers", 925, 500, 130, 535, 625, 1100000, 400000, 0.43, listOf("NLGA"), false),
++        Row("PONDEROSA PINE", "No.2", "Beams and Stringers", 600, 300, 130, 535, 400, 900000, 330000, 0.43, listOf("NLGA"), false),
++        Row("PONDEROSA PINE", "Select Structural", "Posts and Timbers", 1000, 675, 130, 535, 800, 1100000, 400000, 0.43, listOf("NLGA"), false),
++        Row("PONDEROSA PINE", "No.1", "Posts and Timbers", 825, 550, 130, 535, 700, 1100000, 400000, 0.43, listOf("NLGA"), false),
++        Row("PONDEROSA PINE", "No.2", "Posts and Timbers", 475, 325, 130, 535, 325, 900000, 330000, 0.43, listOf("NLGA"), false),
++        Row("RED MAPLE", "Select Structural", "Beams and Stringers", 1500, 875, 195, 615, 900, 1500000, 550000, 0.58, listOf("NELMA"), false),
++        Row("RED MAPLE", "No.1", "Beams and Stringers", 1250, 625, 195, 615, 750, 1500000, 550000, 0.58, listOf("NELMA"), false),
++        Row("RED MAPLE", "No.2", "Beams and Stringers", 800, 400, 195, 615, 475, 1200000, 440000, 0.58, listOf("NELMA"), false),
++        Row("RED MAPLE", "Select Structural", "Posts and Timbers", 1400, 925, 195, 615, 950, 1500000, 550000, 0.58, listOf("NELMA"), false),
++        Row("RED MAPLE", "No.1", "Posts and Timbers", 1150, 750, 195, 615, 825, 1500000, 550000, 0.58, listOf("NELMA"), false),
++        Row("RED MAPLE", "No.2", "Posts and Timbers", 650, 425, 195, 615, 375, 1200000, 440000, 0.58, listOf("NELMA"), false),
++        Row("RED OAK", "Select Structural", "Beams and Stringers", 1350, 800, 155, 820, 825, 1200000, 440000, 0.67, listOf("NELMA"), false),
++        Row("RED OAK", "No.1", "Beams and Stringers", 1150, 550, 155, 820, 700, 1200000, 440000, 0.67, listOf("NELMA"), false),
++        Row("RED OAK", "No.2", "Beams and Stringers", 725, 375, 155, 820, 450, 1000000, 370000, 0.67, listOf("NELMA"), false),
++        Row("RED OAK", "Select Structural", "Posts and Timbers", 1250, 850, 155, 820, 875, 1200000, 440000, 0.67, listOf("NELMA"), false),
++        Row("RED OAK", "No.1", "Posts and Timbers", 1000, 675, 155, 820, 775, 1200000, 440000, 0.67, listOf("NELMA"), false),
++        Row("RED OAK", "No.2", "Posts and Timbers", 575, 400, 155, 820, 350, 1000000, 370000, 0.67, listOf("NELMA"), false),
++        Row("RED PINE", "Select Structural", "Beams and Stringers", 1050, 625, 130, 440, 725, 1100000, 400000, 0.44, listOf("NLGA"), false),
++        Row("RED PINE", "No.1", "Beams and Stringers", 875, 450, 130, 440, 600, 1100000, 400000, 0.44, listOf("NLGA"), false),
++        Row("RED PINE", "No.2", "Beams and Stringers", 575, 300, 130, 440, 375, 900000, 330000, 0.44, listOf("NLGA"), false),
++        Row("RED PINE", "Select Structural", "Posts and Timbers", 1000, 675, 130, 440, 775, 1100000, 400000, 0.44, listOf("NLGA"), false),
++        Row("RED PINE", "No.1", "Posts and Timbers", 800, 550, 130, 440, 675, 1100000, 400000, 0.44, listOf("NLGA"), false),
++        Row("RED PINE", "No.2", "Posts and Timbers", 475, 325, 130, 440, 475, 900000, 330000, 0.44, listOf("NLGA"), false),
++        Row("REDWOOD", "Select Structural", "5\" x 5\" and Larger", 1100, 750, 145, 420, 900, 1000000, 370000, 0.37, listOf("RIS"), false),
++        Row("REDWOOD", "No. 1", "5\" x 5\" and Larger", 950, 650, 145, 420, 800, 1000000, 370000, 0.37, listOf("RIS"), false),
++        Row("REDWOOD", "No. 2", "5\" x 5\" and Larger", 750, 400, 145, 420, 650, 900000, 330000, 0.37, listOf("RIS"), false),
++        Row("SITKA SPRUCE", "Select Structural", "Beams and Stringers", 1200, 675, 140, 435, 825, 1300000, 470000, 0.43, listOf("PLIB"), false),
++        Row("SITKA SPRUCE", "No.1", "Beams and Stringers", 1000, 500, 140, 435, 675, 1300000, 470000, 0.43, listOf("PLIB"), false),
++        Row("SITKA SPRUCE", "No.2", "Beams and Stringers", 650, 325, 140, 435, 450, 1000000, 370000, 0.43, listOf("PLIB"), false),
++        Row("SITKA SPRUCE", "Select Structural", "Posts and Timbers", 1150, 750, 140, 435, 875, 1300000, 470000, 0.43, listOf("PLIB"), false),
++        Row("SITKA SPRUCE", "No.1", "Posts and Timbers", 925, 600, 140, 435, 750, 1300000, 470000, 0.43, listOf("PLIB"), false),
++        Row("SITKA SPRUCE", "No.2", "Posts and Timbers", 550, 350, 140, 435, 525, 1000000, 370000, 0.43, listOf("PLIB"), false),
++        Row("SITKA SPRUCE", "Select Structural", "Beams and Stringers", 1200, 675, 140, 435, 825, 1300000, 470000, 0.43, listOf("WWPA"), false),
++        Row("SITKA SPRUCE", "No.1", "Beams and Stringers", 1000, 500, 140, 435, 675, 1300000, 470000, 0.43, listOf("WWPA"), false),
++        Row("SITKA SPRUCE", "No.2", "Beams and Stringers", 650, 325, 140, 435, 450, 1100000, 400000, 0.43, listOf("WWPA"), false),
++        Row("SITKA SPRUCE", "Select Structural", "Posts and Timbers", 1150, 750, 140, 435, 875, 1300000, 470000, 0.43, listOf("WWPA"), false),
++        Row("SITKA SPRUCE", "No.1", "Posts and Timbers", 925, 600, 140, 435, 750, 1300000, 470000, 0.43, listOf("WWPA"), false),
++        Row("SITKA SPRUCE", "No.2", "Posts and Timbers", 550, 350, 140, 435, 525, 1100000, 400000, 0.43, listOf("WWPA"), false),
++        Row("SOUTHERN PINE", "Dense Select Structural", "5\" x 5\" and Larger", 1750, 1200, 165, 440, 1100, 1600000, 580000, 0.55, listOf("SPIB"), true),
++        Row("SOUTHERN PINE", "Select Structural", "5\" x 5\" and Larger", 1500, 1000, 165, 375, 950, 1500000, 550000, 0.55, listOf("SPIB"), true),
++        Row("SOUTHERN PINE", "No. 1 Dense", "5\" x 5\" and Larger", 1550, 1050, 165, 440, 975, 1600000, 580000, 0.55, listOf("SPIB"), true),
++        Row("SOUTHERN PINE", "No. 1", "5\" x 5\" and Larger", 1350, 900, 165, 375, 825, 1500000, 550000, 0.55, listOf("SPIB"), true),
++        Row("SOUTHERN PINE", "No. 2 Dense", "5\" x 5\" and Larger", 975, 650, 165, 440, 625, 1300000, 470000, 0.55, listOf("SPIB"), true),
++        Row("SOUTHERN PINE", "No. 2", "5\" x 5\" and Larger", 850, 550, 165, 375, 525, 1200000, 440000, 0.55, listOf("SPIB"), true),
++        Row("SOUTHERN PINE", "Dense Select Structural 86", "5\" x 5\" and Larger", 2100, 1400, 165, 440, 1300, 1600000, 580000, 0.55, listOf("SPIB"), true),
++        Row("SOUTHERN PINE", "Dense Select Structural 72", "5\" x 5\" and Larger", 1750, 1200, 165, 440, 1100, 1600000, 580000, 0.55, listOf("SPIB"), true),
++        Row("SOUTHERN PINE", "Dense Select Structural 65", "5\" x 5\" and Larger", 1600, 1050, 165, 440, 1000, 1600000, 580000, 0.55, listOf("SPIB"), true),
++        Row("SPRUCE-PINE-FIR", "Select Structural", "Beams and Stringers", 1100, 650, 125, 425, 775, 1300000, 470000, 0.42, listOf("NLGA"), false),
++        Row("SPRUCE-PINE-FIR", "No.1", "Beams and Stringers", 900, 450, 125, 425, 625, 1300000, 470000, 0.42, listOf("NLGA"), false),
++        Row("SPRUCE-PINE-FIR", "No.2", "Beams and Stringers", 600, 300, 125, 425, 425, 1000000, 370000, 0.42, listOf("NLGA"), false),
++        Row("SPRUCE-PINE-FIR", "Select Structural", "Posts and Timbers", 1050, 700, 125, 425, 800, 1300000, 470000, 0.42, listOf("NLGA"), false),
++        Row("SPRUCE-PINE-FIR", "No.1", "Posts and Timbers", 850, 550, 125, 425, 700, 1300000, 470000, 0.42, listOf("NLGA"), false),
++        Row("SPRUCE-PINE-FIR", "No.2", "Posts and Timbers", 500, 325, 125, 425, 500, 1000000, 370000, 0.42, listOf("NLGA"), false),
++        Row("SPRUCE-PINE-FIR (SOUTH)", "Select Structural", "Beams and Stringers", 1050, 625, 125, 335, 675, 1200000, 440000, 0.36, listOf("NELMA", "PLIB", "WWPA"), false),
++        Row("SPRUCE-PINE-FIR (SOUTH)", "No.1", "Beams and Stringers", 900, 450, 125, 335, 550, 1200000, 440000, 0.36, listOf("NELMA", "PLIB", "WWPA"), false),
++        Row("SPRUCE-PINE-FIR (SOUTH)", "No.2", "Beams and Stringers", 575, 300, 125, 335, 375, 1000000, 370000, 0.36, listOf("NELMA", "PLIB", "WWPA"), false),
++        Row("SPRUCE-PINE-FIR (SOUTH)", "Select Structural", "Posts and Timbers", 1000, 675, 125, 335, 700, 1200000, 440000, 0.36, listOf("NELMA", "PLIB", "WWPA"), false),
++        Row("SPRUCE-PINE-FIR (SOUTH)", "No.1", "Posts and Timbers", 800, 550, 125, 335, 625, 1200000, 440000, 0.36, listOf("NELMA", "PLIB", "WWPA"), false),
++        Row("SPRUCE-PINE-FIR (SOUTH)", "No.2", "Posts and Timbers", 475, 325, 125, 335, 425, 1000000, 370000, 0.36, listOf("NELMA", "PLIB", "WWPA"), false),
++        Row("WESTERN CEDARS", "Select Structural", "Beams and Stringers", 1150, 675, 140, 425, 875, 1000000, 370000, 0.36, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN CEDARS", "No.1", "Beams and Stringers", 975, 475, 140, 425, 725, 1000000, 370000, 0.36, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN CEDARS", "No.2", "Beams and Stringers", 625, 325, 140, 425, 475, 800000, 290000, 0.36, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN CEDARS", "Select Structural", "Posts and Timbers", 1100, 725, 140, 425, 925, 1000000, 370000, 0.36, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN CEDARS", "No.1", "Posts and Timbers", 875, 600, 140, 425, 800, 1000000, 370000, 0.36, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN CEDARS", "No.2", "Posts and Timbers", 550, 350, 140, 425, 550, 800000, 290000, 0.36, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN CEDARS (NORTH)", "Select Structural", "Beams and Stringers", 1150, 675, 130, 425, 850, 1000000, 370000, 0.35, listOf("NLGA"), false),
++        Row("WESTERN CEDARS (NORTH)", "No.1", "Beams and Stringers", 925, 475, 130, 425, 700, 1000000, 370000, 0.35, listOf("NLGA"), false),
++        Row("WESTERN CEDARS (NORTH)", "No.2", "Beams and Stringers", 625, 300, 130, 425, 450, 800000, 290000, 0.35, listOf("NLGA"), false),
++        Row("WESTERN CEDARS (NORTH)", "Select Structural", "Posts and Timbers", 1050, 700, 130, 425, 900, 1000000, 370000, 0.35, listOf("NLGA"), false),
++        Row("WESTERN CEDARS (NORTH)", "No.1", "Posts and Timbers", 875, 575, 130, 425, 800, 1000000, 370000, 0.35, listOf("NLGA"), false),
++        Row("WESTERN CEDARS (NORTH)", "No.2", "Posts and Timbers", 500, 350, 130, 425, 550, 800000, 290000, 0.35, listOf("NLGA"), false),
++        Row("WESTERN HEMLOCK", "Select Structural", "Beams and Stringers", 1400, 825, 170, 410, 1000, 1400000, 510000, 0.47, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN HEMLOCK", "No.1", "Beams and Stringers", 1150, 575, 170, 410, 850, 1400000, 510000, 0.47, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN HEMLOCK", "No.2", "Beams and Stringers", 750, 375, 170, 410, 550, 1100000, 400000, 0.47, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN HEMLOCK", "Select Structural", "Posts and Timbers", 1300, 875, 170, 410, 1100, 1400000, 510000, 0.47, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN HEMLOCK", "No.1", "Posts and Timbers", 1050, 700, 170, 410, 950, 1400000, 510000, 0.47, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN HEMLOCK", "No.2", "Posts and Timbers", 650, 425, 170, 410, 650, 1100000, 400000, 0.47, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN HEMLOCK (NORTH)", "Select Structural", "Beams and Stringers", 1400, 825, 135, 410, 1000, 1400000, 510000, 0.46, listOf("NLGA"), false),
++        Row("WESTERN HEMLOCK (NORTH)", "No.1", "Beams and Stringers", 1150, 575, 135, 410, 850, 1400000, 510000, 0.46, listOf("NLGA"), false),
++        Row("WESTERN HEMLOCK (NORTH)", "No.2", "Beams and Stringers", 750, 375, 135, 410, 550, 1100000, 400000, 0.46, listOf("NLGA"), false),
++        Row("WESTERN HEMLOCK (NORTH)", "Select Structural", "Posts and Timbers", 1300, 875, 135, 410, 1100, 1400000, 510000, 0.46, listOf("NLGA"), false),
++        Row("WESTERN HEMLOCK (NORTH)", "No.1", "Posts and Timbers", 1050, 700, 135, 410, 950, 1400000, 510000, 0.46, listOf("NLGA"), false),
++        Row("WESTERN HEMLOCK (NORTH)", "No.2", "Posts and Timbers", 650, 425, 135, 410, 650, 1100000, 400000, 0.46, listOf("NLGA"), false),
++        Row("WESTERN JUNIPER", "Select Structural", "Beams and Stringers", 1300, 650, 115, 770, 325, 500000, 180000, 0.42, listOf("PLIB"), false),
++        Row("WESTERN JUNIPER", "No.1", "Beams and Stringers", 1100, 450, 115, 770, 275, 500000, 180000, 0.42, listOf("PLIB"), false),
++        Row("WESTERN JUNIPER", "No.2", "Beams and Stringers", 650, 350, 115, 770, 175, 400000, 150000, 0.42, listOf("PLIB"), false),
++        Row("WESTERN JUNIPER", "Select Structural", "Posts and Timbers", 1300, 675, 115, 770, 350, 500000, 180000, 0.42, listOf("PLIB"), false),
++        Row("WESTERN JUNIPER", "No.1", "Posts and Timbers", 1000, 550, 115, 770, 300, 500000, 180000, 0.42, listOf("PLIB"), false),
++        Row("WESTERN JUNIPER", "No.2", "Posts and Timbers", 600, 325, 115, 770, 225, 400000, 150000, 0.42, listOf("PLIB"), false),
++        Row("WESTERN WHITE PINE", "Select Structural", "Beams and Stringers", 1050, 600, 120, 375, 775, 1300000, 470000, 0.4, listOf("NLGA"), false),
++        Row("WESTERN WHITE PINE", "No.1", "Beams and Stringers", 850, 425, 120, 375, 625, 1300000, 470000, 0.4, listOf("NLGA"), false),
++        Row("WESTERN WHITE PINE", "No.2", "Beams and Stringers", 550, 275, 120, 375, 400, 1000000, 370000, 0.4, listOf("NLGA"), false),
++        Row("WESTERN WHITE PINE", "Select Structural", "Posts and Timbers", 975, 650, 120, 375, 800, 1300000, 470000, 0.4, listOf("NLGA"), false),
++        Row("WESTERN WHITE PINE", "No.1", "Posts and Timbers", 775, 525, 120, 375, 700, 1300000, 470000, 0.4, listOf("NLGA"), false),
++        Row("WESTERN WHITE PINE", "No.2", "Posts and Timbers", 450, 300, 120, 375, 500, 1000000, 370000, 0.4, listOf("NLGA"), false),
++        Row("WESTERN WOODS", "Select Structural", "Beams and Stringers", 1050, 625, 125, 345, 750, 1100000, 400000, 0.36, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN WOODS", "No.1", "Beams and Stringers", 900, 450, 125, 345, 625, 1100000, 400000, 0.36, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN WOODS", "No.2", "Beams and Stringers", 575, 300, 125, 345, 425, 900000, 330000, 0.36, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN WOODS", "Select Structural", "Posts and Timbers", 1000, 675, 125, 345, 800, 1100000, 400000, 0.36, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN WOODS", "No.1", "Posts and Timbers", 800, 525, 125, 345, 700, 1100000, 400000, 0.36, listOf("PLIB", "WWPA"), false),
++        Row("WESTERN WOODS", "No.2", "Posts and Timbers", 475, 325, 125, 345, 475, 900000, 330000, 0.36, listOf("PLIB", "WWPA"), false),
++        Row("WHITE OAK", "Select Structural", "Beams and Stringers", 1400, 825, 205, 800, 900, 1000000, 370000, 0.73, listOf("NELMA"), false),
++        Row("WHITE OAK", "No.1", "Beams and Stringers", 1200, 575, 205, 800, 775, 1000000, 370000, 0.73, listOf("NELMA"), false),
++        Row("WHITE OAK", "No.2", "Beams and Stringers", 750, 375, 205, 800, 475, 800000, 290000, 0.73, listOf("NELMA"), false),
++        Row("WHITE OAK", "Select Structural", "Posts and Timbers", 1300, 875, 205, 800, 950, 1000000, 370000, 0.73, listOf("NELMA"), false),
++        Row("WHITE OAK", "No.1", "Posts and Timbers", 1050, 700, 205, 800, 825, 1000000, 370000, 0.73, listOf("NELMA"), false),
++        Row("WHITE OAK", "No.2", "Posts and Timbers", 600, 400, 205, 800, 400, 800000, 290000, 0.73, listOf("NELMA"), false),
++    )
++
++    /** Species names exactly as printed, in table order. */
++    val species: List<String> = rows.map { it.species }.distinct()
++
++    fun find(species: String, grade: String, sizeClassification: String, agency: String): Row? =
++        rows.firstOrNull {
++            it.species == species && it.grade == grade && it.sizeClassification == sizeClassification &&
++                agency in it.gradingRulesAgencies
++        }
++}
+diff --git a/core/solver/src/test/java/com/lz/solver/material/Nds2024Table4DTest.kt b/core/solver/src/test/java/com/lz/solver/material/Nds2024Table4DTest.kt
+new file mode 100644
+index 0000000..1fb7ea0
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/material/Nds2024Table4DTest.kt
+@@ -0,0 +1,88 @@
++package com.lz.solver.material
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/**
++ * NDS 2024 Supplement Table 4D source data. The structural checks guard the extraction; the spot checks are rows
++ * read by eye from the printed table (not from the extraction code).
++ */
++class Nds2024Table4DTest {
++
++    private val t = Nds2024Table4D
++    private val bs = "Beams and Stringers"
++    private val pt = "Posts and Timbers"
++
++    @Test
++    fun `the table has the printed shape`() {
++        assertEquals(250, t.rows.size)
++        assertEquals(39, t.species.size)
++        // 33 species x 2 size classes x 3 grades, plus the special blocks
++        val perSpecies = t.rows.groupBy { it.species }
++        for ((s, rs) in perSpecies) {
++            when (s) {
++                "DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH" -> assertEquals(s, 22, rs.size) // PLIB 5+5, WWPA 6+6
++                "SITKA SPRUCE" -> assertEquals(s, 12, rs.size)                                  // PLIB 3+3, WWPA 3+3
++                "SOUTHERN PINE" -> assertEquals(s, 9, rs.size)
++                "BALDCYPRESS", "MIXED SOUTHERN PINE", "REDWOOD" -> assertEquals(s, 3, rs.size)
++                else -> assertEquals(s, 6, rs.size)
++            }
++        }
++        assertEquals(setOf("Beams and Stringers", "Posts and Timbers", "5\"x5\" and Larger", "5\" x 5\" and Larger"), t.rows.map { it.sizeClassification }.toSet())
++        assertEquals(3, t.rows.count { it.species == "SOUTHERN PINE" && (it.grade.endsWith("86") || it.grade.endsWith("72") || it.grade.endsWith("65")) })
++    }
++
++    @Test
++    fun `every row is internally consistent`() {
++        for (r in t.rows) {
++            val id = "${r.species} / ${r.grade} / ${r.sizeClassification} / ${r.gradingRulesAgencies}"
++            assertTrue(id, r.eMin in 100_000 until r.e)
++            assertTrue(id, r.fb > 0 && r.ft > 0 && r.fv > 0 && r.fcPerp > 0 && r.fc > 0)
++            assertTrue(id, r.specificGravity in 0.30..0.75)
++            assertTrue(id, r.gradingRulesAgencies.isNotEmpty())
++        }
++        assertEquals(setOf("MIXED SOUTHERN PINE", "SOUTHERN PINE"), t.rows.filter { it.wetServiceValues }.map { it.species }.toSet())
++        // every block has one G
++        for ((k, rs) in t.rows.groupBy { it.species to it.gradingRulesAgencies }) assertEquals(k.toString(), 1, rs.map { it.specificGravity }.toSet().size)
++    }
++
++    private fun check(
++        species: String, grade: String, size: String, agency: String,
++        fb: Int, ft: Int, fv: Int, fcPerp: Int, fc: Int, e: Int, eMin: Int, g: Double
++    ) {
++        val r = t.find(species, grade, size, agency)
++        assertNotNull("$species $grade $size $agency", r)
++        assertEquals("$species $grade $size $agency", listOf(fb, ft, fv, fcPerp, fc, e, eMin), listOf(r!!.fb, r.ft, r.fv, r.fcPerp, r.fc, r.e, r.eMin))
++        assertEquals("$species $grade G", g, r.specificGravity, 0.0)
++    }
++
++    @Test
++    fun `rows read from the printed pages`() {
++        check("ALASKA CEDAR", "Select Structural", bs, "PLIB", 1400, 675, 155, 525, 925, 1_200_000, 440_000, 0.47)
++        check("BALDCYPRESS", "No.2", "5\"x5\" and Larger", "SPIB", 625, 425, 175, 615, 600, 1_000_000, 370_000, 0.43)
++        check("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "Dense No. 1", bs, "PLIB", 1550, 775, 170, 730, 1100, 1_700_000, 620_000, 0.50)
++        check("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "No. 2 Dense", bs, "WWPA", 1000, 500, 170, 730, 700, 1_400_000, 510_000, 0.50)
++        check("DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", "No. 2 Dense", pt, "WWPA", 850, 550, 170, 730, 825, 1_400_000, 510_000, 0.50)
++        check("HEM-FIR", "No.1", pt, "WWPA", 975, 650, 140, 405, 850, 1_300_000, 470_000, 0.43)
++        check("HEM-FIR", "No.1", pt, "PLIB", 975, 650, 140, 405, 850, 1_300_000, 470_000, 0.43)
++        check("MIXED SOUTHERN PINE", "Select Structural", "5\"x5\" and Larger", "SPIB", 1500, 1000, 165, 375, 900, 1_300_000, 470_000, 0.51)
++        check("REDWOOD", "No. 2", "5\" x 5\" and Larger", "RIS", 750, 400, 145, 420, 650, 900_000, 330_000, 0.37)
++        check("SITKA SPRUCE", "No.2", bs, "PLIB", 650, 325, 140, 435, 450, 1_000_000, 370_000, 0.43)
++        check("SITKA SPRUCE", "No.2", bs, "WWPA", 650, 325, 140, 435, 450, 1_100_000, 400_000, 0.43)
++        check("SOUTHERN PINE", "Dense Select Structural 86", "5\" x 5\" and Larger", "SPIB", 2100, 1400, 165, 440, 1300, 1_600_000, 580_000, 0.55)
++        check("SOUTHERN PINE", "No. 2", "5\" x 5\" and Larger", "SPIB", 850, 550, 165, 375, 525, 1_200_000, 440_000, 0.55)
++        check("SPRUCE-PINE-FIR (SOUTH)", "No.2", pt, "NELMA", 475, 325, 125, 335, 425, 1_000_000, 370_000, 0.36)
++        check("WESTERN JUNIPER", "Select Structural", pt, "PLIB", 1300, 675, 115, 770, 350, 500_000, 180_000, 0.42)
++        check("WHITE OAK", "No.2", bs, "NELMA", 750, 375, 205, 800, 475, 800_000, 290_000, 0.73)
++        assertEquals(listOf("PLIB", "WWPA"), t.find("WESTERN WOODS", "No.1", pt, "PLIB")!!.gradingRulesAgencies)
++        assertEquals(listOf("NELMA", "PLIB", "WWPA"), t.find("SPRUCE-PINE-FIR (SOUTH)", "No.1", bs, "WWPA")!!.gradingRulesAgencies)
++    }
++
++    @Test
++    fun `spruce pine conversion factors match footnote 2`() {
++        val c = t.sprucePineConversion
++        assertEquals(listOf(0.78, 0.78, 0.98, 0.73, 0.78, 0.82), listOf(c.fb, c.ft, c.fv, c.fcPerp, c.fc, c.eAndEMin))
++    }
++}
