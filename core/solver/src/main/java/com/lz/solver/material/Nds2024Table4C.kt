@@ -1,0 +1,190 @@
+package com.lz.solver.material
+
+/**
+ * NDS 2024 Supplement, Table 4C: Reference Design Values for Mechanically Graded Dimension Lumber (MSR and MEL),
+ * with the footnote 2 table of specific gravity G, shear parallel to grain Fv and compression perpendicular to grain
+ * Fc-perp by species and E. Values are for normal load duration and dry service conditions, in psi, exactly as
+ * printed (checked by two independent extractions of the PDF that agree on all 76 grade rows and all 36 footnote-2
+ * rows; the species/agency attribution of the footnote-2 table follows the printed merged cells).
+ *
+ * Size classification: the size column of the printed table is ONE merged cell for every MSR and MEL row (the page
+ * geometry has no cell border inside it), reading "2" and less in thickness / 2" and wider" ([SIZE_CLASSIFICATION]).
+ * MSR/MEL designations are NOT unique: five MSR designations are printed twice with different Ft and/or Fc for
+ * different agencies, so rows are looked up by designation AND agency ([find]). Where the printed agency list wrapped
+ * onto the next printed line (2700f-2.2E: "..., SPIB," then "WWPA") the wrapped agency is assigned back to its own row.
+ *
+ * The footnote 2 table is keyed by species name as printed (including the printed spelling "Englemann Spruce-
+ * Lodgepole Pine") and by the printed E range. Its Southern Pine "1.8" row carries the printed asterisk
+ * ([SpeciesRow.footnoteMarked]); the footnote's alternative values are in [SOUTHERN_PINE_1_8E_G055].
+ * Footnote 3 (E and Ft may differ from the "Fb-E" designation when the grade stamp says so) is a design rule, not data.
+ *
+ * The Table 4C Adjustment Factors page (flat use Cfu, repetitive member Cr, wet service CM) is NOT part of this data
+ * and is applied by the design code.
+ *
+ * This is source data only: NDS 2024 stays blocked for design (see [NdsCodeData]) until the design-value lookup,
+ * the 2024 adjustment-factor pages and the species mapping are connected and verified.
+ */
+object Nds2024Table4C {
+
+    const val SIZE_CLASSIFICATION = "2\" and less in thickness, 2\" and wider"
+
+    enum class GradingSystem { MSR, MEL }
+
+    data class Row(
+        val system: GradingSystem,
+        /** Printed grade designation, for example "2250f-1.9E" (MSR) or "M-24" (MEL). */
+        val designation: String,
+        val fb: Int,
+        val ft: Int,
+        val fc: Int,
+        val e: Int,
+        val eMin: Int,
+        val gradingRulesAgencies: List<String>
+    )
+
+    /** Footnote 2 row. Values with a printed asterisk keep their number; see [footnoteMarked]. */
+    data class SpeciesRow(
+        val species: String,
+        /** E range as printed, in millions of psi (for example "1.0 to 1.9", "2.3 & higher"). */
+        val eRange: String,
+        val specificGravity: Double,
+        val fv: Int,
+        val fcPerp: Int,
+        val gradingRulesAgencies: List<String>,
+        val footnoteMarked: Boolean
+    )
+
+    /** Footnote to the asterisk in the Southern Pine 1.8 row: 1.8E marked with G = 0.55 on the grade stamp. */
+    object SOUTHERN_PINE_1_8E_G055 {
+        const val SPECIFIC_GRAVITY = 0.55
+        const val FV = 175
+        const val FC_PERP = 565
+    }
+
+    val rows: List<Row> = listOf(
+        Row(GradingSystem.MSR, "900f-1.0E", 900, 350, 1050, 1000000, 510000, listOf("NELMA", "PLIB", "SPIB", "WWPA")),
+        Row(GradingSystem.MSR, "900f-1.4E", 900, 540, 1050, 1400000, 710000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "1000f-1.4E", 1000, 615, 1450, 1400000, 710000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "1050f-1.2E", 1050, 450, 1225, 1200000, 610000, listOf("SPIB")),
+        Row(GradingSystem.MSR, "1100f-1.4E", 1100, 700, 1500, 1400000, 710000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "1200f-1.2E", 1200, 600, 1400, 1200000, 610000, listOf("NELMA", "NLGA", "PLIB", "WWPA")),
+        Row(GradingSystem.MSR, "1200f-1.3E", 1200, 600, 1400, 1300000, 660000, listOf("SPIB")),
+        Row(GradingSystem.MSR, "1200f-1.4E", 1200, 600, 1400, 1400000, 710000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "1200f-1.5E", 1200, 600, 1525, 1500000, 760000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "1250f-1.4E", 1250, 800, 1475, 1400000, 710000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "1350f-1.3E", 1350, 750, 1600, 1300000, 660000, listOf("NELMA", "NLGA", "PLIB", "WWPA")),
+        Row(GradingSystem.MSR, "1350f-1.4E", 1350, 750, 1600, 1400000, 710000, listOf("PLIB", "SPIB")),
+        Row(GradingSystem.MSR, "1400f-1.2E", 1400, 800, 1600, 1200000, 610000, listOf("NLGA")),
+        Row(GradingSystem.MSR, "1450f-1.3E", 1450, 800, 1625, 1300000, 660000, listOf("NELMA", "NLGA", "PLIB", "WWPA")),
+        Row(GradingSystem.MSR, "1450f-1.3E", 1450, 825, 1600, 1300000, 660000, listOf("SPIB")),
+        Row(GradingSystem.MSR, "1450f-1.5E", 1450, 875, 1625, 1500000, 760000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "1500f-1.4E", 1500, 900, 1650, 1400000, 710000, listOf("NELMA", "NLGA", "PLIB", "WWPA")),
+        Row(GradingSystem.MSR, "1500f-1.5E", 1500, 900, 1650, 1500000, 760000, listOf("SPIB")),
+        Row(GradingSystem.MSR, "1500f-1.6E", 1500, 900, 1650, 1600000, 810000, listOf("SPIB")),
+        Row(GradingSystem.MSR, "1500f-1.7E", 1500, 900, 1650, 1700000, 860000, listOf("SPIB")),
+        Row(GradingSystem.MSR, "1600f-1.4E", 1600, 950, 1675, 1400000, 710000, listOf("NLGA")),
+        Row(GradingSystem.MSR, "1650f-1.3E", 1650, 1020, 1700, 1300000, 660000, listOf("NLGA")),
+        Row(GradingSystem.MSR, "1650f-1.5E", 1650, 1020, 1700, 1500000, 760000, listOf("NELMA", "NLGA", "PLIB", "SPIB", "WWPA")),
+        Row(GradingSystem.MSR, "1650f-1.6E", 1650, 1020, 1700, 1600000, 810000, listOf("SPIB")),
+        Row(GradingSystem.MSR, "1650f-1.6E", 1650, 1175, 1700, 1600000, 810000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "1650f-1.7E", 1650, 1020, 1750, 1700000, 860000, listOf("SPIB")),
+        Row(GradingSystem.MSR, "1700f-1.6E", 1700, 1175, 1725, 1600000, 810000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "1800f-1.5E", 1800, 1300, 1750, 1500000, 760000, listOf("NLGA")),
+        Row(GradingSystem.MSR, "1800f-1.6E", 1800, 1175, 1750, 1600000, 810000, listOf("NELMA", "NLGA", "PLIB", "SPIB", "WWPA")),
+        Row(GradingSystem.MSR, "1800f-1.8E", 1800, 1200, 1750, 1800000, 910000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "1800f-2.0E", 1800, 1175, 1750, 2000000, 1020000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "1850f-1.7E", 1850, 1175, 1850, 1700000, 860000, listOf("SPIB")),
+        Row(GradingSystem.MSR, "1950f-1.7E", 1950, 1375, 1800, 1700000, 860000, listOf("NELMA", "NLGA", "PLIB", "SPIB", "WWPA")),
+        Row(GradingSystem.MSR, "1950f-1.9E", 1950, 900, 1825, 1900000, 970000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "1950f-1.9E", 1950, 1375, 1825, 1900000, 970000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "2000f-1.6E", 2000, 1300, 1825, 1600000, 810000, listOf("NLGA")),
+        Row(GradingSystem.MSR, "2100f-1.8E", 2100, 1575, 1875, 1800000, 910000, listOf("NELMA", "NLGA", "PLIB", "SPIB", "WWPA")),
+        Row(GradingSystem.MSR, "2250f-1.7E", 2250, 1750, 1925, 1700000, 860000, listOf("NLGA")),
+        Row(GradingSystem.MSR, "2250f-1.8E", 2250, 1750, 1925, 1800000, 910000, listOf("NLGA", "PLIB")),
+        Row(GradingSystem.MSR, "2250f-1.9E", 2250, 1750, 1925, 1900000, 970000, listOf("NELMA", "NLGA", "PLIB", "SPIB", "WWPA")),
+        Row(GradingSystem.MSR, "2250f-2.0E", 2250, 1600, 1925, 2000000, 1020000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "2250f-2.0E", 2250, 1750, 1925, 2000000, 1020000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "2400f-1.8E", 2400, 1925, 1975, 1800000, 910000, listOf("NLGA")),
+        Row(GradingSystem.MSR, "2400f-2.0E", 2400, 1925, 1975, 2000000, 1020000, listOf("NELMA", "NLGA", "PLIB", "SPIB", "WWPA")),
+        Row(GradingSystem.MSR, "2500f-2.2E", 2500, 1750, 2000, 2200000, 1120000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "2500f-2.2E", 2500, 1925, 2000, 2200000, 1120000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "2550f-2.1E", 2550, 2050, 2025, 2100000, 1070000, listOf("NELMA", "NLGA", "PLIB", "SPIB", "WWPA")),
+        Row(GradingSystem.MSR, "2700f-2.0E", 2700, 1800, 2100, 2000000, 1020000, listOf("PLIB")),
+        Row(GradingSystem.MSR, "2700f-2.2E", 2700, 2150, 2100, 2200000, 1120000, listOf("NELMA", "NLGA", "PLIB", "SPIB", "WWPA")),
+        Row(GradingSystem.MSR, "2850f-1.8E", 2850, 1600, 2100, 1800000, 910000, listOf("SPIB")),
+        Row(GradingSystem.MSR, "2850f-2.0E", 2850, 1925, 2100, 2000000, 1020000, listOf("SPIB")),
+        Row(GradingSystem.MSR, "2850f-2.3E", 2850, 2300, 2150, 2300000, 1170000, listOf("NELMA", "NLGA", "PLIB", "SPIB", "WWPA")),
+        Row(GradingSystem.MSR, "3000f-2.4E", 3000, 2400, 2200, 2400000, 1220000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-5", 900, 500, 1050, 1100000, 510000, listOf("SPIB")),
+        Row(GradingSystem.MEL, "M-6", 1100, 600, 1300, 1000000, 470000, listOf("SPIB")),
+        Row(GradingSystem.MEL, "M-7", 1200, 650, 1400, 1100000, 510000, listOf("SPIB")),
+        Row(GradingSystem.MEL, "M-8", 1300, 700, 1500, 1300000, 610000, listOf("SPIB")),
+        Row(GradingSystem.MEL, "M-9", 1400, 800, 1600, 1400000, 650000, listOf("SPIB")),
+        Row(GradingSystem.MEL, "M-10", 1400, 800, 1600, 1200000, 560000, listOf("NLGA")),
+        Row(GradingSystem.MEL, "M-11", 1550, 850, 1675, 1500000, 700000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-12", 1600, 850, 1675, 1600000, 750000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-13", 1600, 950, 1675, 1400000, 650000, listOf("NLGA")),
+        Row(GradingSystem.MEL, "M-14", 1800, 1000, 1750, 1700000, 790000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-15", 1800, 1100, 1750, 1500000, 700000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-18", 2000, 1200, 1825, 1800000, 840000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-19", 2000, 1300, 1825, 1600000, 750000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-21", 2300, 1400, 1950, 1900000, 890000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-22", 2350, 1500, 1950, 1700000, 790000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-23", 2400, 1900, 1975, 1800000, 840000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-24", 2700, 1800, 2100, 1900000, 890000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-25", 2750, 2000, 2100, 2200000, 1030000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-26", 2800, 1800, 2150, 2000000, 930000, listOf("NLGA", "SPIB")),
+        Row(GradingSystem.MEL, "M-28", 2200, 1600, 1900, 1700000, 790000, listOf("SPIB")),
+        Row(GradingSystem.MEL, "M-29", 1550, 850, 1650, 1700000, 790000, listOf("SPIB")),
+        Row(GradingSystem.MEL, "M-30", 2050, 1050, 1850, 1700000, 790000, listOf("SPIB")),
+        Row(GradingSystem.MEL, "M-31", 2850, 1600, 2150, 1900000, 890000, listOf("SPIB")),
+    )
+
+    val speciesRows: List<SpeciesRow> = listOf(
+        SpeciesRow("Douglas Fir-Larch", "1.0 to 1.9", 0.50, 180, 625, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Douglas Fir-Larch", "2.0", 0.51, 180, 670, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Douglas Fir-Larch", "2.1", 0.52, 180, 690, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Douglas Fir-Larch", "2.2", 0.53, 180, 715, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Douglas Fir-Larch", "2.3", 0.54, 185, 735, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Douglas Fir-Larch", "2.4", 0.55, 185, 760, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Douglas Fir-Larch (N)", "1.2 to 1.9", 0.49, 180, 625, listOf("NLGA"), footnoteMarked = false),
+        SpeciesRow("Douglas Fir-Larch (N)", "2.0 to 2.2", 0.53, 180, 715, listOf("NLGA"), footnoteMarked = false),
+        SpeciesRow("Douglas Fir-Larch (N)", "2.3 & higher", 0.57, 190, 715, listOf("NLGA"), footnoteMarked = false),
+        SpeciesRow("Douglas Fir-South", "1.0 and higher", 0.46, 180, 520, listOf("WWPA"), footnoteMarked = false),
+        SpeciesRow("Englemann Spruce- Lodgepole Pine", "1.0 and higher", 0.38, 135, 335, listOf("WWPA"), footnoteMarked = false),
+        SpeciesRow("Englemann Spruce- Lodgepole Pine", "1.5 and higher", 0.46, 160, 555, listOf("WWPA"), footnoteMarked = false),
+        SpeciesRow("Hem-Fir", "1.0 to 1.5", 0.43, 150, 405, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Hem-Fir", "1.6", 0.44, 155, 510, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Hem-Fir", "1.7", 0.45, 160, 535, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Hem-Fir", "1.8", 0.46, 160, 555, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Hem-Fir", "1.9", 0.47, 165, 580, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Hem-Fir", "2.0", 0.48, 170, 600, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Hem-Fir", "2.1", 0.49, 170, 625, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Hem-Fir", "2.2", 0.50, 175, 645, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Hem-Fir", "2.3", 0.51, 175, 670, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Hem-Fir", "2.4", 0.52, 180, 690, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Hem-Fir (N)", "1.0 and higher", 0.46, 145, 405, listOf("NLGA"), footnoteMarked = false),
+        SpeciesRow("Southern Pine", "1.0 to 1.7", 0.55, 175, 565, listOf("SPIB"), footnoteMarked = false),
+        SpeciesRow("Southern Pine", "1.8", 0.57, 190, 805, listOf("SPIB"), footnoteMarked = true),
+        SpeciesRow("Southern Pine", "1.9 and higher", 0.57, 190, 805, listOf("SPIB"), footnoteMarked = false),
+        SpeciesRow("Spruce-Pine-Fir", "1.2 to 1.7", 0.42, 135, 425, listOf("NLGA"), footnoteMarked = false),
+        SpeciesRow("Spruce-Pine-Fir", "1.8 to 1.9", 0.46, 160, 525, listOf("NLGA"), footnoteMarked = false),
+        SpeciesRow("Spruce-Pine-Fir", "2.0 and higher", 0.50, 170, 615, listOf("NLGA"), footnoteMarked = false),
+        SpeciesRow("Spruce-Pine-Fir (S)", "1.0 to 1.1", 0.36, 135, 335, listOf("NELMA", "PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Spruce-Pine-Fir (S)", "1.2 to 1.9", 0.42, 150, 465, listOf("NELMA"), footnoteMarked = false),
+        SpeciesRow("Spruce-Pine-Fir (S)", "1.2 to 1.7", 0.42, 150, 465, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Spruce-Pine-Fir (S)", "1.8 to 1.9", 0.46, 160, 555, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Spruce-Pine-Fir (S)", "2.0 and higher", 0.50, 175, 645, listOf("NELMA", "PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Western Cedars", "1.0 and higher", 0.36, 155, 425, listOf("PLIB", "WWPA"), footnoteMarked = false),
+        SpeciesRow("Western Woods", "1.0 and higher", 0.36, 135, 335, listOf("PLIB", "WWPA"), footnoteMarked = false),
+    )
+
+    val msrRows: List<Row> get() = rows.filter { it.system == GradingSystem.MSR }
+    val melRows: List<Row> get() = rows.filter { it.system == GradingSystem.MEL }
+
+    fun find(designation: String, agency: String): Row? =
+        rows.firstOrNull { it.designation == designation && agency in it.gradingRulesAgencies }
+
+    /** All printed rows for a designation (several for the five designations printed twice). */
+    fun findAll(designation: String): List<Row> = rows.filter { it.designation == designation }
+}
