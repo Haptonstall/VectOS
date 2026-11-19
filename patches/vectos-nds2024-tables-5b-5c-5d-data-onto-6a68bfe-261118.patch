@@ -1,0 +1,436 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/material/Nds2024Table5B.kt b/core/solver/src/main/java/com/lz/solver/material/Nds2024Table5B.kt
+new file mode 100644
+index 0000000..50dafde
+--- /dev/null
++++ b/core/solver/src/main/java/com/lz/solver/material/Nds2024Table5B.kt
+@@ -0,0 +1,102 @@
++package com.lz.solver.material
++
++/**
++ * NDS 2024 Supplement, Table 5B: Reference Design Values for Structural Glued Laminated Softwood Timber (members
++ * stressed primarily in axial tension or compression, or in bending with loads parallel to the wide faces; Table 5A
++ * directs 2 and 3 lamination members to this table). Values are
++ * for normal load duration and dry service, as printed (psi, and 10^6 psi for the moduli). The table is printed on
++ * one page (84) as two sections, "Visually Graded Western Species" (17 combinations) and "Visually Graded Southern
++ * Pine" (13). Extracted from the PDF's positioned words (the page is printed rotated) and independently from the text
++ * layout; both agree on all 30 rows. Column qualifiers are exactly those printed in the header, checked against the
++ * column positions: Ft is for 2 or more laminations; Fc is printed twice, for 4 or more laminations and for 2 or 3
++ * laminations; Fby is printed three times (4 or more, 3 and 2 laminations); Fvy has no lamination qualifier in the
++ * header (footnotes 1 and 2 reduce it for 2 or 3 laminations and for unbonded multi-piece laminations); Fbx is
++ * printed for "2 Laminations to 15 in. Deep" (footnote 4: for members deeper than 15 in. Fbx is multiplied by 0.88).
++ *
++ * Footnotes as printed (paraphrased), none of them applied by the data: 1. Fvy x 0.84 (2 laminations) or 0.95 (3
++ * laminations); 2. Fvy x 0.4 for 5, 7 or 9 laminations of multiple piece laminations that are not edge bonded, x 0.5
++ * for other multiple piece laminations with unbonded edge joints, cumulative with 1 and 3; 3. Fvx and Fvy are
++ * multiplied by the shear reduction factor Cvr of NDS 5.3.10; 4. Fbx x 0.88 over 15 in. deep; 5. (printed on
++ * combination 22, Softwood Species SW) when Western Cedars, Western Cedars (North), Western Woods and Redwood (open
++ * grain) are used in SW combinations E is reduced by 100,000 psi and Emin by 52,800 psi, and when Coast Sitka Spruce,
++ * Coast Species, Western White Pine and Eastern White Pine are used Fvx and Fvy are reduced by 10 psi, before any
++ * other adjustment; 6. Etrue is the shear-free modulus for deflection when shear deflection is considered
++ * separately; 7. E is the apparent modulus used for beam deflection; 8. Emin is for beam and column stability.
++ * The only footnote marker printed on a row is (5) on combination 22 ([Row.markers]).
++ *
++ * [Row.symbol] is kept as printed, including the two-part Southern Pine symbols such as "47 1:10" (the second part is
++ * printed on a second line under the number). Species codes are as printed (DF, HF, SW, AC, POC, SP) and are not
++ * expanded here because these pages do not define them.
++ *
++ * The Table 5B Adjustment Factors page (volume factor CV with x = 20 for Southern Pine and x = 10 otherwise, flat use
++ * Cfu, wet service CM) is NOT part of this data. This is source data only: NDS 2024 stays blocked for design (see
++ * [NdsCodeData]) until the design-value lookup, the 2024 adjustment-factor pages and the species mapping are
++ * connected and verified.
++ */
++object Nds2024Table5B {
++
++    data class Marker(val column: String, val footnotes: List<Int>)
++
++    data class Row(
++        val symbol: String,
++        val species: String,
++        val grade: String,
++        /** Printed section heading the row sits under. */
++        val section: String,
++        val eTrue: Double, val e: Double, val eMin: Double,
++        val fcPerp: Int,
++        /** Tension parallel to grain, 2 or more laminations. */
++        val ft: Int,
++        /** Compression parallel to grain, 4 or more laminations. */
++        val fcLam4Plus: Int,
++        /** Compression parallel to grain, 2 or 3 laminations. */
++        val fcLam2or3: Int,
++        /** Bending about the y-y axis, 4 or more laminations. */
++        val fbyLam4Plus: Int,
++        val fbyLam3: Int,
++        val fbyLam2: Int,
++        /** Shear parallel to grain, y-y axis (no lamination qualifier is printed in the header; footnotes 1 to 3). */
++        val fvy: Int,
++        /** Bending about the x-x axis, printed for "2 Laminations to 15 in. Deep" (footnote 4 above 15 in.). */
++        val fbxLam2To15InDeep: Int,
++        val fvx: Int,
++        val specificGravity: Double,
++        val markers: List<Marker>
++    )
++
++    val rows: List<Row> = listOf(
++        Row("1", "DF", "L3", "Visually Graded Western Species", 1.6, 1.5, 0.79, 560, 950, 1550, 1250, 1450, 1250, 1000, 230, 1250, 265, 0.5, emptyList()),
++        Row("2", "DF", "L2", "Visually Graded Western Species", 1.7, 1.6, 0.85, 560, 1250, 1950, 1600, 1800, 1600, 1300, 230, 1700, 265, 0.5, emptyList()),
++        Row("3", "DF", "L2D", "Visually Graded Western Species", 2.0, 1.9, 1.0, 650, 1450, 2300, 1900, 2100, 1850, 1550, 230, 2000, 265, 0.5, emptyList()),
++        Row("4", "DF", "L1CL", "Visually Graded Western Species", 2.0, 1.9, 1.0, 590, 1400, 2100, 1950, 2200, 2000, 1650, 230, 2100, 265, 0.5, emptyList()),
++        Row("5", "DF", "L1", "Visually Graded Western Species", 2.1, 2.0, 1.06, 650, 1650, 2400, 2100, 2400, 2100, 1800, 230, 2200, 265, 0.5, emptyList()),
++        Row("14", "HF", "L3", "Visually Graded Western Species", 1.4, 1.3, 0.69, 375, 800, 1100, 1050, 1200, 1050, 850, 190, 1100, 215, 0.43, emptyList()),
++        Row("15", "HF", "L2", "Visually Graded Western Species", 1.5, 1.4, 0.74, 375, 1050, 1350, 1350, 1500, 1350, 1100, 190, 1450, 215, 0.43, emptyList()),
++        Row("16", "HF", "L1", "Visually Graded Western Species", 1.7, 1.6, 0.85, 375, 1200, 1500, 1500, 1750, 1550, 1300, 190, 1600, 215, 0.43, emptyList()),
++        Row("17", "HF", "L1D", "Visually Graded Western Species", 1.8, 1.7, 0.9, 500, 1400, 1750, 1750, 2000, 1850, 1550, 190, 1900, 215, 0.43, emptyList()),
++        Row("22", "SW", "L3", "Visually Graded Western Species", 1.1, 1.0, 0.53, 315, 525, 850, 725, 800, 700, 575, 170, 725, 195, 0.35, listOf(Marker("label", listOf(5)))),
++        Row("69", "AC", "L3", "Visually Graded Western Species", 1.3, 1.2, 0.63, 470, 725, 1150, 1100, 1100, 975, 775, 230, 1000, 265, 0.46, emptyList()),
++        Row("70", "AC", "L2", "Visually Graded Western Species", 1.4, 1.3, 0.69, 470, 975, 1450, 1450, 1400, 1250, 1000, 230, 1350, 265, 0.46, emptyList()),
++        Row("71", "AC", "L1D", "Visually Graded Western Species", 1.7, 1.6, 0.85, 560, 1250, 1900, 1900, 1850, 1650, 1400, 230, 1750, 265, 0.46, emptyList()),
++        Row("72", "AC", "L1S", "Visually Graded Western Species", 1.7, 1.6, 0.85, 560, 1250, 1900, 1900, 1850, 1650, 1400, 230, 1900, 265, 0.46, emptyList()),
++        Row("73", "POC", "L3", "Visually Graded Western Species", 1.4, 1.3, 0.69, 470, 775, 1500, 1200, 1200, 1050, 825, 230, 1050, 265, 0.46, emptyList()),
++        Row("74", "POC", "L2", "Visually Graded Western Species", 1.5, 1.4, 0.74, 470, 1050, 1900, 1550, 1450, 1300, 1100, 230, 1400, 265, 0.46, emptyList()),
++        Row("75", "POC", "L1D", "Visually Graded Western Species", 1.8, 1.7, 0.9, 560, 1350, 2300, 2050, 1950, 1750, 1500, 230, 1850, 265, 0.46, emptyList()),
++        Row("47", "SP", "N2M12", "Visually Graded Southern Pine", 1.5, 1.4, 0.74, 650, 1200, 1900, 1150, 1750, 1550, 1300, 260, 1400, 300, 0.55, emptyList()),
++        Row("47 1:10", "SP", "N2M10", "Visually Graded Southern Pine", 1.5, 1.4, 0.74, 650, 1150, 1700, 1150, 1750, 1550, 1300, 260, 1400, 300, 0.55, emptyList()),
++        Row("47 1:8", "SP", "N2M", "Visually Graded Southern Pine", 1.5, 1.4, 0.74, 650, 1000, 1500, 1150, 1600, 1550, 1300, 260, 1400, 300, 0.55, emptyList()),
++        Row("48", "SP", "N2D12", "Visually Graded Southern Pine", 1.8, 1.7, 0.9, 740, 1400, 2200, 1350, 2000, 1800, 1500, 260, 1600, 300, 0.55, emptyList()),
++        Row("48 1:10", "SP", "N2D10", "Visually Graded Southern Pine", 1.8, 1.7, 0.9, 740, 1350, 2000, 1350, 2000, 1800, 1500, 260, 1600, 300, 0.55, emptyList()),
++        Row("48 1:8", "SP", "N2D", "Visually Graded Southern Pine", 1.8, 1.7, 0.9, 740, 1150, 1750, 1350, 1850, 1800, 1500, 260, 1600, 300, 0.55, emptyList()),
++        Row("49", "SP", "N1M16", "Visually Graded Southern Pine", 1.8, 1.7, 0.9, 650, 1350, 2100, 1450, 1950, 1750, 1500, 260, 1800, 300, 0.55, emptyList()),
++        Row("49 1:14", "SP", "N1M14", "Visually Graded Southern Pine", 1.8, 1.7, 0.9, 650, 1350, 2000, 1450, 1950, 1750, 1500, 260, 1800, 300, 0.55, emptyList()),
++        Row("49 1:12", "SP", "N1M12", "Visually Graded Southern Pine", 1.8, 1.7, 0.9, 650, 1300, 1900, 1450, 1950, 1750, 1500, 260, 1800, 300, 0.55, emptyList()),
++        Row("49 1:10", "SP", "N1M", "Visually Graded Southern Pine", 1.8, 1.7, 0.9, 650, 1150, 1700, 1450, 1850, 1750, 1500, 260, 1800, 300, 0.55, emptyList()),
++        Row("50", "SP", "N1D14", "Visually Graded Southern Pine", 2.0, 1.9, 1.0, 740, 1550, 2300, 1700, 2300, 2100, 1750, 260, 2100, 300, 0.55, emptyList()),
++        Row("50 1:12", "SP", "N1D12", "Visually Graded Southern Pine", 2.0, 1.9, 1.0, 740, 1500, 2200, 1700, 2300, 2100, 1750, 260, 2100, 300, 0.55, emptyList()),
++        Row("50 1:10", "SP", "N1D", "Visually Graded Southern Pine", 2.0, 1.9, 1.0, 740, 1350, 2000, 1700, 2100, 2100, 1750, 260, 2100, 300, 0.55, emptyList()),
++    )
++
++    /** The symbol is not unique across sections only if printed so; it is unique in this table. */
++    fun find(symbol: String): Row? = rows.firstOrNull { it.symbol == symbol }
++}
+diff --git a/core/solver/src/main/java/com/lz/solver/material/Nds2024Table5C.kt b/core/solver/src/main/java/com/lz/solver/material/Nds2024Table5C.kt
+new file mode 100644
+index 0000000..d431e18
+--- /dev/null
++++ b/core/solver/src/main/java/com/lz/solver/material/Nds2024Table5C.kt
+@@ -0,0 +1,74 @@
++package com.lz.solver.material
++
++/**
++ * NDS 2024 Supplement, Table 5C: Reference Design Values for Structural Glued Laminated Hardwood Timber (members
++ * stressed primarily in bending; for members of 4 or more laminations). Values are for normal load duration and dry
++ * service, as printed (psi, and 10^6 psi for E). Two printed sections: "Visually Graded Hardwoods" (12 combinations) and
++ * "E-Rated Hardwoods" (9). Extracted from the PDF's positioned words (the page is printed rotated) and independently
++ * from the text layout; both agree on all 21 rows.
++ *
++ * Column meaning as printed: Fbx+ bending about x-x with the bottom of the beam stressed in tension (positive
++ * bending), Fbx- with the top in tension (negative bending); [Row.fcx] and [Row.fcy] are compression perpendicular to
++ * grain for x-x and y-y bending (printed Fcx, Fcy; values are tabulated for loading both perpendicular and parallel
++ * to the wide faces); [Row.fvx] and [Row.fvy] shear parallel to grain (printed with the
++ * header "(Horizontal)"); Ex and Ey are for deflection, Ex min and Ey min for stability; Ft and Fc are axial.
++ * Unlike Tables 5A and 5B there is no shear-free (true) modulus column.
++ *
++ * Footnotes as printed (paraphrased): 1. the combinations apply to members of 4 or more laminations and are intended
++ * for bending with loads perpendicular to the wide faces; Table 5D gives combinations for axial members, for
++ * loading parallel to the wide faces and for 2 or 3 laminations; 2. the values apply to timbers with
++ * laminations of a single piece across the width or edge-bonded pieces; for unbonded multiple piece laminations
++ * multiply by 0.4 (5, 7 or 9 laminations) or 0.5 (other members); 3. (on the fastener specific gravity) the values
++ * are for the group of hardwood species permitted in the combination; the actual species' value may be used when
++ * known. The data does not apply these.
++ *
++ * [Row.speciesCode] is the code printed after the symbol on three E-rated rows (24F-E3 "YP", 24F-E4 "RM", 24F-E5
++ * "RO"); these pages do not define the codes and they are not expanded here.
++ *
++ * The Table 5C Adjustment Factors page (volume factor CV with x = 10, flat use Cfu, wet service CM) is NOT part of
++ * this data. This is source data only: NDS 2024 stays blocked for design (see [NdsCodeData]) until the design-value
++ * lookup, the 2024 adjustment-factor pages and the species mapping are connected and verified.
++ */
++object Nds2024Table5C {
++
++    data class Marker(val column: String, val footnotes: List<Int>)
++
++    data class Row(
++        val symbol: String,
++        val speciesCode: String?,
++        val section: String,
++        val fbxPos: Int, val fbxNeg: Int, val fcx: Int, val fvx: Int,
++        val ex: Double, val exMin: Double,
++        val fby: Int, val fcy: Int, val fvy: Int,
++        val ey: Double, val eyMin: Double,
++        val ft: Int, val fc: Int,
++        val specificGravity: Double,
++        val markers: List<Marker>
++    )
++
++    val rows: List<Row> = listOf(
++        Row("12F-V1", null, "Visually Graded Hardwoods", 1200, 600, 285, 125, 1.2, 0.63, 1050, 285, 110, 1.0, 0.53, 600, 800, 0.39, emptyList()),
++        Row("12F-V2", null, "Visually Graded Hardwoods", 1200, 1200, 285, 125, 1.2, 0.63, 1050, 285, 110, 1.1, 0.58, 625, 860, 0.39, emptyList()),
++        Row("14F-V1", null, "Visually Graded Hardwoods", 1400, 700, 405, 155, 1.3, 0.69, 1250, 405, 135, 1.1, 0.58, 700, 950, 0.45, emptyList()),
++        Row("14F-V2", null, "Visually Graded Hardwoods", 1400, 700, 590, 180, 1.3, 0.69, 1450, 590, 160, 1.1, 0.58, 750, 1200, 0.53, emptyList()),
++        Row("14F-V3", null, "Visually Graded Hardwoods", 1400, 1400, 405, 155, 1.3, 0.69, 1250, 405, 135, 1.1, 0.58, 725, 950, 0.45, emptyList()),
++        Row("14F-V4", null, "Visually Graded Hardwoods", 1400, 1400, 590, 180, 1.3, 0.69, 1450, 590, 160, 1.1, 0.58, 775, 1200, 0.53, emptyList()),
++        Row("16F-V1", null, "Visually Graded Hardwoods", 1600, 800, 590, 180, 1.4, 0.74, 1400, 590, 160, 1.2, 0.63, 800, 1200, 0.53, emptyList()),
++        Row("16F-V2", null, "Visually Graded Hardwoods", 1600, 800, 835, 200, 1.5, 0.79, 1700, 835, 175, 1.3, 0.69, 875, 1250, 0.63, emptyList()),
++        Row("16F-V3", null, "Visually Graded Hardwoods", 1600, 1600, 590, 180, 1.4, 0.74, 1400, 590, 160, 1.2, 0.63, 850, 1200, 0.53, emptyList()),
++        Row("16F-V4", null, "Visually Graded Hardwoods", 1600, 1600, 835, 200, 1.6, 0.85, 1700, 835, 175, 1.3, 0.69, 900, 1300, 0.63, emptyList()),
++        Row("20F-V1", null, "Visually Graded Hardwoods", 2000, 1000, 835, 200, 1.7, 0.9, 1700, 835, 175, 1.4, 0.74, 975, 1400, 0.63, emptyList()),
++        Row("20F-V2", null, "Visually Graded Hardwoods", 2000, 2000, 835, 200, 1.7, 0.9, 1700, 835, 175, 1.4, 0.74, 1000, 1400, 0.63, emptyList()),
++        Row("16F-E1", null, "E-Rated Hardwoods", 1600, 800, 440, 125, 1.4, 0.74, 1250, 285, 110, 1.2, 0.63, 825, 975, 0.39, emptyList()),
++        Row("16F-E2", null, "E-Rated Hardwoods", 1600, 1600, 440, 125, 1.4, 0.74, 1400, 285, 110, 1.2, 0.63, 900, 1000, 0.39, emptyList()),
++        Row("20F-E1", null, "E-Rated Hardwoods", 2000, 1000, 590, 155, 1.6, 0.85, 1350, 405, 135, 1.3, 0.69, 950, 1050, 0.45, emptyList()),
++        Row("20F-E2", null, "E-Rated Hardwoods", 2000, 2000, 590, 155, 1.6, 0.85, 1600, 405, 135, 1.3, 0.69, 1050, 1100, 0.45, emptyList()),
++        Row("24F-E1", null, "E-Rated Hardwoods", 2400, 1200, 770, 180, 1.8, 0.95, 1550, 590, 160, 1.5, 0.79, 1050, 1400, 0.53, emptyList()),
++        Row("24F-E2", null, "E-Rated Hardwoods", 2400, 2400, 770, 180, 1.8, 0.95, 1650, 590, 160, 1.5, 0.79, 1050, 1400, 0.53, emptyList()),
++        Row("24F-E3", "YP", "E-Rated Hardwoods", 2400, 1200, 590, 155, 1.8, 0.95, 1450, 405, 135, 1.5, 0.79, 975, 1200, 0.45, emptyList()),
++        Row("24F-E4", "RM", "E-Rated Hardwoods", 2400, 1200, 895, 220, 1.8, 0.95, 1650, 710, 195, 1.6, 0.85, 1050, 1350, 0.53, emptyList()),
++        Row("24F-E5", "RO", "E-Rated Hardwoods", 2400, 1200, 1075, 235, 1.8, 0.95, 1700, 900, 205, 1.5, 0.79, 1100, 1450, 0.63, emptyList()),
++    )
++
++    fun find(symbol: String): Row? = rows.firstOrNull { it.symbol == symbol }
++}
+diff --git a/core/solver/src/main/java/com/lz/solver/material/Nds2024Table5D.kt b/core/solver/src/main/java/com/lz/solver/material/Nds2024Table5D.kt
+new file mode 100644
+index 0000000..2ac7933
+--- /dev/null
++++ b/core/solver/src/main/java/com/lz/solver/material/Nds2024Table5D.kt
+@@ -0,0 +1,94 @@
++package com.lz.solver.material
++
++/**
++ * NDS 2024 Supplement, Table 5D: Reference Design Values for Structural Glued Laminated Hardwood Timber (members
++ * stressed primarily in axial tension or compression, or in bending with loads parallel to the wide faces; Table 5C
++ * directs members of 2 or 3 laminations to this table). Values are for normal load duration and dry service, as printed (psi, and 10^6 psi for
++ * E). Two printed sections: "Visually Graded Hardwoods" (H1-H16, grades N3, N2, N1, SS) and "E-Rated Hardwoods"
++ * (H17-H37, grades such as 1.5E3 and 2.0E6), with species groups A to D. The groups and the E-rated grade codes are
++ * not defined on these pages and are kept as printed. Extracted from the PDF's positioned words (the pages are printed
++ * rotated) and independently from the text layout; both agree on all 37 rows.
++ *
++ * Column qualifiers are those printed in the header, checked against the column positions: Ft is for 2 or more
++ * laminations; Fc is printed for 4 or more laminations and for 2 or 3 laminations; Fby for 4 or more, 3 and 2
++ * laminations; Fvy for 4 or more laminations; Fbx is printed for "2 Laminations to 15 in. Deep". There is a single E
++ * and Emin (no separate shear-free modulus column).
++ *
++ * Footnotes as printed (paraphrased), not applied by the data: 1. Fvy x 0.84 (2 laminations) or 0.95 (3
++ * laminations); 2. Fvy x 0.4 for 5, 7 or 9 laminations of multiple piece laminations that are not edge bonded, x 0.5 for
++ * other multiple piece laminations with unbonded edge joints, cumulative with 1; 3. Fbx x 0.88 for members deeper
++ * than 15 in. No footnote marker is printed on any row.
++ *
++ * The Table 5D Adjustment Factors page (volume factor CV with x = 10, flat use Cfu, wet service CM) is NOT part of
++ * this data. This is source data only: NDS 2024 stays blocked for design (see [NdsCodeData]) until the design-value
++ * lookup, the 2024 adjustment-factor pages and the species mapping are connected and verified.
++ */
++object Nds2024Table5D {
++
++    data class Row(
++        val symbol: String,
++        val speciesGroup: String,
++        val grade: String,
++        val section: String,
++        val e: Double, val eMin: Double,
++        val fcPerp: Int,
++        /** Tension parallel to grain, 2 or more laminations. */
++        val ft: Int,
++        /** Compression parallel to grain, 4 or more laminations. */
++        val fcLam4Plus: Int,
++        /** Compression parallel to grain, 2 or 3 laminations. */
++        val fcLam2or3: Int,
++        val fbyLam4Plus: Int,
++        val fbyLam3: Int,
++        val fbyLam2: Int,
++        /** Shear parallel to grain, y-y axis, printed for 4 or more laminations (footnotes 1 and 2 adjust it). */
++        val fvy: Int,
++        /** Bending about the x-x axis, printed for "2 Laminations to 15 in. Deep" (footnote 3 above 15 in.). */
++        val fbxLam2To15InDeep: Int,
++        val fvx: Int,
++        val specificGravity: Double,
++        val markers: List<Nds2024Table5B.Marker>
++    )
++
++    val rows: List<Row> = listOf(
++        Row("H1", "A", "N3", "Visually Graded Hardwoods", 1.3, 0.67, 835, 425, 900, 900, 1250, 1100, 875, 175, 925, 200, 0.63, emptyList()),
++        Row("H2", "A", "N2", "Visually Graded Hardwoods", 1.5, 0.78, 835, 875, 1300, 1300, 1700, 1550, 1300, 175, 1200, 200, 0.63, emptyList()),
++        Row("H3", "A", "N1", "Visually Graded Hardwoods", 1.7, 0.88, 835, 1000, 1450, 1450, 2000, 1800, 1550, 175, 1600, 200, 0.63, emptyList()),
++        Row("H4", "A", "SS", "Visually Graded Hardwoods", 1.7, 0.88, 835, 1150, 1600, 1600, 2000, 1850, 1600, 175, 1700, 200, 0.63, emptyList()),
++        Row("H5", "B", "N3", "Visually Graded Hardwoods", 1.2, 0.62, 590, 350, 800, 800, 1050, 900, 750, 160, 750, 180, 0.53, emptyList()),
++        Row("H6", "B", "N2", "Visually Graded Hardwoods", 1.3, 0.67, 590, 750, 1150, 1150, 1450, 1300, 1050, 160, 1000, 180, 0.53, emptyList()),
++        Row("H7", "B", "N1", "Visually Graded Hardwoods", 1.5, 0.78, 590, 850, 1300, 1300, 1650, 1500, 1300, 160, 1350, 180, 0.53, emptyList()),
++        Row("H8", "B", "SS", "Visually Graded Hardwoods", 1.5, 0.78, 590, 950, 1450, 1450, 1700, 1550, 1350, 160, 1400, 180, 0.53, emptyList()),
++        Row("H9", "C", "N3", "Visually Graded Hardwoods", 1.0, 0.52, 405, 300, 625, 625, 900, 800, 625, 135, 675, 155, 0.45, emptyList()),
++        Row("H10", "C", "N2", "Visually Graded Hardwoods", 1.2, 0.62, 405, 625, 900, 900, 1200, 1100, 925, 135, 875, 155, 0.45, emptyList()),
++        Row("H11", "C", "N1", "Visually Graded Hardwoods", 1.3, 0.67, 405, 725, 1000, 1000, 1400, 1300, 1100, 135, 1150, 155, 0.45, emptyList()),
++        Row("H12", "C", "SS", "Visually Graded Hardwoods", 1.3, 0.67, 405, 825, 1100, 1100, 1450, 1350, 1150, 135, 1200, 155, 0.45, emptyList()),
++        Row("H13", "D", "N3", "Visually Graded Hardwoods", 0.9, 0.47, 285, 250, 575, 575, 775, 675, 550, 110, 575, 125, 0.39, emptyList()),
++        Row("H14", "D", "N2", "Visually Graded Hardwoods", 1.1, 0.57, 285, 550, 825, 825, 1050, 950, 800, 110, 750, 125, 0.39, emptyList()),
++        Row("H15", "D", "N1", "Visually Graded Hardwoods", 1.2, 0.62, 285, 625, 925, 925, 1200, 1100, 950, 110, 1000, 125, 0.39, emptyList()),
++        Row("H16", "D", "SS", "Visually Graded Hardwoods", 1.2, 0.62, 285, 700, 1050, 1050, 1250, 1150, 1000, 110, 1050, 125, 0.39, emptyList()),
++        Row("H17", "A", "1.5E3", "E-Rated Hardwoods", 1.4, 0.73, 1015, 1000, 1500, 1350, 1850, 1750, 1550, 175, 1200, 200, 0.63, emptyList()),
++        Row("H18", "A", "1.8E3", "E-Rated Hardwoods", 1.7, 0.88, 1015, 1150, 1950, 1850, 2100, 2000, 1750, 175, 1450, 200, 0.63, emptyList()),
++        Row("H19", "A", "1.8E6", "E-Rated Hardwoods", 1.7, 0.88, 1015, 1450, 2000, 1900, 2300, 2200, 1950, 175, 1650, 200, 0.63, emptyList()),
++        Row("H20", "A", "2.0E3", "E-Rated Hardwoods", 1.9, 0.98, 1015, 1350, 2600, 2200, 2400, 2300, 2100, 175, 1700, 200, 0.63, emptyList()),
++        Row("H21", "A", "2.0E6", "E-Rated Hardwoods", 1.9, 0.98, 1015, 1700, 2430, 2300, 2400, 2400, 2300, 175, 2100, 200, 0.63, emptyList()),
++        Row("H22", "B", "1.5E3", "E-Rated Hardwoods", 1.4, 0.73, 770, 1000, 1500, 1350, 1850, 1750, 1550, 160, 1200, 180, 0.53, emptyList()),
++        Row("H23", "B", "1.8E3", "E-Rated Hardwoods", 1.7, 0.88, 770, 1150, 1950, 1850, 2100, 2000, 1750, 160, 1450, 180, 0.53, emptyList()),
++        Row("H24", "B", "1.8E6", "E-Rated Hardwoods", 1.7, 0.88, 770, 1450, 2000, 1900, 2300, 2200, 1950, 160, 1650, 180, 0.53, emptyList()),
++        Row("H25", "B", "2.0E3", "E-Rated Hardwoods", 1.9, 0.98, 770, 1350, 2300, 2200, 2400, 2300, 2100, 160, 1700, 180, 0.53, emptyList()),
++        Row("H26", "B", "2.0E6", "E-Rated Hardwoods", 1.9, 0.98, 770, 1700, 2400, 2300, 2400, 2400, 2300, 160, 2100, 180, 0.53, emptyList()),
++        Row("H27", "C", "1.5E3", "E-Rated Hardwoods", 1.4, 0.73, 590, 1000, 1500, 1350, 1850, 1750, 1550, 135, 1200, 155, 0.45, emptyList()),
++        Row("H28", "C", "1.8E3", "E-Rated Hardwoods", 1.7, 0.88, 590, 1150, 1950, 1850, 2100, 2000, 1750, 135, 1450, 155, 0.45, emptyList()),
++        Row("H29", "C", "1.8E6", "E-Rated Hardwoods", 1.7, 0.88, 590, 1450, 2000, 1900, 2300, 2200, 1950, 135, 1650, 155, 0.45, emptyList()),
++        Row("H30", "C", "2.0E3", "E-Rated Hardwoods", 1.9, 0.98, 590, 1350, 2300, 2200, 2400, 2300, 2100, 135, 1700, 155, 0.45, emptyList()),
++        Row("H31", "C", "2.0E6", "E-Rated Hardwoods", 1.9, 0.98, 590, 1700, 2400, 2300, 2400, 2400, 2300, 135, 2100, 155, 0.45, emptyList()),
++        Row("H32", "D", "1.5E3", "E-Rated Hardwoods", 1.4, 0.73, 440, 1000, 1500, 1350, 1850, 1750, 1550, 110, 1200, 125, 0.39, emptyList()),
++        Row("H33", "D", "1.5E6", "E-Rated Hardwoods", 1.4, 0.73, 440, 1250, 1500, 1400, 2000, 1900, 1700, 110, 1250, 125, 0.39, emptyList()),
++        Row("H34", "D", "1.8E3", "E-Rated Hardwoods", 1.7, 0.88, 440, 1150, 1950, 1850, 2100, 2000, 1750, 110, 1450, 125, 0.39, emptyList()),
++        Row("H35", "D", "1.8E6", "E-Rated Hardwoods", 1.7, 0.88, 440, 1450, 2000, 1900, 2300, 2200, 1950, 110, 1650, 125, 0.39, emptyList()),
++        Row("H36", "D", "2.0E3", "E-Rated Hardwoods", 1.9, 0.98, 440, 1350, 2300, 2200, 2400, 2300, 2100, 110, 1700, 125, 0.39, emptyList()),
++        Row("H37", "D", "2.0E6", "E-Rated Hardwoods", 1.9, 0.98, 440, 1700, 2400, 2300, 2400, 2400, 2300, 110, 2100, 125, 0.39, emptyList()),
++    )
++
++    fun find(symbol: String): Row? = rows.firstOrNull { it.symbol == symbol }
++}
+diff --git a/core/solver/src/test/java/com/lz/solver/material/Nds2024GluedLaminatedTables5BTo5DTest.kt b/core/solver/src/test/java/com/lz/solver/material/Nds2024GluedLaminatedTables5BTo5DTest.kt
+new file mode 100644
+index 0000000..ca21f77
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/material/Nds2024GluedLaminatedTables5BTo5DTest.kt
+@@ -0,0 +1,142 @@
++package com.lz.solver.material
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/**
++ * NDS 2024 Supplement Tables 5B, 5C and 5D source data. The structural checks guard the extraction; the spot checks
++ * are rows read by eye from the printed tables (not from the extraction code).
++ */
++class Nds2024GluedLaminatedTables5BTo5DTest {
++
++    // ---------------------------------------------------------------- 5B
++    private val b = Nds2024Table5B
++
++    @Test
++    fun `5B has the printed shape and consistent rows`() {
++        assertEquals(30, b.rows.size)
++        assertEquals(17, b.rows.count { it.section == "Visually Graded Western Species" })
++        assertEquals(13, b.rows.count { it.section == "Visually Graded Southern Pine" })
++        assertEquals(setOf("DF", "HF", "SW", "AC", "POC", "SP"), b.rows.map { it.species }.toSet())
++        assertEquals(30, b.rows.map { it.symbol }.toSet().size)
++        for (r in b.rows) {
++            val id = "${r.symbol} ${r.species} ${r.grade}"
++            assertTrue(id, r.eMin < r.e && r.e <= r.eTrue)
++            assertTrue(id, r.fbyLam4Plus >= r.fbyLam3 && r.fbyLam3 >= r.fbyLam2)
++            assertTrue(id, r.fcLam4Plus >= r.fcLam2or3)
++            assertTrue(id, r.specificGravity in 0.30..0.60)
++        }
++        assertEquals(listOf(Nds2024Table5B.Marker("label", listOf(5))), b.find("22")!!.markers)
++        assertEquals(1, b.rows.count { it.markers.isNotEmpty() })
++    }
++
++    private fun checkB(symbol: String, species: String, grade: String, v: List<Number>) {
++        val r = b.find(symbol)
++        assertNotNull(symbol, r)
++        assertEquals(symbol, listOf(species, grade), listOf(r!!.species, r.grade))
++        assertEquals(
++            symbol, v,
++            listOf(r.eTrue, r.e, r.eMin, r.fcPerp, r.ft, r.fcLam4Plus, r.fcLam2or3, r.fbyLam4Plus, r.fbyLam3, r.fbyLam2, r.fvy, r.fbxLam2To15InDeep, r.fvx, r.specificGravity)
++        )
++    }
++
++    @Test
++    fun `5B rows read from the printed page`() {
++        checkB("1", "DF", "L3", listOf(1.6, 1.5, 0.79, 560, 950, 1550, 1250, 1450, 1250, 1000, 230, 1250, 265, 0.50))
++        checkB("22", "SW", "L3", listOf(1.1, 1.0, 0.53, 315, 525, 850, 725, 800, 700, 575, 170, 725, 195, 0.35))
++        checkB("47 1:10", "SP", "N2M10", listOf(1.5, 1.4, 0.74, 650, 1150, 1700, 1150, 1750, 1550, 1300, 260, 1400, 300, 0.55))
++        checkB("50 1:10", "SP", "N1D", listOf(2.0, 1.9, 1.00, 740, 1350, 2000, 1700, 2100, 2100, 1750, 260, 2100, 300, 0.55))
++        checkB("75", "POC", "L1D", listOf(1.8, 1.7, 0.90, 560, 1350, 2300, 2050, 1950, 1750, 1500, 230, 1850, 265, 0.46))
++    }
++
++    // ---------------------------------------------------------------- 5C
++    private val c = Nds2024Table5C
++
++    @Test
++    fun `5C has the printed shape and consistent rows`() {
++        assertEquals(21, c.rows.size)
++        assertEquals(12, c.rows.count { it.section == "Visually Graded Hardwoods" })
++        assertEquals(9, c.rows.count { it.section == "E-Rated Hardwoods" })
++        assertEquals(21, c.rows.map { it.symbol }.toSet().size)
++        assertEquals(mapOf("24F-E3" to "YP", "24F-E4" to "RM", "24F-E5" to "RO"), c.rows.filter { it.speciesCode != null }.associate { it.symbol to it.speciesCode })
++        for (r in c.rows) {
++            val id = r.symbol
++            assertTrue(id, r.exMin < r.ex && r.eyMin < r.ey)
++            assertTrue(id, r.fbxNeg <= r.fbxPos || r.fbxNeg == 2000)
++            assertTrue(id, r.specificGravity in 0.35..0.70)
++        }
++    }
++
++    @Test
++    fun `5C rows read from the printed page`() {
++        val a = c.find("12F-V1")!!
++        assertEquals(listOf(1200, 600, 285, 125), listOf(a.fbxPos, a.fbxNeg, a.fcx, a.fvx))
++        assertEquals(listOf(1.2, 0.63), listOf(a.ex, a.exMin))
++        assertEquals(listOf(1050, 285, 110), listOf(a.fby, a.fcy, a.fvy))
++        assertEquals(listOf(1.0, 0.53), listOf(a.ey, a.eyMin))
++        assertEquals(listOf(600, 800), listOf(a.ft, a.fc))
++        assertEquals(0.39, a.specificGravity, 0.0)
++        val d = c.find("20F-V2")!!
++        assertEquals(listOf(2000, 2000, 835, 200), listOf(d.fbxPos, d.fbxNeg, d.fcx, d.fvx))
++        val e = c.find("24F-E3")!!
++        assertEquals("YP", e.speciesCode)
++        assertEquals(listOf(2400, 1200, 590, 155), listOf(e.fbxPos, e.fbxNeg, e.fcx, e.fvx))
++        assertEquals(listOf(1.8, 0.95), listOf(e.ex, e.exMin))
++        assertEquals(listOf(1450, 405, 135), listOf(e.fby, e.fcy, e.fvy))
++        assertEquals(listOf(1.5, 0.79), listOf(e.ey, e.eyMin))
++        assertEquals(listOf(975, 1200), listOf(e.ft, e.fc))
++        assertEquals(0.45, e.specificGravity, 0.0)
++        val f = c.find("24F-E5")!!
++        assertEquals(listOf(2400, 1200, 1075, 235), listOf(f.fbxPos, f.fbxNeg, f.fcx, f.fvx))
++        assertEquals(listOf(1.8, 0.95, 1.5, 0.79), listOf(f.ex, f.exMin, f.ey, f.eyMin))
++        assertEquals(listOf(1700, 900, 205), listOf(f.fby, f.fcy, f.fvy))
++        assertEquals(listOf(1100, 1450), listOf(f.ft, f.fc))
++        assertEquals(0.63, f.specificGravity, 0.0)
++    }
++
++    // ---------------------------------------------------------------- 5D
++    private val d = Nds2024Table5D
++
++    @Test
++    fun `5D has the printed shape and consistent rows`() {
++        assertEquals(37, d.rows.size)
++        assertEquals((1..37).map { "H$it" }, d.rows.map { it.symbol })
++        assertEquals(16, d.rows.count { it.section == "Visually Graded Hardwoods" })
++        assertEquals(21, d.rows.count { it.section == "E-Rated Hardwoods" })
++        assertEquals(setOf("A", "B", "C", "D"), d.rows.map { it.speciesGroup }.toSet())
++        assertEquals(setOf("N3", "N2", "N1", "SS"), d.rows.take(16).map { it.grade }.toSet())
++        assertTrue(d.rows.all { it.markers.isEmpty() })
++        for (r in d.rows) {
++            val id = r.symbol
++            assertTrue(id, r.eMin < r.e)
++            assertTrue(id, r.fbyLam4Plus >= r.fbyLam3 && r.fbyLam3 >= r.fbyLam2)
++            assertTrue(id, r.fcLam4Plus >= r.fcLam2or3)
++            assertTrue(id, r.specificGravity in 0.35..0.70)
++        }
++        // each species group has the same G in every row
++        for ((g, rs) in d.rows.groupBy { it.speciesGroup }) assertEquals(g, 1, rs.map { it.specificGravity }.toSet().size)
++    }
++
++    @Test
++    fun `5D rows read from the printed pages`() {
++        val a = d.find("H1")!!
++        assertEquals(listOf("A", "N3"), listOf(a.speciesGroup, a.grade))
++        assertEquals(listOf(1.3, 0.67), listOf(a.e, a.eMin))
++        assertEquals(listOf(835, 425, 900, 900, 1250, 1100, 875, 175, 925, 200), listOf(a.fcPerp, a.ft, a.fcLam4Plus, a.fcLam2or3, a.fbyLam4Plus, a.fbyLam3, a.fbyLam2, a.fvy, a.fbxLam2To15InDeep, a.fvx))
++        assertEquals(0.63, a.specificGravity, 0.0)
++        val b12 = d.find("H12")!!
++        assertEquals(listOf("C", "SS"), listOf(b12.speciesGroup, b12.grade))
++        assertEquals(listOf(1.3, 0.67), listOf(b12.e, b12.eMin))
++        assertEquals(listOf(405, 825, 1100, 1100, 1450, 1350, 1150, 135, 1200, 155), listOf(b12.fcPerp, b12.ft, b12.fcLam4Plus, b12.fcLam2or3, b12.fbyLam4Plus, b12.fbyLam3, b12.fbyLam2, b12.fvy, b12.fbxLam2To15InDeep, b12.fvx))
++        val c35 = d.find("H35")!!
++        assertEquals(listOf("D", "1.8E6"), listOf(c35.speciesGroup, c35.grade))
++        assertEquals(listOf(1.7, 0.88), listOf(c35.e, c35.eMin))
++        assertEquals(listOf(440, 1450, 2000, 1900, 2300, 2200, 1950, 110, 1650, 125), listOf(c35.fcPerp, c35.ft, c35.fcLam4Plus, c35.fcLam2or3, c35.fbyLam4Plus, c35.fbyLam3, c35.fbyLam2, c35.fvy, c35.fbxLam2To15InDeep, c35.fvx))
++        assertEquals(0.39, c35.specificGravity, 0.0)
++        val z = d.find("H37")!!
++        assertEquals(listOf(1.9, 0.98), listOf(z.e, z.eMin))
++        assertEquals(listOf(440, 1700, 2400, 2300, 2400, 2400, 2300, 110, 2100, 125), listOf(z.fcPerp, z.ft, z.fcLam4Plus, z.fcLam2or3, z.fbyLam4Plus, z.fbyLam3, z.fbyLam2, z.fvy, z.fbxLam2To15InDeep, z.fvx))
++    }
++}
