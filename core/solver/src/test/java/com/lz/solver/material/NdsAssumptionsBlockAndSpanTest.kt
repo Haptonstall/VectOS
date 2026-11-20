@@ -116,13 +116,17 @@ class NdsAssumptionsBlockAndSpanTest {
     // ---------------- hard block ----------------
 
     @Test
-    fun `wood design is blocked for editions without sourced design values`() {
+    fun `wood design is blocked for editions and materials without sourced design values`() {
         assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2018))
         assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2015))      // sourced from the 2015 Supplement
-        assertNotNull(NdsCodeData.blockReason(NdsEdition.NDS_2024))
+        // NDS 2024 is sourced for solid-sawn lumber only (Tables 4A / 4B); every other material is blocked per species
+        assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2024))
+        assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2024, WoodSpecies.DF_L, WoodGrade.NO_2))
+        assertNotNull(NdsCodeData.blockReason(NdsEdition.NDS_2024, WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3))
         NdsCodeData.requireUsable(NdsEdition.NDS_2018)
+        NdsCodeData.requireUsable(NdsEdition.NDS_2024, WoodSpecies.SOUTHERN_PINE, WoodGrade.NO_2)
         var thrown = false
-        try { NdsCodeData.requireUsable(NdsEdition.NDS_2024) } catch (e: CodeDataBlockedException) { thrown = true }
+        try { NdsCodeData.requireUsable(NdsEdition.NDS_2024, WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3) } catch (e: CodeDataBlockedException) { thrown = true }
         assertTrue(thrown)
     }
 

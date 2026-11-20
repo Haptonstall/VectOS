@@ -11,7 +11,8 @@ import com.lz.model.units.inPsi
 
 /**
  * Wet service factors CM, per design value (NDS Supplement Tables 4A / 4B for dimension
- * lumber, 5A / 5C for glulam; identical in the NDS 2015 and 2018 Supplements).
+ * lumber, 5A / 5C for glulam; identical in the NDS 2015 and 2018 Supplements; for dimension lumber also checked
+ * against the NDS 2024 Supplement Tables 4A / 4B adjustment pages).
  *
  *   Dimension lumber (in service above 19 % moisture content):
  *     Fb 0.85 (1.0 when Fb x CF <= 1150 psi)   Ft 1.0   Fv 0.97   Fc-perp 0.67

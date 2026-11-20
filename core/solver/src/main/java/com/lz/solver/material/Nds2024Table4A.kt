@@ -11,8 +11,9 @@ package com.lz.solver.material
  * factors on the Table 4A Adjustment Factors page (size factor CF, flat use Cfu, repetitive member Cr, wet service
  * CM) are NOT part of this data and are applied by the design code.
  *
- * This is source data only: NDS 2024 stays blocked for design (see [NdsCodeData]) until the design-value lookup,
- * the 2024 adjustment-factor pages and the species mapping are connected and verified.
+ * Connected to design for Douglas Fir-Larch, Hem-Fir and Spruce-Pine-Fir through [Nds2024SawnLumber] (the only
+ * Table 4A species the app offers). Every other species in this table is data only and stays blocked for NDS 2024
+ * (see [NdsCodeData]) until it is mapped and verified.
  */
 object Nds2024Table4A {
 

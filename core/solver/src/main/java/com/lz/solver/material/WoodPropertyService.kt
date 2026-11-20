@@ -74,7 +74,26 @@ object WoodPropertyService {
         NdsEdition.NDS_2015 ->
             if (species.isGlulam && species != WoodSpecies.GLULAM_HARDWOODS) glulamSoftwood2015[species to grade]
             else tabulated2018(species, grade)
+        // NDS 2024 Supplement: solid-sawn lumber only (Tables 4A / 4B). Glulam and every other species or
+        // table is not connected yet and returns null, so the design is blocked.
+        NdsEdition.NDS_2024 -> tabulated2024(species, grade)
         else -> null   // no sourced data for this edition
+    }
+
+    /**
+     * NDS 2024 Supplement values for the solid-sawn species the app offers. The design values come from
+     * [Nds2024SawnLumber] (Tables 4A / 4B); the unit weight is the one the app already uses for the species
+     * (it is not a Supplement design value), carried from the existing table row.
+     */
+    private fun tabulated2024(species: WoodSpecies, grade: WoodGrade): WoodReferenceProperties? = when (species) {
+        WoodSpecies.SOUTHERN_PINE -> getSouthernPineDimensionValues(grade, 4.0, NdsEdition.NDS_2024)
+        WoodSpecies.DF_L, WoodSpecies.HEM_FIR, WoodSpecies.SPF -> {
+            val base = tabulated2018(species, grade)
+            val r = Nds2024SawnLumber.table4A(species, grade)
+            if (base == null || r == null) null
+            else sawnLumber(r.fb, r.ft, r.fv, r.fcPerp, r.fc, r.e, r.eMin, base.densityPcf)
+        }
+        else -> null
     }
 
     /** True when [edition] has tabulated values for [species] / [grade]. */
@@ -1106,6 +1125,10 @@ object WoodPropertyService {
         nominalWidthIn: Double,
         edition: NdsEdition = NdsEdition.NDS_2018
     ): WoodReferenceProperties? {
+        if (edition == NdsEdition.NDS_2024) {
+            val r = Nds2024SawnLumber.southernPine(grade, nominalWidthIn) ?: return null
+            return sawnLumber(r.fb, r.ft, r.fv, r.fcPerp, r.fc, r.e, r.eMin, densityPcf = 37.0)
+        }
         // Table 4B (and its width bands) is identical in the NDS 2015 Supplement.
         if (edition != NdsEdition.NDS_2018 && edition != NdsEdition.NDS_2015) return null
         val rows = southernPineTable4B[grade] ?: return null

@@ -16,8 +16,9 @@ package com.lz.solver.material
  * Spruce Pine is not tabulated: footnote 3 derives it from Mixed Southern Pine with [sprucePineConversion] and
  * prescribed rounding, so no Spruce Pine rows are included here.
  *
- * This is source data only: NDS 2024 stays blocked for design (see [NdsCodeData]) until the design-value lookup,
- * the 2024 adjustment-factor pages and the species mapping are connected and verified.
+ * Connected to design for Southern Pine through [Nds2024SawnLumber], by member width. Dense Structural 86 / 72 / 65
+ * have no row in this table and are blocked for NDS 2024; Construction, Standard and Utility are served for members up
+ * to 4" nominal width only. Mixed Southern Pine is data only (see [NdsCodeData]).
  */
 object Nds2024Table4B {
 

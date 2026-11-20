@@ -234,17 +234,13 @@ class NdsLoadDurationAndEditionTest {
     // ------------------------------------------------------------------ edition awareness
 
     @Test
-    fun `a sawn-lumber check against NDS 2018 or 2015 has no missing-data notice, 2024 does`() {
+    fun `a sawn-lumber check has no missing-data notice for NDS 2018, 2015 or 2024`() {
         val asd = DesignMethodology.ASD
         fun notices(e: NdsEdition) = calc(edition = e).evaluateDetailed(demand(dPlusL), asd).codeDataNotices
         assertTrue(notices(NdsEdition.NDS_2018).none { it.status == CodeDataStatus.NOT_SOURCED })
         assertTrue(notices(NdsEdition.NDS_2015).none { it.status == CodeDataStatus.NOT_SOURCED })
-        for (e in listOf(NdsEdition.NDS_2024)) {
-            val n = notices(e).first { it.status == CodeDataStatus.NOT_SOURCED }
-            assertTrue(n.dataset.contains("Reference design values"))
-            assertTrue(n.message.contains("NDS ${e.year}"))
-            assertTrue(n.message.contains("blocked"))
-        }
+        // NDS 2024 solid-sawn lumber is sourced (Tables 4A / 4B); only glulam still carries the notice (see the glulam test)
+        assertTrue(notices(NdsEdition.NDS_2024).none { it.status == CodeDataStatus.NOT_SOURCED })
         assertEquals("NDS 2024", calc(edition = NdsEdition.NDS_2024).evaluateDetailed(demand(dOnly), asd).standardLabel)
         assertEquals("NDS 2015", calc(edition = NdsEdition.NDS_2015).evaluateDetailed(demand(dOnly), asd)
             .selectedProperties.first { it.title == "Code and standard" }.rows.first { it.symbol == "Standard" }.value)

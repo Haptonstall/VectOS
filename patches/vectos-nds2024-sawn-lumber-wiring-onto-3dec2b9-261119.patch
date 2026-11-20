@@ -1,0 +1,418 @@
+diff --git a/core/solver/src/main/java/com/lz/solver/material/Nds2024SawnLumber.kt b/core/solver/src/main/java/com/lz/solver/material/Nds2024SawnLumber.kt
+new file mode 100644
+index 0000000..70863a7
+--- /dev/null
++++ b/core/solver/src/main/java/com/lz/solver/material/Nds2024SawnLumber.kt
+@@ -0,0 +1,92 @@
++package com.lz.solver.material
++
++import com.lz.model.structural.WoodGrade
++import com.lz.model.structural.WoodSpecies
++
++/**
++ * Maps the solid-sawn species and grades the app offers onto the NDS 2024 Supplement rows (Tables 4A and 4B, see
++ * [Nds2024Table4A] and [Nds2024Table4B]). Only what the printed tables contain is served; a species, grade or width
++ * with no printed row returns null so the design is blocked rather than filled from another edition.
++ *
++ * Assumptions (flagged in the change notes):
++ *  - DF_L is the Table 4A block "DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH", HEM_FIR is "HEM-FIR" and SPF is
++ *    "SPRUCE-PINE-FIR" (not the "(NORTH)" or "(SOUTH)" blocks).
++ *  - Spruce-Pine-Fir is printed with one combined grade "No. 1/ No. 2"; both app grades NO_1 and NO_2 map to it.
++ *  - The grades "No. 1 & Btr" (DF-L, Hem-Fir) are not offered by the app and are not mapped.
++ *  - Southern Pine Construction, Standard and Utility are printed only for 4" wide members, so they are served for
++ *    a nominal width of 4" or less and not above it (the 2015 / 2018 lookup returns that row for every width).
++ *  - Dense Structural 86 / 72 / 65 have no row in the 2024 Table 4B (the 2024 Supplement lists "Dense Select
++ *    Structural 86 / 72 / 65" only in Table 4D, timbers), so they return null for 2024.
++ */
++internal object Nds2024SawnLumber {
++
++    private const val DF_L_BLOCK = "DOUGLAS FIR-LARCH, DOUGLAS FIR, WESTERN LARCH"
++
++    private fun blockName(species: WoodSpecies): String? = when (species) {
++        WoodSpecies.DF_L -> DF_L_BLOCK
++        WoodSpecies.HEM_FIR -> "HEM-FIR"
++        WoodSpecies.SPF -> "SPRUCE-PINE-FIR"
++        else -> null
++    }
++
++    private fun table4AGrades(grade: WoodGrade): List<String> = when (grade) {
++        WoodGrade.SELECT_STRUCTURAL -> listOf("Select Structural")
++        WoodGrade.NO_1 -> listOf("No. 1", "No. 1/ No. 2")
++        WoodGrade.NO_2 -> listOf("No. 2", "No. 1/ No. 2")
++        WoodGrade.NO_3 -> listOf("No. 3")
++        WoodGrade.STUD -> listOf("Stud")
++        WoodGrade.CONSTRUCTION -> listOf("Construction")
++        WoodGrade.STANDARD -> listOf("Standard")
++        WoodGrade.UTILITY -> listOf("Utility")
++        else -> emptyList()
++    }
++
++    /** The Table 4A row for [species] / [grade], or null when the table has none (or the species is not Table 4A). */
++    fun table4A(species: WoodSpecies, grade: WoodGrade): Nds2024Table4A.Row? {
++        val block = blockName(species) ?: return null
++        for (label in table4AGrades(grade)) {
++            Nds2024Table4A.rows.firstOrNull { it.species == block && it.grade == label }?.let { return it }
++        }
++        return null
++    }
++
++    private const val CSU_WIDTH = "4\" wide"
++
++    private fun table4BGrade(grade: WoodGrade): String? = when (grade) {
++        WoodGrade.SELECT_STRUCTURAL -> "Select Structural"
++        WoodGrade.DENSE_SELECT_STRUCTURAL -> "Dense Select Structural"
++        WoodGrade.NON_DENSE_SELECT_STRUCTURAL -> "Non-Dense Select Structural"
++        WoodGrade.NO_1 -> "No.1"
++        WoodGrade.NO_1_DENSE -> "No.1 Dense"
++        WoodGrade.NO_1_NON_DENSE -> "No.1 Non-Dense"
++        WoodGrade.NO_2 -> "No.2"
++        WoodGrade.NO_2_DENSE -> "No.2 Dense"
++        WoodGrade.NO_2_NON_DENSE -> "No.2 Non-Dense"
++        WoodGrade.NO_3, WoodGrade.STUD -> "No.3 and Stud"
++        WoodGrade.CONSTRUCTION -> "Construction"
++        WoodGrade.STANDARD -> "Standard"
++        WoodGrade.UTILITY -> "Utility"
++        else -> null   // Dense Structural 86 / 72 / 65: no 2024 Table 4B row
++    }
++
++    /**
++     * The Table 4B Southern Pine row for [grade] and a member of nominal width [nominalWidthIn] (the larger
++     * nominal dimension), or null when the table has none. Widths above 12" use the 12" row (the size factor for
++     * wider lumber is applied separately by the design code).
++     */
++    fun southernPine(grade: WoodGrade, nominalWidthIn: Double): Nds2024Table4B.Row? {
++        val label = table4BGrade(grade) ?: return null
++        val width = when (grade) {
++            WoodGrade.CONSTRUCTION, WoodGrade.STANDARD, WoodGrade.UTILITY ->
++                if (nominalWidthIn <= 4.0) CSU_WIDTH else return null
++            else -> when {
++                nominalWidthIn <= 4.0 -> "2\" - 4\" wide"
++                nominalWidthIn <= 6.0 -> "5\" - 6\" wide"
++                nominalWidthIn <= 8.0 -> "8\" wide"
++                nominalWidthIn <= 10.0 -> "10\" wide"
++                else -> "12\" wide"
++            }
++        }
++        return Nds2024Table4B.find("SOUTHERN PINE", label, width)
++    }
++}
+diff --git a/core/solver/src/main/java/com/lz/solver/material/Nds2024Table4A.kt b/core/solver/src/main/java/com/lz/solver/material/Nds2024Table4A.kt
+index 1d79f1b..1be7d66 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/Nds2024Table4A.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/Nds2024Table4A.kt
+@@ -11,8 +11,9 @@ package com.lz.solver.material
+  * factors on the Table 4A Adjustment Factors page (size factor CF, flat use Cfu, repetitive member Cr, wet service
+  * CM) are NOT part of this data and are applied by the design code.
+  *
+- * This is source data only: NDS 2024 stays blocked for design (see [NdsCodeData]) until the design-value lookup,
+- * the 2024 adjustment-factor pages and the species mapping are connected and verified.
++ * Connected to design for Douglas Fir-Larch, Hem-Fir and Spruce-Pine-Fir through [Nds2024SawnLumber] (the only
++ * Table 4A species the app offers). Every other species in this table is data only and stays blocked for NDS 2024
++ * (see [NdsCodeData]) until it is mapped and verified.
+  */
+ object Nds2024Table4A {
+ 
+diff --git a/core/solver/src/main/java/com/lz/solver/material/Nds2024Table4B.kt b/core/solver/src/main/java/com/lz/solver/material/Nds2024Table4B.kt
+index 1376773..47eea84 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/Nds2024Table4B.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/Nds2024Table4B.kt
+@@ -16,8 +16,9 @@ package com.lz.solver.material
+  * Spruce Pine is not tabulated: footnote 3 derives it from Mixed Southern Pine with [sprucePineConversion] and
+  * prescribed rounding, so no Spruce Pine rows are included here.
+  *
+- * This is source data only: NDS 2024 stays blocked for design (see [NdsCodeData]) until the design-value lookup,
+- * the 2024 adjustment-factor pages and the species mapping are connected and verified.
++ * Connected to design for Southern Pine through [Nds2024SawnLumber], by member width. Dense Structural 86 / 72 / 65
++ * have no row in this table and are blocked for NDS 2024; Construction, Standard and Utility are served for members up
++ * to 4" nominal width only. Mixed Southern Pine is data only (see [NdsCodeData]).
+  */
+ object Nds2024Table4B {
+ 
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+index 173785e..7d1f993 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsCodeData.kt
+@@ -50,7 +50,7 @@ object NdsCodeData {
+      * substituted (project decision, Oct 2026).
+      */
+     fun blockReason(edition: NdsEdition): String? =
+-        if (edition in designValueEditions) null
++        if (edition in designValueEditions || edition in sawnLumberOnlyEditions) null
+         else "Wood design is blocked for ${standardLabel(edition)}: its Supplement design values " +
+             "(Tables 4A / 4B / 4D / 4E / 5A / 5C) and the size and flat-use factors have not been " +
+             "incorporated, and values from another edition are not substituted. Use a building code " +
+@@ -64,6 +64,9 @@ object NdsCodeData {
+     fun blockReason(edition: NdsEdition, species: WoodSpecies, grade: WoodGrade): String? =
+         blockReason(edition)
+             ?: if (WoodPropertyService.isSourced(species, grade, edition)) null
++            else if (species.isGlulam && edition in sawnLumberOnlyEditions)
++                "Wood design is blocked: the ${standardLabel(edition)} Supplement glulam design values (Tables 5A to 5D) " +
++                    "have not been connected yet, and values from another edition are not substituted."
+             else "Wood design is blocked: ${species.name} / ${grade.name} has no tabulated design values in " +
+                 "the ${standardLabel(edition)} Supplement as incorporated here, and values from another " +
+                 "edition are not substituted. Choose a combination that is in the ${standardLabel(edition)} tables."
+@@ -110,6 +113,13 @@ object NdsCodeData {
+      */
+     private val designValueEditions = setOf(NdsEdition.NDS_2018, NdsEdition.NDS_2015)
+ 
++    /**
++     * Editions sourced for solid-sawn lumber only. NDS 2024: Tables 4A (Douglas Fir-Larch, Hem-Fir, Spruce-Pine-Fir)
++     * and 4B (Southern Pine) for the species and grades the app offers, checked against the 2024 Supplement
++     * (see [Nds2024SawnLumber]). Glulam and every other species stay blocked for 2024 per species / grade.
++     */
++    private val sawnLumberOnlyEditions = setOf(NdsEdition.NDS_2024)
++
+     /** Editions whose Chapter 2 (CD, Ct, KF, phi) has been checked against the published text. */
+     private val chapter2Editions = setOf(NdsEdition.NDS_2018, NdsEdition.NDS_2015)
+ 
+@@ -129,7 +139,7 @@ object NdsCodeData {
+         val label = standardLabel(edition)
+         val out = mutableListOf<CodeDataNotice>()
+ 
+-        if (edition !in designValueEditions) {
++        if (edition !in designValueEditions && !(edition in sawnLumberOnlyEditions && !isGlulam)) {
+             out += CodeDataNotice(
+                 dataset = if (isGlulam) "Reference design values \u2014 glulam (Supplement Tables 5A / 5C)"
+                 else "Reference design values and size factors (Supplement Tables 4A / 4B)",
+diff --git a/core/solver/src/main/java/com/lz/solver/material/NdsWetService.kt b/core/solver/src/main/java/com/lz/solver/material/NdsWetService.kt
+index cd4087f..9e5a8b6 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/NdsWetService.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/NdsWetService.kt
+@@ -11,7 +11,8 @@ import com.lz.model.units.inPsi
+ 
+ /**
+  * Wet service factors CM, per design value (NDS Supplement Tables 4A / 4B for dimension
+- * lumber, 5A / 5C for glulam; identical in the NDS 2015 and 2018 Supplements).
++ * lumber, 5A / 5C for glulam; identical in the NDS 2015 and 2018 Supplements; for dimension lumber also checked
++ * against the NDS 2024 Supplement Tables 4A / 4B adjustment pages).
+  *
+  *   Dimension lumber (in service above 19 % moisture content):
+  *     Fb 0.85 (1.0 when Fb x CF <= 1150 psi)   Ft 1.0   Fv 0.97   Fc-perp 0.67
+diff --git a/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt b/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
+index 13f5fbb..70ef482 100644
+--- a/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
++++ b/core/solver/src/main/java/com/lz/solver/material/WoodPropertyService.kt
+@@ -74,9 +74,28 @@ object WoodPropertyService {
+         NdsEdition.NDS_2015 ->
+             if (species.isGlulam && species != WoodSpecies.GLULAM_HARDWOODS) glulamSoftwood2015[species to grade]
+             else tabulated2018(species, grade)
++        // NDS 2024 Supplement: solid-sawn lumber only (Tables 4A / 4B). Glulam and every other species or
++        // table is not connected yet and returns null, so the design is blocked.
++        NdsEdition.NDS_2024 -> tabulated2024(species, grade)
+         else -> null   // no sourced data for this edition
+     }
+ 
++    /**
++     * NDS 2024 Supplement values for the solid-sawn species the app offers. The design values come from
++     * [Nds2024SawnLumber] (Tables 4A / 4B); the unit weight is the one the app already uses for the species
++     * (it is not a Supplement design value), carried from the existing table row.
++     */
++    private fun tabulated2024(species: WoodSpecies, grade: WoodGrade): WoodReferenceProperties? = when (species) {
++        WoodSpecies.SOUTHERN_PINE -> getSouthernPineDimensionValues(grade, 4.0, NdsEdition.NDS_2024)
++        WoodSpecies.DF_L, WoodSpecies.HEM_FIR, WoodSpecies.SPF -> {
++            val base = tabulated2018(species, grade)
++            val r = Nds2024SawnLumber.table4A(species, grade)
++            if (base == null || r == null) null
++            else sawnLumber(r.fb, r.ft, r.fv, r.fcPerp, r.fc, r.e, r.eMin, base.densityPcf)
++        }
++        else -> null
++    }
++
+     /** True when [edition] has tabulated values for [species] / [grade]. */
+     fun isSourced(species: WoodSpecies, grade: WoodGrade, edition: NdsEdition): Boolean =
+         getReferenceProperties(species, grade, edition) != null
+@@ -1106,6 +1125,10 @@ object WoodPropertyService {
+         nominalWidthIn: Double,
+         edition: NdsEdition = NdsEdition.NDS_2018
+     ): WoodReferenceProperties? {
++        if (edition == NdsEdition.NDS_2024) {
++            val r = Nds2024SawnLumber.southernPine(grade, nominalWidthIn) ?: return null
++            return sawnLumber(r.fb, r.ft, r.fv, r.fcPerp, r.fc, r.e, r.eMin, densityPcf = 37.0)
++        }
+         // Table 4B (and its width bands) is identical in the NDS 2015 Supplement.
+         if (edition != NdsEdition.NDS_2018 && edition != NdsEdition.NDS_2015) return null
+         val rows = southernPineTable4B[grade] ?: return null
+diff --git a/core/solver/src/test/java/com/lz/solver/material/Nds2024SawnLumberWiringTest.kt b/core/solver/src/test/java/com/lz/solver/material/Nds2024SawnLumberWiringTest.kt
+new file mode 100644
+index 0000000..e21daf1
+--- /dev/null
++++ b/core/solver/src/test/java/com/lz/solver/material/Nds2024SawnLumberWiringTest.kt
+@@ -0,0 +1,128 @@
++package com.lz.solver.material
++
++import com.lz.model.regulatory.nds.NdsEdition
++import com.lz.model.structural.WoodGrade
++import com.lz.model.structural.WoodSpecies
++import com.lz.model.units.inPsi
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/**
++ * NDS 2024 wiring for solid-sawn lumber (Tables 4A / 4B). Expected values are the ones printed in the 2024 Supplement
++ * (read from the pages, not from the code under test).
++ */
++class Nds2024SawnLumberWiringTest {
++
++    private val e24 = NdsEdition.NDS_2024
++
++    private fun vals(species: WoodSpecies, grade: WoodGrade): List<Double> {
++        val p = WoodPropertyService.getReferenceProperties(species, grade, e24)
++        assertNotNull("$species $grade", p)
++        p!!
++        return listOf(
++            p.bending.inPsi, p.tensionParallel.inPsi, p.shear.inPsi, p.compressionPerp.inPsi, p.compressionParallel.inPsi,
++            p.modulusOfElasticity.inPsi, p.eMin!!.inPsi
++        )
++    }
++
++    private fun d(vararg v: Int) = v.map { it.toDouble() }
++
++    @Test
++    fun `Table 4A rows are served for Douglas Fir-Larch, Hem-Fir and Spruce-Pine-Fir`() {
++        assertEquals(d(1500, 1000, 180, 625, 1700, 1900000, 690000), vals(WoodSpecies.DF_L, WoodGrade.SELECT_STRUCTURAL))
++        assertEquals(d(900, 575, 180, 625, 1350, 1600000, 580000), vals(WoodSpecies.DF_L, WoodGrade.NO_2))
++        assertEquals(d(525, 325, 180, 625, 775, 1400000, 510000), vals(WoodSpecies.DF_L, WoodGrade.NO_3))
++        assertEquals(d(850, 525, 150, 405, 1300, 1300000, 470000), vals(WoodSpecies.HEM_FIR, WoodGrade.NO_2))
++        assertEquals(d(1250, 700, 135, 425, 1400, 1500000, 550000), vals(WoodSpecies.SPF, WoodGrade.SELECT_STRUCTURAL))
++        assertEquals(d(675, 350, 135, 425, 725, 1200000, 440000), vals(WoodSpecies.SPF, WoodGrade.STUD))
++        // Spruce-Pine-Fir is printed with one combined "No. 1/ No. 2" row, used for both grades
++        assertEquals(d(875, 450, 135, 425, 1150, 1400000, 510000), vals(WoodSpecies.SPF, WoodGrade.NO_1))
++        assertEquals(d(875, 450, 135, 425, 1150, 1400000, 510000), vals(WoodSpecies.SPF, WoodGrade.NO_2))
++    }
++
++    @Test
++    fun `the unit weight is the species value the app already uses and the shear modulus is E over 16`() {
++        val p = WoodPropertyService.getReferenceProperties(WoodSpecies.DF_L, WoodGrade.NO_2, e24)!!
++        assertEquals(35.0, p.densityPcf, 0.0)
++        assertEquals(1_600_000.0 / 16.0, p.shearModulus.inPsi, 1e-6)
++        assertEquals(30.0, WoodPropertyService.getReferenceProperties(WoodSpecies.HEM_FIR, WoodGrade.NO_2, e24)!!.densityPcf, 0.0)
++    }
++
++    private fun sp(grade: WoodGrade, width: Double): List<Double>? =
++        WoodPropertyService.getSouthernPineDimensionValues(grade, width, e24)?.let {
++            listOf(it.bending.inPsi, it.tensionParallel.inPsi, it.shear.inPsi, it.compressionPerp.inPsi, it.compressionParallel.inPsi,
++                it.modulusOfElasticity.inPsi, it.eMin!!.inPsi)
++        }
++
++    @Test
++    fun `Table 4B Southern Pine values follow the member width`() {
++        assertEquals(d(1100, 675, 175, 565, 1450, 1400000, 510000), sp(WoodGrade.NO_2, 4.0))
++        assertEquals(d(1100, 675, 175, 565, 1450, 1400000, 510000), sp(WoodGrade.NO_2, 2.0))
++        assertEquals(d(750, 450, 175, 565, 1250, 1400000, 510000), sp(WoodGrade.NO_2, 12.0))
++        assertEquals(d(750, 450, 175, 565, 1250, 1400000, 510000), sp(WoodGrade.NO_2, 14.0))   // above 12": the 12" row
++        assertEquals(d(1700, 1200, 175, 480, 1650, 1600000, 580000), sp(WoodGrade.NON_DENSE_SELECT_STRUCTURAL, 8.0))
++        assertEquals(d(1200, 800, 175, 660, 1550, 1800000, 660000), sp(WoodGrade.NO_1_DENSE, 10.0))
++        assertEquals(d(575, 350, 175, 565, 800, 1300000, 470000), sp(WoodGrade.NO_3, 6.0))
++        assertEquals(sp(WoodGrade.NO_3, 6.0), sp(WoodGrade.STUD, 6.0))                          // printed as "No.3 and Stud"
++        assertEquals(d(2700, 1900, 175, 660, 2050, 1900000, 690000), sp(WoodGrade.DENSE_SELECT_STRUCTURAL, 3.0))
++        // the species lookup uses the 2"-4" band
++        assertEquals(d(1100, 675, 175, 565, 1450, 1400000, 510000), vals(WoodSpecies.SOUTHERN_PINE, WoodGrade.NO_2))
++    }
++
++    @Test
++    fun `Southern Pine Construction, Standard and Utility are served for 4 in or less only`() {
++        assertEquals(d(475, 275, 175, 565, 1300, 1200000, 440000), sp(WoodGrade.STANDARD, 4.0))
++        assertEquals(d(475, 275, 175, 565, 1300, 1200000, 440000), sp(WoodGrade.STANDARD, 3.0))
++        for (g in listOf(WoodGrade.CONSTRUCTION, WoodGrade.STANDARD, WoodGrade.UTILITY)) {
++            assertNull("$g 6 in", sp(g, 6.0))
++            assertNull("$g 12 in", sp(g, 12.0))
++        }
++    }
++
++    @Test
++    fun `Dense Structural 86, 72 and 65 have no 2024 row and are blocked, as is everything not in Tables 4A and 4B`() {
++        for (g in listOf(WoodGrade.DENSE_STRUCTURAL_86, WoodGrade.DENSE_STRUCTURAL_72, WoodGrade.DENSE_STRUCTURAL_65)) {
++            assertNull(g.name, WoodPropertyService.getReferenceProperties(WoodSpecies.SOUTHERN_PINE, g, e24))
++            assertNull(g.name, sp(g, 4.0))
++            assertTrue(g.name, NdsCodeData.blockReason(e24, WoodSpecies.SOUTHERN_PINE, g)!!.contains("NDS 2024"))
++            // the 2018 table still has them
++            assertNotNull(g.name, WoodPropertyService.getReferenceProperties(WoodSpecies.SOUTHERN_PINE, g, NdsEdition.NDS_2018))
++        }
++        assertNull(WoodPropertyService.getReferenceProperties(WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3, e24))
++        assertTrue(NdsCodeData.blockReason(e24, WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3)!!.contains("glulam"))
++    }
++
++    @Test
++    fun `sawn lumber is usable for 2024 and the 2024 values match the 2018 ones the app held for these grades`() {
++        // the grades the app offers for each species (Hem-Fir has no No. 3)
++        val offered = mapOf(
++            WoodSpecies.DF_L to listOf(WoodGrade.SELECT_STRUCTURAL, WoodGrade.NO_1, WoodGrade.NO_2, WoodGrade.NO_3),
++            WoodSpecies.HEM_FIR to listOf(WoodGrade.SELECT_STRUCTURAL, WoodGrade.NO_1, WoodGrade.NO_2),
++            WoodSpecies.SPF to listOf(WoodGrade.SELECT_STRUCTURAL, WoodGrade.NO_1, WoodGrade.NO_2, WoodGrade.NO_3, WoodGrade.STUD),
++            WoodSpecies.SOUTHERN_PINE to listOf(WoodGrade.SELECT_STRUCTURAL, WoodGrade.NO_1, WoodGrade.NO_2, WoodGrade.NO_3)
++        )
++        for ((s, grades) in offered) {
++            for (g in grades) {
++                assertNull("$s $g", NdsCodeData.blockReason(e24, s, g))
++                val a = WoodPropertyService.getReferenceProperties(s, g, NdsEdition.NDS_2018)!!
++                val b = WoodPropertyService.getReferenceProperties(s, g, e24)!!
++                assertEquals("$s $g", a, b)   // the Supplement printed the same values for the offered grades
++            }
++        }
++    }
++
++    @Test
++    fun `the edition-only gate no longer blocks 2024 and 2018 and 2015 are unchanged`() {
++        assertNull(NdsCodeData.blockReason(e24))
++        assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2018))
++        assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2015))
++        // glulam notices for 2024 still say the design values are not sourced; sawn lumber has none
++        assertTrue(NdsCodeData.noticesFor(e24, com.lz.model.structural.DesignMethodology.ASD, isGlulam = false)
++            .none { it.status == com.lz.model.structural.CodeDataStatus.NOT_SOURCED })
++        assertTrue(NdsCodeData.noticesFor(e24, com.lz.model.structural.DesignMethodology.ASD, isGlulam = true)
++            .any { it.status == com.lz.model.structural.CodeDataStatus.NOT_SOURCED })
++    }
++}
+diff --git a/core/solver/src/test/java/com/lz/solver/material/NdsAssumptionsBlockAndSpanTest.kt b/core/solver/src/test/java/com/lz/solver/material/NdsAssumptionsBlockAndSpanTest.kt
+index 74a2af0..342df4f 100644
+--- a/core/solver/src/test/java/com/lz/solver/material/NdsAssumptionsBlockAndSpanTest.kt
++++ b/core/solver/src/test/java/com/lz/solver/material/NdsAssumptionsBlockAndSpanTest.kt
+@@ -116,13 +116,17 @@ class NdsAssumptionsBlockAndSpanTest {
+     // ---------------- hard block ----------------
+ 
+     @Test
+-    fun `wood design is blocked for editions without sourced design values`() {
++    fun `wood design is blocked for editions and materials without sourced design values`() {
+         assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2018))
+         assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2015))      // sourced from the 2015 Supplement
+-        assertNotNull(NdsCodeData.blockReason(NdsEdition.NDS_2024))
++        // NDS 2024 is sourced for solid-sawn lumber only (Tables 4A / 4B); every other material is blocked per species
++        assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2024))
++        assertNull(NdsCodeData.blockReason(NdsEdition.NDS_2024, WoodSpecies.DF_L, WoodGrade.NO_2))
++        assertNotNull(NdsCodeData.blockReason(NdsEdition.NDS_2024, WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3))
+         NdsCodeData.requireUsable(NdsEdition.NDS_2018)
++        NdsCodeData.requireUsable(NdsEdition.NDS_2024, WoodSpecies.SOUTHERN_PINE, WoodGrade.NO_2)
+         var thrown = false
+-        try { NdsCodeData.requireUsable(NdsEdition.NDS_2024) } catch (e: CodeDataBlockedException) { thrown = true }
++        try { NdsCodeData.requireUsable(NdsEdition.NDS_2024, WoodSpecies.GLULAM_DF_DF, WoodGrade.G_16F_V3) } catch (e: CodeDataBlockedException) { thrown = true }
+         assertTrue(thrown)
+     }
+ 
+diff --git a/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt b/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
+index 7ab39cf..f180f81 100644
+--- a/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
++++ b/core/solver/src/test/java/com/lz/solver/material/NdsLoadDurationAndEditionTest.kt
+@@ -234,17 +234,13 @@ class NdsLoadDurationAndEditionTest {
+     // ------------------------------------------------------------------ edition awareness
+ 
+     @Test
+-    fun `a sawn-lumber check against NDS 2018 or 2015 has no missing-data notice, 2024 does`() {
++    fun `a sawn-lumber check has no missing-data notice for NDS 2018, 2015 or 2024`() {
+         val asd = DesignMethodology.ASD
+         fun notices(e: NdsEdition) = calc(edition = e).evaluateDetailed(demand(dPlusL), asd).codeDataNotices
+         assertTrue(notices(NdsEdition.NDS_2018).none { it.status == CodeDataStatus.NOT_SOURCED })
+         assertTrue(notices(NdsEdition.NDS_2015).none { it.status == CodeDataStatus.NOT_SOURCED })
+-        for (e in listOf(NdsEdition.NDS_2024)) {
+-            val n = notices(e).first { it.status == CodeDataStatus.NOT_SOURCED }
+-            assertTrue(n.dataset.contains("Reference design values"))
+-            assertTrue(n.message.contains("NDS ${e.year}"))
+-            assertTrue(n.message.contains("blocked"))
+-        }
++        // NDS 2024 solid-sawn lumber is sourced (Tables 4A / 4B); only glulam still carries the notice (see the glulam test)
++        assertTrue(notices(NdsEdition.NDS_2024).none { it.status == CodeDataStatus.NOT_SOURCED })
+         assertEquals("NDS 2024", calc(edition = NdsEdition.NDS_2024).evaluateDetailed(demand(dOnly), asd).standardLabel)
+         assertEquals("NDS 2015", calc(edition = NdsEdition.NDS_2015).evaluateDetailed(demand(dOnly), asd)
+             .selectedProperties.first { it.title == "Code and standard" }.rows.first { it.symbol == "Standard" }.value)

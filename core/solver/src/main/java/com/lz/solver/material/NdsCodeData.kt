@@ -50,7 +50,7 @@ object NdsCodeData {
      * substituted (project decision, Oct 2026).
      */
     fun blockReason(edition: NdsEdition): String? =
-        if (edition in designValueEditions) null
+        if (edition in designValueEditions || edition in sawnLumberOnlyEditions) null
         else "Wood design is blocked for ${standardLabel(edition)}: its Supplement design values " +
             "(Tables 4A / 4B / 4D / 4E / 5A / 5C) and the size and flat-use factors have not been " +
             "incorporated, and values from another edition are not substituted. Use a building code " +
@@ -64,6 +64,9 @@ object NdsCodeData {
     fun blockReason(edition: NdsEdition, species: WoodSpecies, grade: WoodGrade): String? =
         blockReason(edition)
             ?: if (WoodPropertyService.isSourced(species, grade, edition)) null
+            else if (species.isGlulam && edition in sawnLumberOnlyEditions)
+                "Wood design is blocked: the ${standardLabel(edition)} Supplement glulam design values (Tables 5A to 5D) " +
+                    "have not been connected yet, and values from another edition are not substituted."
             else "Wood design is blocked: ${species.name} / ${grade.name} has no tabulated design values in " +
                 "the ${standardLabel(edition)} Supplement as incorporated here, and values from another " +
                 "edition are not substituted. Choose a combination that is in the ${standardLabel(edition)} tables."
@@ -110,6 +113,13 @@ object NdsCodeData {
      */
     private val designValueEditions = setOf(NdsEdition.NDS_2018, NdsEdition.NDS_2015)
 
+    /**
+     * Editions sourced for solid-sawn lumber only. NDS 2024: Tables 4A (Douglas Fir-Larch, Hem-Fir, Spruce-Pine-Fir)
+     * and 4B (Southern Pine) for the species and grades the app offers, checked against the 2024 Supplement
+     * (see [Nds2024SawnLumber]). Glulam and every other species stay blocked for 2024 per species / grade.
+     */
+    private val sawnLumberOnlyEditions = setOf(NdsEdition.NDS_2024)
+
     /** Editions whose Chapter 2 (CD, Ct, KF, phi) has been checked against the published text. */
     private val chapter2Editions = setOf(NdsEdition.NDS_2018, NdsEdition.NDS_2015)
 
@@ -129,7 +139,7 @@ object NdsCodeData {
         val label = standardLabel(edition)
         val out = mutableListOf<CodeDataNotice>()
 
-        if (edition !in designValueEditions) {
+        if (edition !in designValueEditions && !(edition in sawnLumberOnlyEditions && !isGlulam)) {
             out += CodeDataNotice(
                 dataset = if (isGlulam) "Reference design values \u2014 glulam (Supplement Tables 5A / 5C)"
                 else "Reference design values and size factors (Supplement Tables 4A / 4B)",
